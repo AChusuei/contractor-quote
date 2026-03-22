@@ -13,8 +13,8 @@ const schema = z.object({
   phone: z.string().refine((v) => v.replace(/\D/g, "").length >= 10, "Enter a valid phone number"),
   cell: z.string().refine((v) => v === "" || v.replace(/\D/g, "").length >= 10, "Enter a valid phone number").optional(),
   jobSiteAddress: z.string().min(1, "Job site address is required"),
-  propertyType: z.enum(["house", "apt", "building", "townhouse"], { errorMap: () => ({ message: "Please select an option" }) }),
-  budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"], { errorMap: () => ({ message: "Please select an option" }) }),
+  propertyType: z.enum(["house", "apt", "building", "townhouse"], { error: "Please select an option" }),
+  budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"], { error: "Please select an option" }),
   howDidYouFindUs: z.string().min(1, "Please tell us how you found us"),
   referredByContractor: z.string().optional(),
 })
