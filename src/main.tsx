@@ -4,6 +4,11 @@ import { BrowserRouter } from "react-router-dom"
 import { ClerkProvider } from "@clerk/clerk-react"
 import "./index.css"
 import App from "./App.tsx"
+import { seedMockQuotes } from "@/lib/quoteStore"
+
+if (import.meta.env.DEV) {
+  seedMockQuotes()
+}
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined
 
