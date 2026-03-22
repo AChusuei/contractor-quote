@@ -12,7 +12,7 @@ const schema = z.object({
   email: z.string().email("Enter a valid email"),
   phone: z.string().refine((v) => v.replace(/\D/g, "").length >= 10, "Enter a valid phone number"),
   cell: z.string().refine((v) => v === "" || v.replace(/\D/g, "").length >= 10, "Enter a valid phone number").optional(),
-  jobSiteAddress: z.string({ required_error: "Job site address is required" }).min(1, "Job site address is required"),
+  jobSiteAddress: z.string().min(1, "Job site address is required"),
   propertyType: z.enum(["house", "apt", "building", "townhouse"]).refine(
     (v) => v.length > 0,
     { message: "Select a property type" }

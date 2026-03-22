@@ -25,11 +25,12 @@ describe("getAddressProvider", () => {
     expect(getAddressProvider()).toBeInstanceOf(GooglePlacesProvider)
   })
 
-  it("returns a RadarProvider when VITE_CQ_ADDRESS_PROVIDER is 'radar'", async () => {
+  it("returns null for 'radar' (Radar provider was replaced by Mapbox)", async () => {
     vi.stubEnv("VITE_CQ_ADDRESS_PROVIDER", "radar")
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     const { getAddressProvider } = await import("./provider")
-    const { RadarProvider } = await import("./radar")
-    expect(getAddressProvider()).toBeInstanceOf(RadarProvider)
+    expect(getAddressProvider()).toBeNull()
+    warnSpy.mockRestore()
   })
 
   it("returns null and warns for unknown provider", async () => {

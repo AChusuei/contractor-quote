@@ -112,7 +112,7 @@ describe("IntakePage — navigation on submit", () => {
     renderIntakePage()
     await fillRequiredFields(user)
 
-    await user.click(screen.getByRole("button", { name: /get my free quote/i }))
+    await user.click(screen.getByRole("button", { name: /continue/i }))
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/intake/scope")
@@ -122,7 +122,7 @@ describe("IntakePage — navigation on submit", () => {
   it("does not navigate when required fields are missing", async () => {
     renderIntakePage()
     // Submit without filling any fields — validation should block navigation
-    await user.click(screen.getByRole("button", { name: /get my free quote/i }))
+    await user.click(screen.getByRole("button", { name: /continue/i }))
 
     await waitFor(() => {
       expect(mockNavigate).not.toHaveBeenCalled()
