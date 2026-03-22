@@ -42,17 +42,17 @@ export function IntakePhotosPage() {
   )
 
   const handleContinue = () => {
-    navigate("/intake/review")
+    navigate("/intake/confirmation")
   }
 
   const handleSkip = () => {
-    navigate("/intake/review")
+    navigate("/intake/confirmation")
   }
 
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 3 of 4</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 3 of 3</p>
         <h1 className="text-2xl font-semibold">Photos</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Upload photos of your existing kitchen to help us give you a more accurate quote.

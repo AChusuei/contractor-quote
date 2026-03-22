@@ -7,6 +7,7 @@ import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
 import { AppointmentConfirmPage } from "@/pages/AppointmentConfirmPage"
 import { IntakeChoicePage } from "@/pages/IntakeChoicePage"
 import { IntakeEstimatePage } from "@/pages/IntakeEstimatePage"
+import { IntakeConfirmationPage } from "@/pages/IntakeConfirmationPage"
 import { AdminShell } from "@/components/AdminShell"
 import { QuotesPage } from "@/pages/admin/QuotesPage"
 import { QuoteDetailPage } from "@/pages/admin/QuoteDetailPage"
@@ -27,6 +28,7 @@ export default function App({ clerkConfigured }: AppProps) {
         <Route path="/intake/appointment" element={<IntakeAppointmentPage />} />
         <Route path="/intake/photos" element={<IntakePhotosPage />} />
         <Route path="/intake/review" element={<IntakeChoicePage />} />
+        <Route path="/intake/confirmation" element={<IntakeConfirmationPage />} />
         <Route path="/intake/confirmed" element={<AppointmentConfirmPage />} />
         <Route path="/intake/estimate" element={<IntakeEstimatePage />} />
       </Route>

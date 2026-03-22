@@ -29,7 +29,7 @@ describe("IntakePhotosPage", () => {
 
   it("renders step header", () => {
     renderPhotosPage()
-    expect(screen.getByText("Step 3 of 4")).toBeInTheDocument()
+    expect(screen.getByText("Step 3 of 3")).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument()
   })
 
@@ -52,13 +52,13 @@ describe("IntakePhotosPage", () => {
     const user = userEvent.setup()
     renderPhotosPage()
     await user.click(screen.getByRole("button", { name: /continue/i }))
-    expect(mockNavigate).toHaveBeenCalledWith("/intake/review")
+    expect(mockNavigate).toHaveBeenCalledWith("/intake/confirmation")
   })
 
   it("navigates to /intake/review when Skip is clicked", async () => {
     const user = userEvent.setup()
     renderPhotosPage()
     await user.click(screen.getByRole("button", { name: /skip/i }))
-    expect(mockNavigate).toHaveBeenCalledWith("/intake/review")
+    expect(mockNavigate).toHaveBeenCalledWith("/intake/confirmation")
   })
 })
