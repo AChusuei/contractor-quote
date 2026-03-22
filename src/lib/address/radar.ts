@@ -1,11 +1,11 @@
 import type { AddressComponents, AddressProvider, AddressSuggestion } from "./types"
 
-const API_KEY = import.meta.env.VITE_RADAR_API_KEY as string | undefined
+const API_KEY = import.meta.env.VITE_CQ_RADAR_API_KEY as string | undefined
 
 export class RadarProvider implements AddressProvider {
   async suggest(query: string): Promise<AddressSuggestion[]> {
     if (!API_KEY) {
-      console.warn("VITE_RADAR_API_KEY not set")
+      console.warn("VITE_CQ_RADAR_API_KEY not set")
       return []
     }
 
@@ -35,7 +35,7 @@ export class RadarProvider implements AddressProvider {
     // Radar autocomplete returns full address data inline; the id encodes the
     // formatted address in "radar:<index>:<formattedAddress>" format.
     const formattedAddress = id.split(":").slice(2).join(":")
-    if (!API_KEY) throw new Error("VITE_RADAR_API_KEY not set")
+    if (!API_KEY) throw new Error("VITE_CQ_RADAR_API_KEY not set")
 
     const params = new URLSearchParams({ query: formattedAddress, limit: "1" })
     const res = await fetch(`https://api.radar.io/v1/geocode/forward?${params}`, {
