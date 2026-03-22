@@ -1,40 +1,6 @@
-import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
-import { Button } from "components"
-import { cn } from "@/lib/utils"
-import {
-  fetchAppointmentSlots,
-  saveAppointmentSelection,
-  type AppointmentSlot,
-} from "@/lib/appointments"
+const APPOINTMENT_URL = import.meta.env.VITE_CQ_GOOGLE_APPOINTMENT_URL as string | undefined
 
 export function IntakeAppointmentPage() {
-  const navigate = useNavigate()
-  const [slots, setSlots] = useState<AppointmentSlot[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchAppointmentSlots()
-      .then(setSlots)
-      .catch(() => setFetchError("Couldn't load appointment times. Please try again."))
-      .finally(() => setLoading(false))
-  }, [])
-
-  const handleContinue = () => {
-    if (!selected) return
-    const slot = slots.find((s) => s.id === selected)!
-    saveAppointmentSelection({
-      type: "slot",
-      slotId: slot.id,
-      startAt: slot.startAt,
-      endAt: slot.endAt,
-      status: "pending",
-    })
-    navigate("/intake/confirmed")
-  }
-
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
@@ -45,46 +11,19 @@ export function IntakeAppointmentPage() {
         </p>
       </div>
 
-      {loading && (
-        <div className="space-y-2" aria-label="Loading appointment slots">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-12 rounded-md bg-muted animate-pulse" />
-          ))}
-        </div>
+      {APPOINTMENT_URL ? (
+        <iframe
+          src={APPOINTMENT_URL}
+          title="Schedule an appointment"
+          className="w-full border-0"
+          style={{ height: "700px" }}
+          allowFullScreen
+        />
+      ) : (
+        <p className="text-sm text-destructive">
+          Appointment scheduling is not configured. Please contact us directly to book a time.
+        </p>
       )}
-
-      {fetchError && (
-        <p className="text-sm text-destructive">{fetchError}</p>
-      )}
-
-      {!loading && !fetchError && (
-        <div className="space-y-2">
-          {slots.map((slot) => (
-            <button
-              key={slot.id}
-              type="button"
-              onClick={() => setSelected(slot.id)}
-              className={cn(
-                "w-full rounded-md border px-4 py-3 text-left text-sm transition-colors",
-                "hover:bg-accent",
-                selected === slot.id
-                  ? "border-primary bg-primary/5 font-medium"
-                  : "border-input bg-background"
-              )}
-            >
-              {slot.label}
-            </button>
-          ))}
-
-
-        </div>
-      )}
-
-      <div className="pt-4">
-        <Button onClick={handleContinue} disabled={!selected} className="w-full">
-          Continue
-        </Button>
-      </div>
     </div>
   )
 }
