@@ -19,7 +19,9 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "components": ["../../../../components/src/index.ts"],
+      "components/*": ["../../../../components/src/*"]
     }
   },
   "include": ["src"]
