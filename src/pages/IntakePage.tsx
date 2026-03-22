@@ -275,7 +275,7 @@ export function IntakePage() {
 
         <div className="pt-2">
           <Button type="submit" disabled={isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting…" : "Get My Free Quote"}
+            {isSubmitting ? "Submitting…" : "Continue"}
           </Button>
         </div>
       </form>
