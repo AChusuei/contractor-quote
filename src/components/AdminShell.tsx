@@ -14,7 +14,10 @@ function AdminUserButton() {
 
 export function AdminShell() {
   const location = useLocation()
-  const navLinks = [{ label: "Quotes", href: "/admin/quotes" }]
+  const navLinks = [
+    { label: "Quotes", href: "/admin/quotes" },
+    { label: "Email", href: "/admin/email/compose" },
+  ]
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,7 +36,7 @@ export function AdminShell() {
                   key={link.href}
                   to={link.href}
                   className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                    location.pathname === link.href
+                    location.pathname.startsWith(link.href)
                       ? "bg-accent font-medium text-accent-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   }`}
