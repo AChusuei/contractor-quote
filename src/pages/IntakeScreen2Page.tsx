@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -238,6 +239,7 @@ export function IntakeScreen2Page() {
     control,
     watch,
     reset,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<IntakeScreen2Data>({
     resolver: zodResolver(schema),
@@ -264,6 +266,14 @@ export function IntakeScreen2Page() {
       additionalNotes: scope?.additionalNotes ?? "",
     },
   })
+
+  const valuesRef = ctx?.valuesRef
+  useEffect(() => {
+    if (!readOnly && valuesRef) {
+      valuesRef.current = () => ({ scope: getValues() }) as Record<string, unknown>
+      return () => { valuesRef.current = null }
+    }
+  }, [readOnly, valuesRef, getValues])
 
   const layoutChanges = watch("layoutChanges")
   const flooringAction = watch("flooringAction")

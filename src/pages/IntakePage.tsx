@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -92,6 +92,7 @@ export function IntakePage() {
     handleSubmit,
     control,
     reset,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<IntakeFormData>({
     resolver: zodResolver(schema),
@@ -108,6 +109,14 @@ export function IntakePage() {
       referredByContractor: quote?.referredByContractor ?? "",
     },
   })
+
+  const valuesRef = ctx?.valuesRef
+  useEffect(() => {
+    if (!readOnly && valuesRef) {
+      valuesRef.current = () => getValues() as Record<string, unknown>
+      return () => { valuesRef.current = null }
+    }
+  }, [readOnly, valuesRef, getValues])
 
   const onSubmit = async (data: IntakeFormData) => {
     setSubmitError(null)
