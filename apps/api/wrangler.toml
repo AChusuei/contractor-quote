@@ -1,0 +1,43 @@
+name = "contractor-quote-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# D1 Database — lead storage
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "contractor-quote-db"
+database_id = "placeholder-replace-with-real-d1-id"
+
+# ---------------------------------------------------------------------------
+# R2 Bucket — photo / file storage
+# ---------------------------------------------------------------------------
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "contractor-quote-storage"
+
+# ---------------------------------------------------------------------------
+# KV Namespace — signed token store (appointment links, upload tokens)
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "placeholder-replace-with-real-kv-id"
+
+# ---------------------------------------------------------------------------
+# Secrets (set via `wrangler secret put <NAME>`)
+# ---------------------------------------------------------------------------
+# HUBSPOT_ACCESS_TOKEN   — HubSpot private-app token for CRM submission
+# TOKEN_SIGNING_SECRET   — HMAC secret for signed URL tokens
+#
+# Example:
+#   wrangler secret put HUBSPOT_ACCESS_TOKEN
+#   wrangler secret put TOKEN_SIGNING_SECRET
+
+# ---------------------------------------------------------------------------
+# Local dev vars (not for production)
+# ---------------------------------------------------------------------------
+[vars]
+ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:5173"
