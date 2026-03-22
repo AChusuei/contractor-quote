@@ -6,7 +6,6 @@ import { IntakeAppointmentPage } from "@/pages/IntakeAppointmentPage"
 import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
 import { AppointmentConfirmPage } from "@/pages/AppointmentConfirmPage"
 import { IntakeChoicePage } from "@/pages/IntakeChoicePage"
-import { IntakeCheckoutPage } from "@/pages/IntakeCheckoutPage"
 import { IntakeEstimatePage } from "@/pages/IntakeEstimatePage"
 
 export default function App() {
@@ -18,9 +17,8 @@ export default function App() {
         <Route path="/intake/appointment" element={<IntakeAppointmentPage />} />
         <Route path="/intake/photos" element={<IntakePhotosPage />} />
         <Route path="/intake/review" element={<IntakeChoicePage />} />
-        <Route path="/intake/checkout" element={<IntakeCheckoutPage />} />
+        <Route path="/intake/confirmed" element={<AppointmentConfirmPage />} />
         <Route path="/intake/estimate" element={<IntakeEstimatePage />} />
-        <Route path="/appointments/:token" element={<AppointmentConfirmPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
