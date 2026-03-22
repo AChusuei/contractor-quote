@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { FileUpload, type UploadFile } from "components"
 import { Button } from "components"
-import { uploadQuotePhoto } from "@/lib/supabase"
+import { uploadQuotePhoto, getQuotePhotos } from "@/lib/supabase"
 import { attachPhotoSession } from "@/lib/quoteStore"
+import { useQuoteContext } from "@/lib/QuoteContext"
 
 const MAX_PHOTOS = 10
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
@@ -26,9 +27,28 @@ function getQuoteSessionId(): string {
 
 export function IntakePhotosPage() {
   const navigate = useNavigate()
+  const ctx = useQuoteContext()
+  const readOnly = ctx?.readOnly ?? false
+  const photoSessionId = ctx?.quote?.photoSessionId
+
   const [files, setFiles] = useState<UploadFile[]>([])
-  const quoteSessionId = useRef(getQuoteSessionId()).current
-  attachPhotoSession(quoteSessionId)
+  const [photos, setPhotos] = useState<{ key: string; url: string }[]>([])
+  const quoteSessionId = useRef(readOnly ? "" : getQuoteSessionId()).current
+  if (!readOnly) attachPhotoSession(quoteSessionId)
+
+  useEffect(() => {
+    if (!readOnly || !photoSessionId) return
+    let revoke: (() => void) | undefined
+    getQuotePhotos(photoSessionId).then((results) => {
+      const items = results.map(({ key, file }) => ({
+        key,
+        url: URL.createObjectURL(file),
+      }))
+      setPhotos(items)
+      revoke = () => items.forEach(({ url }) => URL.revokeObjectURL(url))
+    })
+    return () => revoke?.()
+  }, [readOnly, photoSessionId])
 
   const isUploading = files.some((f) => f.status === "uploading")
   const hasError = files.some((f) => f.status === "error")
@@ -47,6 +67,31 @@ export function IntakePhotosPage() {
 
   const handleSkip = () => {
     navigate("/intake/confirmation")
+  }
+
+  if (readOnly) {
+    return (
+      <div className="max-w-xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold">Photos</h1>
+        </div>
+        {photos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No photos uploaded.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {photos.map(({ key, url }) => (
+              <a key={key} href={url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={url}
+                  alt="Quote photo"
+                  className="rounded-md border aspect-square object-cover w-full hover:opacity-90 transition-opacity"
+                />
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (

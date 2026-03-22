@@ -9,12 +9,15 @@ import {
   type Quote,
   type QuoteStatus,
 } from "@/lib/quoteStore"
-import { getQuotePhotos } from "@/lib/supabase"
 import { fetchQuotes } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
+import { QuoteProvider } from "@/lib/QuoteContext"
+import { IntakePage } from "@/pages/IntakePage"
+import { IntakeScreen2Page } from "@/pages/IntakeScreen2Page"
+import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
 
 // ---------------------------------------------------------------------------
-// Status config (extends the existing statuses from quoteStore)
+// Status config
 // ---------------------------------------------------------------------------
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
@@ -35,33 +38,9 @@ const STATUS_COLORS: Record<QuoteStatus, string> = {
 
 const ALL_STATUSES: QuoteStatus[] = ["lead", "measure_scheduled", "quoted", "accepted", "rejected"]
 
-const PROPERTY_LABELS: Record<string, string> = {
-  house: "House",
-  apt: "Apartment",
-  building: "Building",
-  townhouse: "Townhouse",
-}
-
-const KITCHEN_SIZE_LABELS: Record<string, string> = {
-  small: "Small (< 70 sq ft)",
-  medium: "Medium (70–150 sq ft)",
-  large: "Large (150+ sq ft)",
-  open_concept: "Open concept",
-}
-
 // ---------------------------------------------------------------------------
 // Display helpers
 // ---------------------------------------------------------------------------
-
-function DetailRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="text-sm mt-0.5">{value}</p>
-    </div>
-  )
-}
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -83,6 +62,18 @@ function formatDateTime(iso: string): string {
     hour12: true,
   })
 }
+
+// ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+
+type TabId = "contact" | "scope" | "photos"
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "contact", label: "Contact & Project" },
+  { id: "scope", label: "Project Scope" },
+  { id: "photos", label: "Photos" },
+]
 
 // ---------------------------------------------------------------------------
 // Status panel
@@ -110,7 +101,7 @@ function StatusPanel({
             onClick={() => onStatusChange(s)}
             className="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
           >
-            → {STATUS_LABELS[s]}
+            &rarr; {STATUS_LABELS[s]}
           </button>
         ))}
       </div>
@@ -174,50 +165,7 @@ function NotesPanel({ quote, onSave }: { quote: Quote; onSave: (notes: string) =
 }
 
 // ---------------------------------------------------------------------------
-// Photos section
-// ---------------------------------------------------------------------------
-
-function PhotosSection({ photoSessionId }: { photoSessionId?: string }) {
-  const [photos, setPhotos] = useState<{ key: string; url: string }[]>([])
-
-  useEffect(() => {
-    if (!photoSessionId) return
-    let revoke: (() => void) | undefined
-    getQuotePhotos(photoSessionId).then((results) => {
-      const items = results.map(({ key, file }) => ({
-        key,
-        url: URL.createObjectURL(file),
-      }))
-      setPhotos(items)
-      revoke = () => items.forEach(({ url }) => URL.revokeObjectURL(url))
-    })
-    return () => revoke?.()
-  }, [photoSessionId])
-
-  return (
-    <div>
-      <SectionHeading>Photos</SectionHeading>
-      {photos.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No photos uploaded.</p>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {photos.map(({ key, url }) => (
-            <a key={key} href={url} target="_blank" rel="noopener noreferrer">
-              <img
-                src={url}
-                alt="Quote photo"
-                className="rounded-md border aspect-square object-cover w-full hover:opacity-90 transition-opacity"
-              />
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Fallback view for quotes that don't have localStorage data (e.g. mock/API quotes)
+// Fallback view for quotes that don't have localStorage data
 // ---------------------------------------------------------------------------
 
 function BasicQuoteView({ id }: { id: string }) {
@@ -231,9 +179,9 @@ function BasicQuoteView({ id }: { id: string }) {
   }, [id])
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <Link to="/admin/quotes" className="text-sm text-muted-foreground hover:text-foreground">
-        ← Back to quotes
+        &larr; Back to quotes
       </Link>
       <div className="rounded-lg border p-8 text-center space-y-2">
         {name && <p className="text-base font-medium">{name}</p>}
@@ -257,6 +205,7 @@ export function QuoteDetailPage() {
   const { isLoaded, isSignedIn } = useAuth()
   const [quote, setQuote] = useState<Quote | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabId>("contact")
 
   useEffect(() => {
     if (!id) { setNotFound(true); return }
@@ -279,16 +228,14 @@ export function QuoteDetailPage() {
 
   if (notFound || !quote) {
     return (
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <Link to="/admin/quotes" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to quotes
+          &larr; Back to quotes
         </Link>
         <p className="mt-8 text-center text-muted-foreground">Quote not found.</p>
       </div>
     )
   }
-
-  const scope = quote.scope
 
   const handleStatusChange = (status: QuoteStatus) => {
     if (!id) return
@@ -302,9 +249,9 @@ export function QuoteDetailPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8">
       <Link to="/admin/quotes" className="text-sm text-muted-foreground hover:text-foreground">
-        ← Back to quotes
+        &larr; Back to quotes
       </Link>
 
       {/* Header */}
@@ -319,136 +266,33 @@ export function QuoteDetailPage() {
         <StatusBadge status={quote.status} />
       </div>
 
-      <div className="grid gap-8 sm:grid-cols-2">
-        {/* Left — quote data */}
-        <div className="space-y-8">
-          {/* Contact info */}
-          <div>
-            <SectionHeading>Contact information</SectionHeading>
-            <div className="space-y-3">
-              <DetailRow label="Name" value={quote.name} />
-              <DetailRow label="Email" value={quote.email} />
-              <DetailRow label="Phone" value={quote.phone} />
-              {quote.cell && <DetailRow label="Cell" value={quote.cell} />}
-              <DetailRow label="How they found us" value={quote.howDidYouFindUs} />
-              {quote.referredByContractor && (
-                <DetailRow label="Referred by" value={quote.referredByContractor} />
-              )}
-            </div>
+      <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
+        {/* Left — tabbed intake pages */}
+        <div>
+          {/* Tab bar */}
+          <div className="flex border-b mb-6">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                  activeTab === tab.id
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* Project overview */}
-          <div>
-            <SectionHeading>Project overview</SectionHeading>
-            <div className="space-y-3">
-              <DetailRow label="Address" value={quote.jobSiteAddress} />
-              <DetailRow label="Property type" value={PROPERTY_LABELS[quote.propertyType]} />
-              <DetailRow label="Budget range" value={quote.budgetRange} />
-              {quote.quotePath && (
-                <DetailRow
-                  label="Quote path"
-                  value={quote.quotePath === "site_visit" ? "Site visit" : "Rough estimate"}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Project scope */}
-          {scope && (
-            <div>
-              <SectionHeading>Project scope</SectionHeading>
-              <div className="space-y-3">
-                <DetailRow
-                  label="Scope type"
-                  value={scope.scopeType === "supply_only" ? "Supply only" : "Supply + install"}
-                />
-                <DetailRow
-                  label="Layout changes"
-                  value={scope.layoutChanges === "yes" ? "Yes" : "No"}
-                />
-                <DetailRow label="Kitchen size" value={KITCHEN_SIZE_LABELS[scope.kitchenSize]} />
-                <DetailRow
-                  label="Cabinets"
-                  value={
-                    scope.cabinets === "new"
-                      ? "New cabinets"
-                      : scope.cabinets === "reface"
-                      ? "Reface existing"
-                      : "Keep as-is"
-                  }
-                />
-                <DetailRow label="Cabinet door style" value={scope.cabinetDoorStyle} />
-                <DetailRow label="Countertop material" value={scope.countertopMaterial} />
-                <DetailRow label="Edge profile" value={scope.countertopEdge} />
-                <DetailRow label="Sink type" value={scope.sinkType} />
-                <DetailRow
-                  label="Backsplash"
-                  value={
-                    scope.backsplash === "yes"
-                      ? "Yes"
-                      : scope.backsplash === "no"
-                      ? "No"
-                      : "Undecided"
-                  }
-                />
-                <DetailRow
-                  label="Flooring"
-                  value={
-                    scope.flooringAction === "keep"
-                      ? "Keep existing"
-                      : `Replace — ${scope.flooringType ?? "type TBD"}`
-                  }
-                />
-                <DetailRow
-                  label="Island / peninsula"
-                  value={scope.islandPeninsula === "none" ? "None" : scope.islandPeninsula}
-                />
-                <DetailRow
-                  label="Design help"
-                  value={
-                    scope.designHelp === "yes"
-                      ? "Yes, needs design direction"
-                      : "No, has a clear vision"
-                  }
-                />
-              </div>
-
-              {/* Appliances */}
-              <div className="mt-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
-                  Appliances
-                </p>
-                <div className="rounded-md border divide-y text-sm">
-                  {[
-                    { label: "Refrigerator", value: scope.applianceFridge },
-                    { label: "Range / Stove", value: scope.applianceRange },
-                    { label: "Dishwasher", value: scope.applianceDishwasher },
-                    { label: "Range Hood", value: scope.applianceHood },
-                    { label: "Microwave", value: scope.applianceMicrowave },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex items-center justify-between px-3 py-2">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className={cn("capitalize font-medium", value === "none" && "text-muted-foreground font-normal")}>
-                        {value === "none" ? "Not included" : value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {scope.additionalNotes && (
-                <div className="mt-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                    Additional notes
-                  </p>
-                  <p className="text-sm bg-muted/40 rounded-md p-3">{scope.additionalNotes}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Photos */}
-          <PhotosSection photoSessionId={quote.photoSessionId} />
+          {/* Tab content — each tab renders an intake page in read-only mode */}
+          <QuoteProvider quote={quote} readOnly>
+            {activeTab === "contact" && <IntakePage />}
+            {activeTab === "scope" && <IntakeScreen2Page />}
+            {activeTab === "photos" && <IntakePhotosPage />}
+          </QuoteProvider>
         </div>
 
         {/* Right — admin actions */}

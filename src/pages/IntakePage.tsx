@@ -7,6 +7,7 @@ import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 import { createQuote } from "@/lib/quoteStore"
+import { useQuoteContext } from "@/lib/QuoteContext"
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -82,6 +83,9 @@ function inputClass(hasError?: boolean) {
 export function IntakePage() {
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const ctx = useQuoteContext()
+  const readOnly = ctx?.readOnly ?? false
+  const quote = ctx?.quote
 
   const {
     register,
@@ -93,13 +97,15 @@ export function IntakePage() {
     resolver: zodResolver(schema),
     mode: "onTouched",
     defaultValues: {
-      name: "",
-      email: "",
-      phone: "",
-      cell: "",
-      jobSiteAddress: "",
-      howDidYouFindUs: "",
-      referredByContractor: "",
+      name: quote?.name ?? "",
+      email: quote?.email ?? "",
+      phone: quote?.phone ?? "",
+      cell: quote?.cell ?? "",
+      jobSiteAddress: quote?.jobSiteAddress ?? "",
+      propertyType: quote?.propertyType,
+      budgetRange: quote?.budgetRange,
+      howDidYouFindUs: quote?.howDidYouFindUs ?? "",
+      referredByContractor: quote?.referredByContractor ?? "",
     },
   })
 
@@ -127,14 +133,18 @@ export function IntakePage() {
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 3</p>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 3</p>
+        )}
         <h1 className="text-2xl font-semibold">Request a Quote</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Tell us about your project and we'll get back to you with a free estimate.
-        </p>
+        {!readOnly && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Tell us about your project and we'll get back to you with a free estimate.
+          </p>
+        )}
       </div>
 
-      {import.meta.env.DEV && (
+      {!readOnly && import.meta.env.DEV && (
         <button
           type="button"
           onClick={() => reset({
@@ -154,14 +164,15 @@ export function IntakePage() {
         </button>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-4">
         {/* Name */}
         <div>
-          <Label htmlFor="name">Full Name *</Label>
+          <Label htmlFor="name">Full Name {!readOnly && "*"}</Label>
           <input
             id="name"
             type="text"
             autoComplete="name"
+            disabled={readOnly}
             className={inputClass(!!errors.name)}
             {...register("name")}
           />
@@ -170,11 +181,12 @@ export function IntakePage() {
 
         {/* Email */}
         <div>
-          <Label htmlFor="email">Email *</Label>
+          <Label htmlFor="email">Email {!readOnly && "*"}</Label>
           <input
             id="email"
             type="email"
             autoComplete="email"
+            disabled={readOnly}
             className={inputClass(!!errors.email)}
             {...register("email")}
           />
@@ -184,11 +196,12 @@ export function IntakePage() {
         {/* Phone + Cell */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="phone">Phone *</Label>
+            <Label htmlFor="phone">Phone {!readOnly && "*"}</Label>
             <input
               id="phone"
               type="tel"
               autoComplete="tel"
+              disabled={readOnly}
               className={inputClass(!!errors.phone)}
               {...register("phone")}
             />
@@ -200,6 +213,7 @@ export function IntakePage() {
               id="cell"
               type="tel"
               autoComplete="tel"
+              disabled={readOnly}
               className={inputClass(!!errors.cell)}
               {...register("cell")}
             />
@@ -209,30 +223,41 @@ export function IntakePage() {
 
         {/* Job site address */}
         <div>
-          <Label htmlFor="jobSiteAddress">Job Site Address *</Label>
-          <Controller
-            name="jobSiteAddress"
-            control={control}
-            render={({ field }) => (
-              <AddressAutocomplete
-                id="jobSiteAddress"
-                value={field.value ?? ""}
-                onChange={field.onChange}
-                onBlur={field.onBlur}
-                hasError={!!errors.jobSiteAddress}
-                autoComplete="street-address"
-                placeholder="Start typing an address…"
-              />
-            )}
-          />
+          <Label htmlFor="jobSiteAddress">Job Site Address {!readOnly && "*"}</Label>
+          {readOnly ? (
+            <input
+              id="jobSiteAddress"
+              type="text"
+              disabled
+              className={inputClass()}
+              {...register("jobSiteAddress")}
+            />
+          ) : (
+            <Controller
+              name="jobSiteAddress"
+              control={control}
+              render={({ field }) => (
+                <AddressAutocomplete
+                  id="jobSiteAddress"
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  hasError={!!errors.jobSiteAddress}
+                  autoComplete="street-address"
+                  placeholder="Start typing an address…"
+                />
+              )}
+            />
+          )}
           <FieldError message={errors.jobSiteAddress?.message} />
         </div>
 
         {/* Property type */}
         <div>
-          <Label htmlFor="propertyType">Property Type *</Label>
+          <Label htmlFor="propertyType">Property Type {!readOnly && "*"}</Label>
           <select
             id="propertyType"
+            disabled={readOnly}
             className={inputClass(!!errors.propertyType)}
             {...register("propertyType")}
             defaultValue=""
@@ -248,9 +273,10 @@ export function IntakePage() {
 
         {/* Budget range */}
         <div>
-          <Label htmlFor="budgetRange">Budget Range *</Label>
+          <Label htmlFor="budgetRange">Budget Range {!readOnly && "*"}</Label>
           <select
             id="budgetRange"
+            disabled={readOnly}
             className={inputClass(!!errors.budgetRange)}
             {...register("budgetRange")}
             defaultValue=""
@@ -266,9 +292,10 @@ export function IntakePage() {
 
         {/* How did you find us */}
         <div>
-          <Label htmlFor="howDidYouFindUs">How Did You Find Us? *</Label>
+          <Label htmlFor="howDidYouFindUs">How Did You Find Us? {!readOnly && "*"}</Label>
           <select
             id="howDidYouFindUs"
+            disabled={readOnly}
             className={inputClass(!!errors.howDidYouFindUs)}
             {...register("howDidYouFindUs")}
             defaultValue=""
@@ -290,22 +317,25 @@ export function IntakePage() {
           <input
             id="referredByContractor"
             type="text"
-            placeholder="Leave blank if not applicable"
+            placeholder={readOnly ? "" : "Leave blank if not applicable"}
+            disabled={readOnly}
             className={inputClass(!!errors.referredByContractor)}
             {...register("referredByContractor")}
           />
           <FieldError message={errors.referredByContractor?.message} />
         </div>
 
-        {submitError && (
+        {!readOnly && submitError && (
           <p className="text-sm text-destructive">{submitError}</p>
         )}
 
-        <div className="pt-2">
-          <Button type="submit" disabled={isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting…" : "Continue"}
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="pt-2">
+            <Button type="submit" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? "Submitting…" : "Continue"}
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   )
