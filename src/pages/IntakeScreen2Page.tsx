@@ -20,8 +20,8 @@ const schema = z.object({
     message: "Select a cabinet option",
   }),
   cabinetDoorStyle: z.string().min(1, "Select a cabinet door style"),
-  countertopMaterial: z.string().min(1, "Enter countertop material"),
-  countertopEdge: z.string().min(1, "Enter edge preference"),
+  countertopMaterial: z.string().min(1, "Select a countertop material"),
+  countertopEdge: z.string().min(1, "Select an edge profile"),
   sinkType: z.string().min(1, "Select a sink type"),
   backsplash: z.enum(["yes", "no", "undecided"], {
     message: "Select an option",
@@ -166,6 +166,34 @@ function ApplianceRow({
     </div>
   )
 }
+
+const COUNTERTOP_MATERIALS = [
+  "Quartz",
+  "Granite",
+  "Marble",
+  "Quartzite",
+  "Butcher block",
+  "Concrete",
+  "Laminate",
+  "Solid surface (Corian)",
+  "Porcelain / tile",
+  "Stainless steel",
+  "Soapstone",
+  "Undecided",
+  "Other",
+]
+
+const COUNTERTOP_EDGES = [
+  "Eased",
+  "Beveled",
+  "Bullnose",
+  "Half bullnose",
+  "Ogee",
+  "Waterfall / mitered",
+  "Pencil / micro bevel",
+  "Undecided",
+  "Other",
+]
 
 const CABINET_DOOR_STYLES = [
   "Shaker",
@@ -338,24 +366,32 @@ export function IntakeScreen2Page() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label htmlFor="countertopMaterial">Countertop material *</Label>
-            <input
+            <select
               id="countertopMaterial"
-              type="text"
-              placeholder="e.g. Quartz, Granite"
               className={inputClass(!!errors.countertopMaterial)}
               {...register("countertopMaterial")}
-            />
+              defaultValue=""
+            >
+              <option value="" disabled>Select material</option>
+              {COUNTERTOP_MATERIALS.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
             <FieldError message={errors.countertopMaterial?.message} />
           </div>
           <div>
-            <Label htmlFor="countertopEdge">Edge preference *</Label>
-            <input
+            <Label htmlFor="countertopEdge">Edge profile *</Label>
+            <select
               id="countertopEdge"
-              type="text"
-              placeholder="e.g. Eased, Bullnose"
               className={inputClass(!!errors.countertopEdge)}
               {...register("countertopEdge")}
-            />
+              defaultValue=""
+            >
+              <option value="" disabled>Select edge</option>
+              {COUNTERTOP_EDGES.map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </select>
             <FieldError message={errors.countertopEdge?.message} />
           </div>
         </div>
