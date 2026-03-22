@@ -12,6 +12,7 @@ import { AdminShell } from "@/components/AdminShell"
 import { QuotesPage } from "@/pages/admin/QuotesPage"
 import { QuoteDetailPage } from "@/pages/admin/QuoteDetailPage"
 import { SignInPage } from "@/pages/admin/SignInPage"
+import { EmailComposePage } from "@/pages/admin/EmailComposePage"
 import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
 
 interface AppProps {
@@ -40,6 +41,7 @@ export default function App({ clerkConfigured }: AppProps) {
             <Route path="/admin/sign-in/*" element={<SignInPage />} />
             <Route path="/admin/quotes" element={<QuotesPage />} />
             <Route path="/admin/quotes/:id" element={<QuoteDetailPage />} />
+            <Route path="/admin/email/compose" element={<EmailComposePage />} />
             <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
           </>
         ) : (
