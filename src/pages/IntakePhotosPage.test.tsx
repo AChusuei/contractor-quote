@@ -29,7 +29,7 @@ describe("IntakePhotosPage", () => {
 
   it("renders step header", () => {
     renderPhotosPage()
-    expect(screen.getByText("Step 4 of 5")).toBeInTheDocument()
+    expect(screen.getByText("Step 3 of 4")).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument()
   })
 
