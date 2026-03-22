@@ -41,7 +41,7 @@ describe("IntakeChoicePage", () => {
     renderChoicePage()
     await user.click(screen.getByText(/schedule a site visit/i).closest("button")!)
     expect(getQuotePath()).toBe("site_visit")
-    expect(mockNavigate).toHaveBeenCalledWith("/intake/checkout")
+    expect(mockNavigate).toHaveBeenCalledWith("/intake/appointment")
   })
 
   it("stores estimate_requested path and navigates to /intake/estimate when rough estimate is chosen", async () => {
