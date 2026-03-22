@@ -41,7 +41,7 @@ export function IntakeAppointmentPage() {
         <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 5 of 5</p>
         <h1 className="text-2xl font-semibold">Preferred Appointment</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Pick a time that works for your site visit. We'll confirm once we receive your request.
+          Pick a tentative date and time that works for your site visit. Once we receive your request, we'll confirm by email if that date and time work.
         </p>
       </div>
 
