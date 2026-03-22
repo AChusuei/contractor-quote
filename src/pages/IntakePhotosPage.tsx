@@ -64,7 +64,6 @@ export function IntakePhotosPage() {
           accept={ACCEPT}
           maxSize={MAX_FILE_SIZE}
           onUpload={atLimit ? undefined : handleUpload}
-          value={files}
           onChange={setFiles}
           disabled={atLimit}
         />
