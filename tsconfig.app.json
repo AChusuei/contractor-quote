@@ -20,8 +20,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "components": ["../../../components/src/index.ts"],
-      "components/*": ["../../../components/src/*"]
+      "components": ["../../../../components/dist/index"],
+      "components/*": ["../../../../components/dist/*"]
     }
   },
   "include": ["src"]
