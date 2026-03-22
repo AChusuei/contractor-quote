@@ -178,6 +178,18 @@ export function updateStatus(id: string, status: QuoteStatus): void {
   writeAll(all)
 }
 
+/** Update lead/scope fields on a quote (for admin edits). */
+export function updateQuote(
+  id: string,
+  updates: Partial<Omit<Quote, "id" | "createdAt" | "status" | "statusHistory" | "contractorNotes">>
+): void {
+  const all = readAll()
+  const idx = all.findIndex((q) => q.id === id)
+  if (idx === -1) return
+  all[idx] = { ...all[idx], ...updates }
+  writeAll(all)
+}
+
 /** Update the contractor notes on a quote. */
 export function updateNotes(id: string, notes: string): void {
   const all = readAll()

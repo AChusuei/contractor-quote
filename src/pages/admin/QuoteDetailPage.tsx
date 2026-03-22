@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { Button } from "components"
 import {
   getQuote,
+  updateQuote,
   updateStatus,
   updateNotes,
   type Quote,
@@ -206,6 +207,9 @@ export function QuoteDetailPage() {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>("contact")
+  const [editing, setEditing] = useState(false)
+  const valuesRef = useRef<(() => Record<string, unknown>) | null>(null)
+  const pendingEditsRef = useRef<Record<string, unknown>>({})
 
   useEffect(() => {
     if (!id) { setNotFound(true); return }
@@ -213,6 +217,45 @@ export function QuoteDetailPage() {
     if (!q) { setNotFound(true); return }
     setQuote(q)
   }, [id])
+
+  /** Flush current tab's form values into the pending edits accumulator. */
+  const flushCurrentTab = useCallback(() => {
+    if (valuesRef.current) {
+      const values = valuesRef.current()
+      Object.assign(pendingEditsRef.current, values)
+    }
+  }, [])
+
+  /** Switch tabs, auto-saving current tab's edits when in edit mode. */
+  const handleTabChange = useCallback(
+    (tab: TabId) => {
+      if (editing) flushCurrentTab()
+      setActiveTab(tab)
+    },
+    [editing, flushCurrentTab]
+  )
+
+  const handleEdit = () => {
+    pendingEditsRef.current = {}
+    setEditing(true)
+  }
+
+  const handleSave = () => {
+    if (!id || !quote) return
+    flushCurrentTab()
+    const edits = pendingEditsRef.current
+    updateQuote(id, edits)
+    setQuote(getQuote(id))
+    pendingEditsRef.current = {}
+    setEditing(false)
+  }
+
+  const handleCancel = () => {
+    pendingEditsRef.current = {}
+    setEditing(false)
+    // Re-read quote from store to discard any visual changes
+    if (id) setQuote(getQuote(id))
+  }
 
   if (!isLoaded || !isSignedIn) {
     return (
@@ -263,8 +306,29 @@ export function QuoteDetailPage() {
             Submitted {formatDateTime(quote.createdAt)}
           </p>
         </div>
-        <StatusBadge status={quote.status} />
+        <div className="flex items-center gap-3">
+          <StatusBadge status={quote.status} />
+          {!editing && (
+            <Button size="sm" variant="outline" onClick={handleEdit}>
+              Edit
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Edit mode toolbar */}
+      {editing && (
+        <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-2">
+          <span className="text-sm font-medium text-primary">Editing</span>
+          <div className="flex-1" />
+          <Button size="sm" variant="outline" onClick={handleCancel}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSave}>
+            Save changes
+          </Button>
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
         {/* Left — tabbed intake pages */}
@@ -274,7 +338,7 @@ export function QuoteDetailPage() {
             {TABS.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={cn(
                   "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
                   activeTab === tab.id
@@ -287,8 +351,8 @@ export function QuoteDetailPage() {
             ))}
           </div>
 
-          {/* Tab content — each tab renders an intake page in read-only mode */}
-          <QuoteProvider quote={quote} readOnly>
+          {/* Tab content */}
+          <QuoteProvider quote={quote} readOnly={!editing} valuesRef={valuesRef}>
             {activeTab === "contact" && <IntakePage />}
             {activeTab === "scope" && <IntakeScreen2Page />}
             {activeTab === "photos" && <IntakePhotosPage />}
