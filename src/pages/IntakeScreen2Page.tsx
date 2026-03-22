@@ -5,6 +5,7 @@ import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { attachScope } from "@/lib/quoteStore"
+import { useQuoteContext } from "@/lib/QuoteContext"
 
 const applianceSchema = z.enum(["new", "existing", "none"])
 
@@ -84,6 +85,7 @@ function RadioGroup({
   onChange,
   onBlur,
   error,
+  disabled,
 }: {
   name: string
   options: { value: string; label: string }[]
@@ -91,6 +93,7 @@ function RadioGroup({
   onChange: (v: string) => void
   onBlur?: () => void
   error?: string
+  disabled?: boolean
 }) {
   return (
     <div>
@@ -99,8 +102,8 @@ function RadioGroup({
           <label
             key={opt.value}
             className={cn(
-              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer select-none",
-              "hover:bg-accent transition-colors",
+              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm select-none",
+              disabled ? "cursor-default opacity-75" : "cursor-pointer hover:bg-accent transition-colors",
               value === opt.value
                 ? "border-primary bg-primary/5 font-medium"
                 : "border-input bg-background"
@@ -111,7 +114,8 @@ function RadioGroup({
               name={name}
               value={opt.value}
               checked={value === opt.value}
-              onChange={() => { onChange(opt.value); onBlur?.() }}
+              onChange={() => { if (!disabled) { onChange(opt.value); onBlur?.() } }}
+              disabled={disabled}
               className="sr-only"
             />
             {opt.label}
@@ -134,11 +138,13 @@ function ApplianceRow({
   name,
   value,
   onChange,
+  disabled,
 }: {
   label: string
   name: string
   value: string
   onChange: (v: string) => void
+  disabled?: boolean
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
@@ -148,8 +154,8 @@ function ApplianceRow({
           <label
             key={opt.value}
             className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer select-none",
-              "hover:bg-accent transition-colors",
+              "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs select-none",
+              disabled ? "cursor-default opacity-75" : "cursor-pointer hover:bg-accent transition-colors",
               value === opt.value
                 ? "border-primary bg-primary/5 font-medium"
                 : "border-input bg-background"
@@ -160,7 +166,8 @@ function ApplianceRow({
               name={name}
               value={opt.value}
               checked={value === opt.value}
-              onChange={() => onChange(opt.value)}
+              onChange={() => { if (!disabled) onChange(opt.value) }}
+              disabled={disabled}
               className="sr-only"
             />
             {opt.label}
@@ -221,6 +228,10 @@ const SINK_TYPES = [
 
 export function IntakeScreen2Page() {
   const navigate = useNavigate()
+  const ctx = useQuoteContext()
+  const readOnly = ctx?.readOnly ?? false
+  const scope = ctx?.quote?.scope
+
   const {
     register,
     handleSubmit,
@@ -232,11 +243,25 @@ export function IntakeScreen2Page() {
     resolver: zodResolver(schema),
     mode: "onTouched",
     defaultValues: {
-      applianceFridge: "none",
-      applianceRange: "none",
-      applianceDishwasher: "none",
-      applianceHood: "none",
-      applianceMicrowave: "none",
+      scopeType: scope?.scopeType,
+      layoutChanges: scope?.layoutChanges,
+      kitchenSize: scope?.kitchenSize,
+      cabinets: scope?.cabinets,
+      cabinetDoorStyle: scope?.cabinetDoorStyle ?? "",
+      countertopMaterial: scope?.countertopMaterial ?? "",
+      countertopEdge: scope?.countertopEdge ?? "",
+      sinkType: scope?.sinkType ?? "",
+      backsplash: scope?.backsplash,
+      flooringAction: scope?.flooringAction,
+      flooringType: scope?.flooringType ?? "",
+      applianceFridge: scope?.applianceFridge ?? "none",
+      applianceRange: scope?.applianceRange ?? "none",
+      applianceDishwasher: scope?.applianceDishwasher ?? "none",
+      applianceHood: scope?.applianceHood ?? "none",
+      applianceMicrowave: scope?.applianceMicrowave ?? "none",
+      islandPeninsula: scope?.islandPeninsula,
+      designHelp: scope?.designHelp,
+      additionalNotes: scope?.additionalNotes ?? "",
     },
   })
 
@@ -251,14 +276,18 @@ export function IntakeScreen2Page() {
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 3</p>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 3</p>
+        )}
         <h1 className="text-2xl font-semibold">Project Scope</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Tell us more about the scope and details of your kitchen project.
-        </p>
+        {!readOnly && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Tell us more about the scope and details of your kitchen project.
+          </p>
+        )}
       </div>
 
-      {import.meta.env.DEV && (
+      {!readOnly && import.meta.env.DEV && (
         <button
           type="button"
           onClick={() => reset({
@@ -287,11 +316,11 @@ export function IntakeScreen2Page() {
         </button>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
+      <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-6">
 
         {/* Scope type */}
         <div>
-          <Label htmlFor="scopeType">What are you looking for? *</Label>
+          <Label htmlFor="scopeType">What are you looking for? {!readOnly && "*"}</Label>
           <Controller
             name="scopeType"
             control={control}
@@ -306,6 +335,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.scopeType?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -313,7 +343,7 @@ export function IntakeScreen2Page() {
 
         {/* Layout changes */}
         <div>
-          <Label htmlFor="layoutChanges">Will this involve layout changes? *</Label>
+          <Label htmlFor="layoutChanges">Will this involve layout changes? {!readOnly && "*"}</Label>
           <Controller
             name="layoutChanges"
             control={control}
@@ -328,6 +358,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.layoutChanges?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -340,7 +371,7 @@ export function IntakeScreen2Page() {
 
         {/* Kitchen size */}
         <div>
-          <Label htmlFor="kitchenSize">Kitchen size *</Label>
+          <Label htmlFor="kitchenSize">Kitchen size {!readOnly && "*"}</Label>
           <Controller
             name="kitchenSize"
             control={control}
@@ -357,6 +388,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.kitchenSize?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -364,7 +396,7 @@ export function IntakeScreen2Page() {
 
         {/* Cabinets */}
         <div>
-          <Label htmlFor="cabinets">Cabinets *</Label>
+          <Label htmlFor="cabinets">Cabinets {!readOnly && "*"}</Label>
           <Controller
             name="cabinets"
             control={control}
@@ -380,6 +412,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.cabinets?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -387,9 +420,10 @@ export function IntakeScreen2Page() {
 
         {/* Cabinet door style */}
         <div>
-          <Label htmlFor="cabinetDoorStyle">Cabinet door style *</Label>
+          <Label htmlFor="cabinetDoorStyle">Cabinet door style {!readOnly && "*"}</Label>
           <select
             id="cabinetDoorStyle"
+            disabled={readOnly}
             className={inputClass(!!errors.cabinetDoorStyle)}
             {...register("cabinetDoorStyle")}
             defaultValue=""
@@ -405,9 +439,10 @@ export function IntakeScreen2Page() {
         {/* Countertop */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="countertopMaterial">Countertop material *</Label>
+            <Label htmlFor="countertopMaterial">Countertop material {!readOnly && "*"}</Label>
             <select
               id="countertopMaterial"
+              disabled={readOnly}
               className={inputClass(!!errors.countertopMaterial)}
               {...register("countertopMaterial")}
               defaultValue=""
@@ -420,9 +455,10 @@ export function IntakeScreen2Page() {
             <FieldError message={errors.countertopMaterial?.message} />
           </div>
           <div>
-            <Label htmlFor="countertopEdge">Edge profile *</Label>
+            <Label htmlFor="countertopEdge">Edge profile {!readOnly && "*"}</Label>
             <select
               id="countertopEdge"
+              disabled={readOnly}
               className={inputClass(!!errors.countertopEdge)}
               {...register("countertopEdge")}
               defaultValue=""
@@ -438,9 +474,10 @@ export function IntakeScreen2Page() {
 
         {/* Sink type */}
         <div>
-          <Label htmlFor="sinkType">Sink type *</Label>
+          <Label htmlFor="sinkType">Sink type {!readOnly && "*"}</Label>
           <select
             id="sinkType"
+            disabled={readOnly}
             className={inputClass(!!errors.sinkType)}
             {...register("sinkType")}
             defaultValue=""
@@ -455,7 +492,7 @@ export function IntakeScreen2Page() {
 
         {/* Backsplash */}
         <div>
-          <Label htmlFor="backsplash">Backsplash *</Label>
+          <Label htmlFor="backsplash">Backsplash {!readOnly && "*"}</Label>
           <Controller
             name="backsplash"
             control={control}
@@ -471,6 +508,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.backsplash?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -478,7 +516,7 @@ export function IntakeScreen2Page() {
 
         {/* Flooring */}
         <div>
-          <Label htmlFor="flooringAction">Flooring *</Label>
+          <Label htmlFor="flooringAction">Flooring {!readOnly && "*"}</Label>
           <Controller
             name="flooringAction"
             control={control}
@@ -493,16 +531,18 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.flooringAction?.message}
+                disabled={readOnly}
               />
             )}
           />
           {flooringAction === "replace" && (
             <div className="mt-2">
-              <Label htmlFor="flooringType">Flooring type *</Label>
+              <Label htmlFor="flooringType">Flooring type {!readOnly && "*"}</Label>
               <input
                 id="flooringType"
                 type="text"
-                placeholder="e.g. Hardwood, Tile, LVP"
+                placeholder={readOnly ? "" : "e.g. Hardwood, Tile, LVP"}
+                disabled={readOnly}
                 className={inputClass(!!errors.flooringType)}
                 {...register("flooringType")}
               />
@@ -519,35 +559,35 @@ export function IntakeScreen2Page() {
               name="applianceFridge"
               control={control}
               render={({ field }) => (
-                <ApplianceRow label="Refrigerator" name="applianceFridge" value={field.value} onChange={field.onChange} />
+                <ApplianceRow label="Refrigerator" name="applianceFridge" value={field.value} onChange={field.onChange} disabled={readOnly} />
               )}
             />
             <Controller
               name="applianceRange"
               control={control}
               render={({ field }) => (
-                <ApplianceRow label="Range / Stove" name="applianceRange" value={field.value} onChange={field.onChange} />
+                <ApplianceRow label="Range / Stove" name="applianceRange" value={field.value} onChange={field.onChange} disabled={readOnly} />
               )}
             />
             <Controller
               name="applianceDishwasher"
               control={control}
               render={({ field }) => (
-                <ApplianceRow label="Dishwasher" name="applianceDishwasher" value={field.value} onChange={field.onChange} />
+                <ApplianceRow label="Dishwasher" name="applianceDishwasher" value={field.value} onChange={field.onChange} disabled={readOnly} />
               )}
             />
             <Controller
               name="applianceHood"
               control={control}
               render={({ field }) => (
-                <ApplianceRow label="Range Hood" name="applianceHood" value={field.value} onChange={field.onChange} />
+                <ApplianceRow label="Range Hood" name="applianceHood" value={field.value} onChange={field.onChange} disabled={readOnly} />
               )}
             />
             <Controller
               name="applianceMicrowave"
               control={control}
               render={({ field }) => (
-                <ApplianceRow label="Microwave" name="applianceMicrowave" value={field.value} onChange={field.onChange} />
+                <ApplianceRow label="Microwave" name="applianceMicrowave" value={field.value} onChange={field.onChange} disabled={readOnly} />
               )}
             />
           </div>
@@ -555,7 +595,7 @@ export function IntakeScreen2Page() {
 
         {/* Island / peninsula */}
         <div>
-          <Label htmlFor="islandPeninsula">Island / peninsula *</Label>
+          <Label htmlFor="islandPeninsula">Island / peninsula {!readOnly && "*"}</Label>
           <Controller
             name="islandPeninsula"
             control={control}
@@ -572,6 +612,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.islandPeninsula?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -579,7 +620,7 @@ export function IntakeScreen2Page() {
 
         {/* Design help */}
         <div>
-          <Label htmlFor="designHelp">Do you need design help / direction? *</Label>
+          <Label htmlFor="designHelp">Do you need design help / direction? {!readOnly && "*"}</Label>
           <Controller
             name="designHelp"
             control={control}
@@ -594,6 +635,7 @@ export function IntakeScreen2Page() {
                 onChange={field.onChange}
                 onBlur={field.onBlur}
                 error={errors.designHelp?.message}
+                disabled={readOnly}
               />
             )}
           />
@@ -605,18 +647,21 @@ export function IntakeScreen2Page() {
           <textarea
             id="additionalNotes"
             rows={4}
-            placeholder="Any other details about your project…"
+            placeholder={readOnly ? "" : "Any other details about your project…"}
+            disabled={readOnly}
             className={inputClass(!!errors.additionalNotes)}
             {...register("additionalNotes")}
           />
           <FieldError message={errors.additionalNotes?.message} />
         </div>
 
-        <div className="pt-2">
-          <Button type="submit" disabled={isSubmitting} className="w-full">
-            {isSubmitting ? "Saving…" : "Continue"}
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="pt-2">
+            <Button type="submit" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? "Saving…" : "Continue"}
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   )
