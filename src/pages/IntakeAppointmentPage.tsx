@@ -4,8 +4,8 @@ export function IntakeAppointmentPage() {
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 5 of 5</p>
-        <h1 className="text-2xl font-semibold">Preferred Appointment</h1>
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 4 of 4</p>
+        <h1 className="text-2xl font-semibold">Preferred Site Visit Appointment</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Pick a tentative date and time that works for your site visit. Once we receive your request, we'll confirm by email if that date and time work.
         </p>
