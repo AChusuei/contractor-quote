@@ -243,13 +243,13 @@ export function IntakeScreen2Page() {
   const flooringAction = watch("flooringAction")
 
   const onSubmit = (_data: IntakeScreen2Data) => {
-    navigate("/intake/photos")
+    navigate("/intake/appointment")
   }
 
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 4</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 5</p>
         <h1 className="text-2xl font-semibold">Project Scope</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Tell us more about the scope and details of your kitchen project.
