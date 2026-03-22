@@ -2,7 +2,7 @@ import { GooglePlacesProvider } from "./google"
 import { RadarProvider } from "./radar"
 import type { AddressProvider } from "./types"
 
-const PROVIDER_KEY = import.meta.env.VITE_ADDRESS_PROVIDER as string | undefined
+const PROVIDER_KEY = import.meta.env.VITE_CQ_ADDRESS_PROVIDER as string | undefined
 
 let _provider: AddressProvider | null | undefined = undefined
 
@@ -24,7 +24,7 @@ export function getAddressProvider(): AddressProvider | null {
     return _provider
   }
 
-  console.warn(`Unknown VITE_ADDRESS_PROVIDER: "${PROVIDER_KEY}"`)
+  console.warn(`Unknown VITE_CQ_ADDRESS_PROVIDER: "${PROVIDER_KEY}"`)
   _provider = null
   return null
 }
