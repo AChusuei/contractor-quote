@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useForm } from "react-hook-form"
+import { useNavigate } from "react-router-dom"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
@@ -83,7 +84,7 @@ function inputClass(hasError?: boolean) {
 }
 
 export function IntakePage() {
-  const [submitted, setSubmitted] = useState(false)
+  const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const {
@@ -98,23 +99,10 @@ export function IntakePage() {
     setSubmitError(null)
     try {
       await submitToHubSpot(data)
-      setSubmitted(true)
+      navigate("/intake/scope")
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Submission failed. Please try again.")
     }
-  }
-
-  if (submitted) {
-    return (
-      <div className="max-w-lg mx-auto py-16 text-center">
-        <div className="rounded-lg border bg-card p-8 shadow-sm">
-          <h2 className="text-2xl font-semibold mb-2">Thank you!</h2>
-          <p className="text-muted-foreground">
-            We've received your information and will be in touch shortly.
-          </p>
-        </div>
-      </div>
-    )
   }
 
   return (
