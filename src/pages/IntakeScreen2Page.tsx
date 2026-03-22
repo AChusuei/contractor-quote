@@ -80,12 +80,14 @@ function RadioGroup({
   options,
   value,
   onChange,
+  onBlur,
   error,
 }: {
   name: string
   options: { value: string; label: string }[]
   value: string | undefined
   onChange: (v: string) => void
+  onBlur?: () => void
   error?: string
 }) {
   return (
@@ -107,7 +109,7 @@ function RadioGroup({
               name={name}
               value={opt.value}
               checked={value === opt.value}
-              onChange={() => onChange(opt.value)}
+              onChange={() => { onChange(opt.value); onBlur?.() }}
               className="sr-only"
             />
             {opt.label}
@@ -224,6 +226,7 @@ export function IntakeScreen2Page() {
     formState: { errors, isSubmitting },
   } = useForm<IntakeScreen2Data>({
     resolver: zodResolver(schema),
+    mode: "onTouched",
     defaultValues: {
       applianceFridge: "none",
       applianceRange: "none",
@@ -268,6 +271,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.scopeType?.message}
               />
             )}
@@ -289,6 +293,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.layoutChanges?.message}
               />
             )}
@@ -317,6 +322,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.kitchenSize?.message}
               />
             )}
@@ -339,6 +345,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.cabinets?.message}
               />
             )}
@@ -429,6 +436,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.backsplash?.message}
               />
             )}
@@ -450,6 +458,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.flooringAction?.message}
               />
             )}
@@ -528,6 +537,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.islandPeninsula?.message}
               />
             )}
@@ -549,6 +559,7 @@ export function IntakeScreen2Page() {
                 ]}
                 value={field.value}
                 onChange={field.onChange}
+                onBlur={field.onBlur}
                 error={errors.designHelp?.message}
               />
             )}
