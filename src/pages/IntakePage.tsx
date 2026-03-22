@@ -86,6 +86,7 @@ export function IntakePage() {
     register,
     handleSubmit,
     control,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<IntakeFormData>({
     resolver: zodResolver(schema),
@@ -120,6 +121,26 @@ export function IntakePage() {
           Tell us about your project and we'll get back to you with a free estimate.
         </p>
       </div>
+
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          onClick={() => reset({
+            name: "John Smith",
+            email: "john.smith@example.com",
+            phone: "(718) 555-1234",
+            cell: "(718) 555-5678",
+            jobSiteAddress: "148-03 Kalmia Avenue, Flushing, New York 11355, United States",
+            propertyType: "house",
+            budgetRange: "25-50k",
+            howDidYouFindUs: "referral",
+            referredByContractor: "Mike's Contracting",
+          })}
+          className="mb-4 w-full rounded border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
+        >
+          ⚡ Fill test data (dev only)
+        </button>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {/* Name */}

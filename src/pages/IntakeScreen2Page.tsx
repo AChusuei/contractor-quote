@@ -225,6 +225,7 @@ export function IntakeScreen2Page() {
     handleSubmit,
     control,
     watch,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<IntakeScreen2Data>({
     resolver: zodResolver(schema),
@@ -254,6 +255,35 @@ export function IntakeScreen2Page() {
           Tell us more about the scope and details of your kitchen project.
         </p>
       </div>
+
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          onClick={() => reset({
+            scopeType: "supply_install",
+            layoutChanges: "no",
+            kitchenSize: "medium",
+            cabinets: "new",
+            cabinetDoorStyle: "Shaker",
+            countertopMaterial: "Quartz",
+            countertopEdge: "Eased",
+            sinkType: "Undermount single basin",
+            backsplash: "yes",
+            flooringAction: "keep",
+            applianceFridge: "existing",
+            applianceRange: "new",
+            applianceDishwasher: "new",
+            applianceHood: "none",
+            applianceMicrowave: "existing",
+            islandPeninsula: "none",
+            designHelp: "no",
+            additionalNotes: "Looking to do a full kitchen reno, open to suggestions on layout.",
+          })}
+          className="mb-4 w-full rounded border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
+        >
+          ⚡ Fill test data (dev only)
+        </button>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
 
