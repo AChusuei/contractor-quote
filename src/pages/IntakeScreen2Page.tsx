@@ -1,4 +1,5 @@
 import { useForm, Controller } from "react-hook-form"
+import { useNavigate } from "react-router-dom"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
@@ -218,6 +219,7 @@ const SINK_TYPES = [
 ]
 
 export function IntakeScreen2Page() {
+  const navigate = useNavigate()
   const {
     register,
     handleSubmit,
@@ -239,9 +241,8 @@ export function IntakeScreen2Page() {
   const layoutChanges = watch("layoutChanges")
   const flooringAction = watch("flooringAction")
 
-  const onSubmit = (data: IntakeScreen2Data) => {
-    // Screen 2 data — navigation to next screen handled by parent flow
-    console.log("Screen 2 submitted:", data)
+  const onSubmit = (_data: IntakeScreen2Data) => {
+    navigate("/intake/photos")
   }
 
   return (

@@ -1,7 +1,14 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
 import { IntakeScreen2Page } from "./IntakeScreen2Page"
+
+const mockNavigate = vi.fn()
+vi.mock("react-router-dom", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("react-router-dom")>()
+  return { ...mod, useNavigate: () => mockNavigate }
+})
 
 // These are the exact values defined in IntakeScreen2Page constants
 const COUNTERTOP_MATERIALS = [
@@ -33,7 +40,11 @@ const COUNTERTOP_EDGES = [
 ]
 
 function renderScreen2() {
-  return render(<IntakeScreen2Page />)
+  return render(
+    <MemoryRouter>
+      <IntakeScreen2Page />
+    </MemoryRouter>
+  )
 }
 
 describe("IntakeScreen2Page — countertop material dropdown", () => {
