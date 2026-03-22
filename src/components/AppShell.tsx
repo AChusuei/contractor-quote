@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom"
+import logoUrl from "@/assets/logo.png"
 
-const LOGO_URL = import.meta.env.VITE_CQ_LOGO_URL as string | undefined
+const LOGO_URL = logoUrl || (import.meta.env.VITE_CQ_LOGO_URL as string | undefined)
 
 export function AppShell() {
   return (
