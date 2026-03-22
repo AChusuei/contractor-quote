@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
+import { attachScope } from "@/lib/quoteStore"
 
 const applianceSchema = z.enum(["new", "existing", "none"])
 
@@ -242,7 +243,8 @@ export function IntakeScreen2Page() {
   const layoutChanges = watch("layoutChanges")
   const flooringAction = watch("flooringAction")
 
-  const onSubmit = (_data: IntakeScreen2Data) => {
+  const onSubmit = (data: IntakeScreen2Data) => {
+    attachScope(data)
     navigate("/intake/photos")
   }
 

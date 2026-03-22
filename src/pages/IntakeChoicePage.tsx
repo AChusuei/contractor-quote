@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
+import { attachQuotePath } from "@/lib/quoteStore"
 
 export type QuotePath = "site_visit" | "estimate_requested"
 
@@ -20,11 +21,13 @@ export function IntakeChoicePage() {
 
   const handleSiteVisit = () => {
     saveQuotePath("site_visit")
+    attachQuotePath("site_visit")
     navigate("/intake/appointment")
   }
 
   const handleEstimate = () => {
     saveQuotePath("estimate_requested")
+    attachQuotePath("estimate_requested")
     navigate("/intake/estimate")
   }
 

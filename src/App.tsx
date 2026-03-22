@@ -9,6 +9,7 @@ import { IntakeChoicePage } from "@/pages/IntakeChoicePage"
 import { IntakeEstimatePage } from "@/pages/IntakeEstimatePage"
 import { AdminShell } from "@/components/AdminShell"
 import { QuotesPage } from "@/pages/admin/QuotesPage"
+import { QuoteDetailPage } from "@/pages/admin/QuoteDetailPage"
 import { SignInPage } from "@/pages/admin/SignInPage"
 import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
 
@@ -19,6 +20,7 @@ interface AppProps {
 export default function App({ clerkConfigured }: AppProps) {
   return (
     <Routes>
+      {/* Customer-facing intake flow */}
       <Route element={<AppShell />}>
         <Route path="/" element={<IntakePage />} />
         <Route path="/intake/scope" element={<IntakeScreen2Page />} />
@@ -29,11 +31,13 @@ export default function App({ clerkConfigured }: AppProps) {
         <Route path="/intake/estimate" element={<IntakeEstimatePage />} />
       </Route>
 
+      {/* Admin portal — Clerk-protected */}
       <Route element={<AdminShell />}>
         {clerkConfigured ? (
           <>
             <Route path="/admin/sign-in/*" element={<SignInPage />} />
             <Route path="/admin/quotes" element={<QuotesPage />} />
+            <Route path="/admin/quotes/:id" element={<QuoteDetailPage />} />
             <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
           </>
         ) : (
