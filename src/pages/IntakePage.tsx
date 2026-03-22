@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils"
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Enter a valid email"),
-  phone: z.string().min(1, "Phone is required"),
-  cell: z.string().optional(),
+  phone: z.string().refine((v) => v.replace(/\D/g, "").length >= 10, "Enter a valid phone number"),
+  cell: z.string().refine((v) => v === "" || v.replace(/\D/g, "").length >= 10, "Enter a valid phone number").optional(),
   jobSiteAddress: z.string().min(1, "Job site address is required"),
   propertyType: z.enum(["house", "apt", "building", "townhouse"]).refine(
     (v) => v.length > 0,
