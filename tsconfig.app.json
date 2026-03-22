@@ -24,5 +24,6 @@
       "components/*": ["/Users/alanchusuei/gt/components/dist/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test-setup.ts"]
 }
