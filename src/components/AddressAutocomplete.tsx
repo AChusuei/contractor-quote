@@ -44,9 +44,12 @@ export function AddressAutocomplete({
   const ignoreNextFetchRef = useRef(false)
 
   const debouncedValue = useDebounce(value, 300)
+  const lastSentRef = useRef<string>("")
 
   useEffect(() => {
-    if (!provider || debouncedValue.trim().length < 3) {
+    const trimmed = debouncedValue.trim()
+
+    if (!provider || trimmed.length < 3) {
       setSuggestions([])
       setOpen(false)
       return
@@ -57,9 +60,13 @@ export function AddressAutocomplete({
       return
     }
 
+    // Skip if trimmed value hasn't changed since last API call
+    if (trimmed === lastSentRef.current) return
+    lastSentRef.current = trimmed
+
     let cancelled = false
     setLoading(true)
-    provider.suggest(debouncedValue).then((results) => {
+    provider.suggest(trimmed).then((results) => {
       if (!cancelled) {
         setSuggestions(results)
         setOpen(results.length > 0)

@@ -2,7 +2,16 @@ import type { AddressComponents, AddressProvider, AddressSuggestion } from "./ty
 
 const API_KEY = import.meta.env.VITE_CQ_MAPBOX_API_KEY as string | undefined
 
+interface MapboxFeature {
+  id: string
+  place_name: string
+  context?: { id: string; text: string }[]
+}
+
 export class MapboxProvider implements AddressProvider {
+  // Cache full feature data from suggest so resolve() doesn't need a second API call
+  private _cache = new Map<string, MapboxFeature>()
+
   async suggest(query: string): Promise<AddressSuggestion[]> {
     if (!API_KEY) {
       console.warn("VITE_CQ_MAPBOX_API_KEY:", API_KEY ? "set" : "NOT SET")
@@ -25,38 +34,27 @@ export class MapboxProvider implements AddressProvider {
     if (!res.ok) return []
 
     const json = await res.json()
-    return (json.features ?? []).map((f: { id: string; place_name: string }) => ({
-      id: f.id,
-      label: f.place_name,
-    }))
+    const features: MapboxFeature[] = json.features ?? []
+
+    features.forEach((f) => this._cache.set(f.id, f))
+
+    return features.map((f) => ({ id: f.id, label: f.place_name }))
   }
 
   async resolve(id: string): Promise<AddressComponents> {
-    if (!API_KEY) throw new Error("VITE_CQ_MAPBOX_API_KEY not set")
+    const feature = this._cache.get(id)
+    if (!feature) throw new Error(`Mapbox: no cached feature for id ${id}`)
 
-    const params = new URLSearchParams({ access_token: API_KEY })
-    const res = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(id)}.json?${params}`
-    )
-    if (!res.ok) throw new Error(`Mapbox geocode failed: ${res.status}`)
-
-    const json = await res.json()
-    const feature = json.features?.[0]
-    if (!feature) throw new Error("No result from Mapbox")
-
-    const ctx: { id: string; text: string }[] = feature.context ?? []
+    const ctx = feature.context ?? []
     const get = (type: string) => ctx.find((c) => c.id.startsWith(type))?.text ?? ""
 
-    const [streetNumber, ...streetParts] = (feature.place_name as string).split(",")
-    const street = streetNumber?.trim() ?? streetParts[0]?.trim() ?? ""
-
     return {
-      street,
+      street: feature.place_name.split(",")[0]?.trim() ?? "",
       city: get("place"),
       state: get("region"),
       zip: get("postcode"),
       country: get("country"),
-      raw: feature.place_name ?? "",
+      raw: feature.place_name,
     }
   }
 }
