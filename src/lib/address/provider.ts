@@ -1,5 +1,5 @@
 import { GooglePlacesProvider } from "./google"
-import { RadarProvider } from "./radar"
+import { MapboxProvider } from "./mapbox"
 import type { AddressProvider } from "./types"
 
 const PROVIDER_KEY = import.meta.env.VITE_CQ_ADDRESS_PROVIDER as string | undefined
@@ -19,8 +19,8 @@ export function getAddressProvider(): AddressProvider | null {
     return _provider
   }
 
-  if (PROVIDER_KEY === "radar") {
-    _provider = new RadarProvider()
+  if (PROVIDER_KEY === "mapbox") {
+    _provider = new MapboxProvider()
     return _provider
   }
 
