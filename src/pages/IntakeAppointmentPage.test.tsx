@@ -20,8 +20,8 @@ describe("IntakeAppointmentPage", () => {
   it("renders step header and heading", async () => {
     vi.stubEnv("VITE_CQ_GOOGLE_APPOINTMENT_URL", "https://calendar.google.com/test")
     await renderPage()
-    expect(screen.getByText("Step 5 of 5")).toBeInTheDocument()
-    expect(screen.getByRole("heading", { name: "Preferred Appointment" })).toBeInTheDocument()
+    expect(screen.getByText("Step 4 of 4")).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Preferred Site Visit Appointment" })).toBeInTheDocument()
   })
 
   it("renders iframe when appointment URL is configured", async () => {

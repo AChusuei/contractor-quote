@@ -59,7 +59,7 @@ function renderPage() {
     <MemoryRouter initialEntries={["/intake/photos"]}>
       <Routes>
         <Route path="/intake/photos" element={<IntakePhotosPage />} />
-        <Route path="/intake/review" element={<div>Review page</div>} />
+        <Route path="/intake/confirmation" element={<div>Review page</div>} />
       </Routes>
     </MemoryRouter>
   )
@@ -115,13 +115,13 @@ describe("IntakePhotosPage", () => {
   it("navigates to /intake/review when Continue is clicked", async () => {
     renderPage()
     fireEvent.click(screen.getByRole("button", { name: /continue/i }))
-    expect(mockNavigate).toHaveBeenCalledWith("/intake/review")
+    expect(mockNavigate).toHaveBeenCalledWith("/intake/confirmation")
   })
 
   it("navigates to /intake/review when Skip is clicked", () => {
     renderPage()
     fireEvent.click(screen.getByRole("button", { name: /skip/i }))
-    expect(mockNavigate).toHaveBeenCalledWith("/intake/review")
+    expect(mockNavigate).toHaveBeenCalledWith("/intake/confirmation")
   })
 
   it("disables the dropzone when at the 10-photo limit", async () => {
