@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
+import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -90,6 +91,7 @@ export function IntakePage() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<IntakeFormData>({
     resolver: zodResolver(schema),
@@ -171,12 +173,20 @@ export function IntakePage() {
         {/* Job site address */}
         <div>
           <Label htmlFor="jobSiteAddress">Job Site Address *</Label>
-          <input
-            id="jobSiteAddress"
-            type="text"
-            autoComplete="street-address"
-            className={inputClass(!!errors.jobSiteAddress)}
-            {...register("jobSiteAddress")}
+          <Controller
+            name="jobSiteAddress"
+            control={control}
+            render={({ field }) => (
+              <AddressAutocomplete
+                id="jobSiteAddress"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                hasError={!!errors.jobSiteAddress}
+                autoComplete="street-address"
+                placeholder="Start typing an address…"
+              />
+            )}
           />
           <FieldError message={errors.jobSiteAddress?.message} />
         </div>
