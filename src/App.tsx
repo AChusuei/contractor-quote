@@ -7,8 +7,16 @@ import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
 import { AppointmentConfirmPage } from "@/pages/AppointmentConfirmPage"
 import { IntakeChoicePage } from "@/pages/IntakeChoicePage"
 import { IntakeEstimatePage } from "@/pages/IntakeEstimatePage"
+import { AdminShell } from "@/components/AdminShell"
+import { QuotesPage } from "@/pages/admin/QuotesPage"
+import { SignInPage } from "@/pages/admin/SignInPage"
+import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
 
-export default function App() {
+interface AppProps {
+  clerkConfigured: boolean
+}
+
+export default function App({ clerkConfigured }: AppProps) {
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -20,6 +28,19 @@ export default function App() {
         <Route path="/intake/confirmed" element={<AppointmentConfirmPage />} />
         <Route path="/intake/estimate" element={<IntakeEstimatePage />} />
       </Route>
+
+      <Route element={<AdminShell />}>
+        {clerkConfigured ? (
+          <>
+            <Route path="/admin/sign-in/*" element={<SignInPage />} />
+            <Route path="/admin/quotes" element={<QuotesPage />} />
+            <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
+          </>
+        ) : (
+          <Route path="/admin/*" element={<ClerkNotConfigured />} />
+        )}
+      </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
