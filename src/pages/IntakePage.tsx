@@ -93,6 +93,7 @@ export function IntakePage() {
     formState: { errors, isSubmitting },
   } = useForm<IntakeFormData>({
     resolver: zodResolver(schema),
+    mode: "onTouched",
   })
 
   const onSubmit = async (data: IntakeFormData) => {
