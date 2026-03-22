@@ -115,7 +115,7 @@ export function IntakePage() {
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 5</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 4</p>
         <h1 className="text-2xl font-semibold">Request a Quote</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Tell us about your project and we'll get back to you with a free estimate.

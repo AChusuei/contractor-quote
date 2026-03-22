@@ -20,7 +20,7 @@ export function IntakeChoicePage() {
 
   const handleSiteVisit = () => {
     saveQuotePath("site_visit")
-    navigate("/intake/checkout")
+    navigate("/intake/appointment")
   }
 
   const handleEstimate = () => {
