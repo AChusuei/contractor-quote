@@ -13,7 +13,7 @@ export function IntakeAppointmentPage() {
   const [slots, setSlots] = useState<AppointmentSlot[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [selected, setSelected] = useState<string | null>(null) // slot id or "flexible"
+  const [selected, setSelected] = useState<string | null>(null)
 
   useEffect(() => {
     fetchAppointmentSlots()
@@ -24,18 +24,14 @@ export function IntakeAppointmentPage() {
 
   const handleContinue = () => {
     if (!selected) return
-    if (selected === "flexible") {
-      saveAppointmentSelection({ type: "flexible", status: "pending" })
-    } else {
-      const slot = slots.find((s) => s.id === selected)!
-      saveAppointmentSelection({
-        type: "slot",
-        slotId: slot.id,
-        startAt: slot.startAt,
-        endAt: slot.endAt,
-        status: "pending",
-      })
-    }
+    const slot = slots.find((s) => s.id === selected)!
+    saveAppointmentSelection({
+      type: "slot",
+      slotId: slot.id,
+      startAt: slot.startAt,
+      endAt: slot.endAt,
+      status: "pending",
+    })
     navigate("/intake/confirmed")
   }
 
@@ -80,21 +76,7 @@ export function IntakeAppointmentPage() {
             </button>
           ))}
 
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => setSelected("flexible")}
-              className={cn(
-                "w-full rounded-md border px-4 py-3 text-left text-sm transition-colors",
-                "hover:bg-accent",
-                selected === "flexible"
-                  ? "border-primary bg-primary/5 font-medium"
-                  : "border-input bg-background"
-              )}
-            >
-              Flexible — contact me to schedule
-            </button>
-          </div>
+
         </div>
       )}
 
