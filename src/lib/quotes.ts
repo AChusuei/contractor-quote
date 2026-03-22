@@ -16,10 +16,13 @@ export type KitchenSize = "small" | "medium" | "large" | "open_concept"
 
 export type BudgetRange = "<10k" | "10-25k" | "25-50k" | "50k+"
 
+export type PropertyType = "house" | "apt" | "building" | "townhouse"
+
 export interface Quote {
   id: string
   customerName: string
   address: string
+  propertyType: PropertyType
   budgetRange: BudgetRange
   scopeType: ScopeType
   layoutChanges: boolean
@@ -34,6 +37,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-001",
       customerName: "Maria Santos",
       address: "842 Peachtree St NE, Atlanta, GA 30308",
+      propertyType: "house",
       budgetRange: "25-50k",
       scopeType: "supply_install",
       layoutChanges: true,
@@ -45,6 +49,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-002",
       customerName: "James Okafor",
       address: "315 Spring St NW, Atlanta, GA 30303",
+      propertyType: "apt",
       budgetRange: "10-25k",
       scopeType: "supply_only",
       layoutChanges: false,
@@ -56,6 +61,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-003",
       customerName: "Priya Nair",
       address: "1080 Cascade Ave SW, Atlanta, GA 30311",
+      propertyType: "building",
       budgetRange: "50k+",
       scopeType: "supply_install",
       layoutChanges: true,
@@ -67,6 +73,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-004",
       customerName: "Derek Williams",
       address: "520 Edgewood Ave SE, Atlanta, GA 30312",
+      propertyType: "townhouse",
       budgetRange: "<10k",
       scopeType: "supply_only",
       layoutChanges: false,
@@ -78,6 +85,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-005",
       customerName: "Angela Kim",
       address: "2200 Peachtree Rd NW, Atlanta, GA 30309",
+      propertyType: "house",
       budgetRange: "25-50k",
       scopeType: "supply_install",
       layoutChanges: false,
@@ -89,6 +97,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-006",
       customerName: "Robert Chen",
       address: "740 Ralph McGill Blvd NE, Atlanta, GA 30312",
+      propertyType: "apt",
       budgetRange: "10-25k",
       scopeType: "supply_only",
       layoutChanges: false,
@@ -100,6 +109,7 @@ function generateMockQuotes(): Quote[] {
       id: "q-007",
       customerName: "Fatima Hassan",
       address: "1560 Metropolitan Pkwy SW, Atlanta, GA 30310",
+      propertyType: "building",
       budgetRange: "50k+",
       scopeType: "supply_install",
       layoutChanges: true,

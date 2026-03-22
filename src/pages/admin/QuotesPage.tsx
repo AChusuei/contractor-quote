@@ -37,6 +37,13 @@ const KITCHEN_SIZE_LABELS: Record<string, string> = {
   open_concept: "Open Concept",
 }
 
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  house: "House",
+  apt: "Apartment",
+  building: "Building",
+  townhouse: "Townhouse",
+}
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 
 const columns: DataTableColumnDef<Quote>[] = [
@@ -51,6 +58,21 @@ const columns: DataTableColumnDef<Quote>[] = [
     accessorKey: "address",
     header: "Address",
     filterMeta: { filterVariant: "text" },
+  },
+  {
+    id: "propertyType",
+    accessorKey: "propertyType",
+    header: "Property Type",
+    cell: ({ getValue }) => PROPERTY_TYPE_LABELS[getValue() as string] ?? String(getValue()),
+    filterMeta: {
+      filterVariant: "select",
+      options: [
+        { label: "House", value: "house" },
+        { label: "Apartment", value: "apt" },
+        { label: "Building", value: "building" },
+        { label: "Townhouse", value: "townhouse" },
+      ],
+    },
   },
   {
     id: "budgetRange",
@@ -217,6 +239,16 @@ export function QuotesPage() {
         defaultPageSize={25}
         enableExport
         exportFilename="quotes"
+        enableRowSelection
+        bulkActions={[
+          {
+            label: "Email selected",
+            onClick: (selectedQuotes) => {
+              const ids = selectedQuotes.map((q) => q.id).join(",")
+              navigate(`/admin/email/compose?quoteIds=${encodeURIComponent(ids)}`)
+            },
+          },
+        ]}
         refreshSlot={
           <button
             onClick={() => void loadQuotes()}
