@@ -6,6 +6,7 @@ import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { AddressAutocomplete } from "@/components/AddressAutocomplete"
+import { createQuote } from "@/lib/quoteStore"
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -105,6 +106,17 @@ export function IntakePage() {
   const onSubmit = async (data: IntakeFormData) => {
     setSubmitError(null)
     try {
+      createQuote({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        cell: data.cell,
+        jobSiteAddress: data.jobSiteAddress,
+        propertyType: data.propertyType,
+        budgetRange: data.budgetRange,
+        howDidYouFindUs: data.howDidYouFindUs,
+        referredByContractor: data.referredByContractor,
+      })
       await submitToHubSpot(data)
       navigate("/intake/scope")
     } catch (err) {

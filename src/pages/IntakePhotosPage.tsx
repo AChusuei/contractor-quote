@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { FileUpload, type UploadFile } from "components"
 import { Button } from "components"
 import { uploadQuotePhoto } from "@/lib/supabase"
+import { attachPhotoSession } from "@/lib/quoteStore"
 
 const MAX_PHOTOS = 10
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
@@ -27,6 +28,7 @@ export function IntakePhotosPage() {
   const navigate = useNavigate()
   const [files, setFiles] = useState<UploadFile[]>([])
   const quoteSessionId = useRef(getQuoteSessionId()).current
+  attachPhotoSession(quoteSessionId)
 
   const isUploading = files.some((f) => f.status === "uploading")
   const hasError = files.some((f) => f.status === "error")

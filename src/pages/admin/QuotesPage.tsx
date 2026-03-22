@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { DataTable, type DataTableColumnDef } from "components"
 import { fetchQuotes, type Quote, type QuoteStatus } from "@/lib/quotes"
@@ -136,6 +136,19 @@ const columns: DataTableColumnDef<Quote>[] = [
         { label: "Measure Scheduled", value: "measure_scheduled" },
       ],
     },
+  },
+  {
+    id: "_actions",
+    header: "",
+    accessorKey: "id",
+    cell: ({ getValue }) => (
+      <Link
+        to={`/admin/quotes/${getValue() as string}`}
+        className="text-xs font-medium text-primary hover:underline whitespace-nowrap"
+      >
+        View →
+      </Link>
+    ),
   },
 ]
 
