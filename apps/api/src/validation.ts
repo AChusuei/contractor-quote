@@ -158,6 +158,91 @@ export const quoteUpdateSchema = z
 export type QuoteUpdate = z.infer<typeof quoteUpdateSchema>
 
 // ---------------------------------------------------------------------------
+// Quote status enum values (display labels live in the frontend)
+// ---------------------------------------------------------------------------
+
+export const QUOTE_STATUSES = [
+  "lead",
+  "reviewing",
+  "site_visit_requested",
+  "site_visit_scheduled",
+  "site_visit_completed",
+  "estimate_requested",
+  "estimate_sent",
+  "accepted",
+  "rejected",
+  "closed",
+] as const
+
+export type QuoteStatus = (typeof QUOTE_STATUSES)[number]
+
+/**
+ * Valid status transitions. Each key lists the statuses it can move TO.
+ * Any transition not listed here is rejected.
+ */
+export const STATUS_TRANSITIONS: Record<QuoteStatus, readonly QuoteStatus[]> = {
+  lead: ["reviewing", "closed"],
+  reviewing: ["site_visit_requested", "estimate_requested", "closed"],
+  site_visit_requested: ["site_visit_scheduled", "closed"],
+  site_visit_scheduled: ["site_visit_completed", "closed"],
+  site_visit_completed: ["estimate_requested", "closed"],
+  estimate_requested: ["estimate_sent", "closed"],
+  estimate_sent: ["accepted", "rejected", "closed"],
+  accepted: ["closed"],
+  rejected: ["reviewing", "closed"],
+  closed: ["reviewing"],
+}
+
+// ---------------------------------------------------------------------------
+// Activity types
+// ---------------------------------------------------------------------------
+
+export const ACTIVITY_TYPES = [
+  "status_change",
+  "note",
+  "photo_added",
+  "photo_removed",
+  "quote_edited",
+  "estimate_sent",
+  "email_sent",
+] as const
+
+export type ActivityType = (typeof ACTIVITY_TYPES)[number]
+
+// ---------------------------------------------------------------------------
+// Activity creation schema
+// ---------------------------------------------------------------------------
+
+export const activityCreateSchema = z
+  .object({
+    type: z.enum(ACTIVITY_TYPES, {
+      error: "Activity type must be one of: status_change, note, photo_added, photo_removed, quote_edited, estimate_sent, email_sent",
+    }),
+
+    content: sanitizedMax(5000, "Content must be 5000 characters or fewer").optional(),
+
+    newStatus: z.enum(QUOTE_STATUSES, {
+      error: "Status must be one of: " + QUOTE_STATUSES.join(", "),
+    }).optional(),
+  })
+  .refine(
+    (val) => {
+      if (val.type === "status_change" && !val.newStatus) return false
+      return true
+    },
+    { message: "New status is required for status changes", path: ["newStatus"] }
+  )
+  .refine(
+    (val) => {
+      if (val.type === "note" && (!val.content || val.content.trim().length === 0)) return false
+      return true
+    },
+    { message: "Content is required for notes", path: ["content"] }
+  )
+
+export type ActivityCreate = z.infer<typeof activityCreateSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 
