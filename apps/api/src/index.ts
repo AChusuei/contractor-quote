@@ -12,6 +12,7 @@ import {
   quoteUpdateSchema,
   activityCreateSchema,
   customerDeletionSchema,
+  emailSendSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
   QUOTE_STATUSES,
@@ -958,6 +959,155 @@ app.delete(
         appointmentsDeleted,
         activityRecordsDeleted: activityDeleted,
       },
+    }
+    return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Email send
+// ---------------------------------------------------------------------------
+
+const BUDGET_LABELS: Record<string, string> = {
+  "<10k": "Under $10k",
+  "10-25k": "$10k – $25k",
+  "25-50k": "$25k – $50k",
+  "50k+": "$50k+",
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  lead: "Lead",
+  measure_scheduled: "Measure Scheduled",
+  quoted: "Quoted",
+  accepted: "Accepted",
+  rejected: "Rejected",
+}
+
+function resolveMergeFields(
+  template: string,
+  quote: { name: string; job_site_address: string; budget_range: string; status: string }
+): string {
+  return template
+    .replace(/\{\{name\}\}/g, quote.name)
+    .replace(/\{\{address\}\}/g, quote.job_site_address)
+    .replace(/\{\{budget\}\}/g, BUDGET_LABELS[quote.budget_range] ?? quote.budget_range)
+    .replace(/\{\{status\}\}/g, STATUS_LABELS[quote.status] ?? quote.status)
+}
+
+function textToHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>")
+}
+
+app.post(
+  "/email/send",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+
+    // --- Parse and validate ---
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = emailSendSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const { to: quoteIds, subject, html: bodyTemplate } = result.data
+
+    // --- Fetch quotes owned by this contractor ---
+    const placeholders = quoteIds.map(() => "?").join(", ")
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, name, email, job_site_address, budget_range, status
+       FROM quotes
+       WHERE id IN (${placeholders}) AND contractor_id = ?`
+    )
+      .bind(...quoteIds, contractorId)
+      .all()
+
+    const quotes = (results ?? []) as Array<{
+      id: string
+      name: string
+      email: string
+      job_site_address: string
+      budget_range: string
+      status: string
+    }>
+
+    if (quotes.length === 0) {
+      return apiError(c, "NOT_FOUND", "No matching quotes found for your account")
+    }
+
+    // --- Send emails ---
+    const apiKey = c.env.SENDGRID_API_KEY
+    const isDevMode = !apiKey
+    let sent = 0
+    let failed = 0
+    const errors: Array<{ quoteId: string; error: string }> = []
+
+    for (const quote of quotes) {
+      const resolvedSubject = resolveMergeFields(subject, quote)
+      const resolvedBody = resolveMergeFields(bodyTemplate, quote)
+      const resolvedHtml = textToHtml(resolvedBody)
+
+      if (isDevMode) {
+        console.log(`[DEV EMAIL] To: ${quote.email} (${quote.name})`)
+        console.log(`[DEV EMAIL] Subject: ${resolvedSubject}`)
+        console.log(`[DEV EMAIL] Body:\n${resolvedBody}`)
+        console.log("---")
+        sent++
+      } else {
+        try {
+          const sgResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              personalizations: [{ to: [{ email: quote.email, name: quote.name }] }],
+              from: { email: "noreply@example.com" },
+              subject: resolvedSubject,
+              content: [{ type: "text/html", value: resolvedHtml }],
+            }),
+          })
+
+          if (sgResponse.status >= 200 && sgResponse.status < 300) {
+            sent++
+          } else {
+            const errText = await sgResponse.text()
+            failed++
+            errors.push({ quoteId: quote.id, error: `SendGrid ${sgResponse.status}: ${errText}` })
+          }
+        } catch (err) {
+          failed++
+          errors.push({ quoteId: quote.id, error: err instanceof Error ? err.message : "Unknown error" })
+        }
+      }
+
+      // Log email_sent activity
+      await c.env.DB.prepare(
+        `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
+         VALUES (?, ?, 'email_sent', ?)`
+      )
+        .bind(quote.id, contractorId, resolvedSubject)
+        .run()
+    }
+
+    const res: ApiOk<{ sent: number; failed: number; errors: typeof errors }> = {
+      ok: true,
+      data: { sent, failed, errors },
     }
     return c.json(res)
   }
