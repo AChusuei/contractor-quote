@@ -473,6 +473,96 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
+// Upload contractor logo
+// ---------------------------------------------------------------------------
+const MAX_LOGO_BYTES = 2 * 1024 * 1024 // 2MB
+const ALLOWED_LOGO_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/svg+xml": "svg",
+}
+
+app.post(
+  "/contractors/:contractorId/logo",
+  requireAuth(),
+  requireContractorOwnership(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+
+    // --- Parse multipart form data ---
+    let formData: FormData
+    try {
+      formData = await c.req.formData()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Request must be multipart form data")
+    }
+
+    const file = formData.get("file")
+    if (!file || !(file instanceof File)) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { file: "A logo image file is required" } },
+        422
+      )
+    }
+
+    // --- Validate content type ---
+    const ext = ALLOWED_LOGO_TYPES[file.type]
+    if (!ext) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { file: "Logo must be a JPEG, PNG, or SVG image" } },
+        422
+      )
+    }
+
+    // --- Validate file size ---
+    if (file.size > MAX_LOGO_BYTES) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { file: "Logo must be under 2MB" } },
+        422
+      )
+    }
+
+    // --- Delete previous logo from R2 if exists ---
+    const contractor = await c.env.DB.prepare(
+      "SELECT logo_url FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ logo_url: string | null }>()
+
+    if (contractor?.logo_url) {
+      // Extract R2 key from the stored URL
+      const previousKey = `${contractorId}/logo.${contractor.logo_url.split(".").pop()}`
+      try {
+        await c.env.STORAGE.delete(previousKey)
+      } catch {
+        // Best-effort deletion — don't fail the upload if old logo cleanup fails
+      }
+    }
+
+    // --- Upload to R2 ---
+    const r2Key = `${contractorId}/logo.${ext}`
+    const fileBuffer = await file.arrayBuffer()
+    await c.env.STORAGE.put(r2Key, fileBuffer, {
+      httpMetadata: { contentType: file.type },
+    })
+
+    // --- Build the public URL ---
+    // In production this would be a custom domain or R2 public bucket URL.
+    // For now, store the R2 key as the logo_url value.
+    const logoUrl = r2Key
+
+    // --- Update D1 ---
+    await c.env.DB.prepare(
+      "UPDATE contractors SET logo_url = ? WHERE id = ?"
+    )
+      .bind(logoUrl, contractorId)
+      .run()
+
+    return c.json({ ok: true, data: { logoUrl } })
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Appointment windows (stub — returns mock slots; replace with real logic)
 // ---------------------------------------------------------------------------
 app.get("/appointment-windows", (c) => {
