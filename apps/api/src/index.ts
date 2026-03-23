@@ -2,6 +2,11 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import type { AppointmentSlot, ApiOk } from "@contractor-quote/types"
 import { apiError } from "./lib/errors"
+import {
+  quoteSubmissionSchema,
+  formatZodErrors,
+  MAX_PAYLOAD_BYTES,
+} from "./validation"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -57,6 +62,114 @@ app.get("/health", (c) => {
     data: { status: "ok", env: c.env.ENVIRONMENT ?? "unknown" },
   }
   return c.json(res)
+})
+
+// ---------------------------------------------------------------------------
+// Quote submission
+// ---------------------------------------------------------------------------
+app.post("/quotes", async (c) => {
+  // --- Payload size gate (100KB) ---
+  const contentLength = c.req.header("content-length")
+  if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_BYTES) {
+    return c.json(
+      { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+      413
+    )
+  }
+
+  // Read body and enforce size limit even without Content-Length header
+  const rawBody = await c.req.text()
+  if (rawBody.length > MAX_PAYLOAD_BYTES) {
+    return c.json(
+      { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+      413
+    )
+  }
+
+  // --- Parse JSON ---
+  let body: unknown
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+  }
+
+  // --- Validate with Zod schema ---
+  const result = quoteSubmissionSchema.safeParse(body)
+  if (!result.success) {
+    return c.json(
+      { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+      422
+    )
+  }
+
+  const data = result.data
+
+  // --- Verify contractorId exists in D1 ---
+  const contractor = await c.env.DB.prepare(
+    "SELECT id FROM contractors WHERE id = ?"
+  )
+    .bind(data.contractorId)
+    .first<{ id: string }>()
+
+  if (!contractor) {
+    return c.json(
+      { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { contractorId: "Contractor not found" } },
+      422
+    )
+  }
+
+  // --- Generate quote ID and public token ---
+  const quoteId = crypto.randomUUID()
+  const tokenBytes = new Uint8Array(32)
+  crypto.getRandomValues(tokenBytes)
+  const publicToken = Array.from(tokenBytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+
+  // --- Insert into D1 ---
+  await c.env.DB.prepare(
+    `INSERT INTO quotes (
+      id, contractor_id, schema_version,
+      name, email, phone, cell,
+      job_site_address, property_type, budget_range,
+      how_did_you_find_us, referred_by_contractor,
+      scope, quote_path, photo_session_id, public_token, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead')`
+  )
+    .bind(
+      quoteId,
+      data.contractorId,
+      data.schemaVersion,
+      data.name,
+      data.email,
+      data.phone,
+      data.cell ?? null,
+      data.jobSiteAddress,
+      data.propertyType,
+      data.budgetRange,
+      data.howDidYouFindUs ?? null,
+      data.referredByContractor ?? null,
+      data.scope ? JSON.stringify(data.scope) : null,
+      data.quotePath ?? null,
+      data.photoSessionId ?? null,
+      publicToken
+    )
+    .run()
+
+  // --- Log activity ---
+  await c.env.DB.prepare(
+    `INSERT INTO quote_activity (quote_id, contractor_id, type, new_value)
+     VALUES (?, ?, 'status_change', 'lead')`
+  )
+    .bind(quoteId, data.contractorId)
+    .run()
+
+  const res: ApiOk<{ id: string; publicToken: string }> = {
+    ok: true,
+    data: { id: quoteId, publicToken },
+  }
+  return c.json(res, 201)
 })
 
 // ---------------------------------------------------------------------------

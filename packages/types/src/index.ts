@@ -53,4 +53,5 @@ export type ErrorCode =
 
 export type ApiOk<T> = { ok: true; data: T }
 export type ApiErr = { ok: false; error: string; code: ErrorCode }
+export type ApiValidationErr = { ok: false; error: string; code: "VALIDATION_ERROR"; fields: Record<string, string> }
 export type ApiResult<T> = ApiOk<T> | ApiErr
