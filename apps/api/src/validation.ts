@@ -243,6 +243,18 @@ export const activityCreateSchema = z
 export type ActivityCreate = z.infer<typeof activityCreateSchema>
 
 // ---------------------------------------------------------------------------
+// Customer data deletion schema
+// ---------------------------------------------------------------------------
+
+export const customerDeletionSchema = z.object({
+  requestType: z.enum(["ccpa", "customer", "contractor"], {
+    error: "Request type must be ccpa, customer, or contractor",
+  }),
+})
+
+export type CustomerDeletion = z.infer<typeof customerDeletionSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 
