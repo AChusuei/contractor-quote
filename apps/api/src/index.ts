@@ -343,6 +343,93 @@ app.patch(
 )
 
 // ---------------------------------------------------------------------------
+// Delete (anonymize) quote — right-to-delete compliance
+// ---------------------------------------------------------------------------
+app.delete(
+  "/quotes/:quoteId",
+  requireAuth(),
+  requireQuoteOwnership(),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const contractorId = c.get("contractorId") as string
+
+    // Fetch the quote to hash PII and find photos
+    const quote = await c.env.DB.prepare(
+      "SELECT name, email, phone, job_site_address, photo_session_id FROM quotes WHERE id = ?"
+    )
+      .bind(quoteId)
+      .first<{ name: string; email: string; phone: string; job_site_address: string; photo_session_id: string | null }>()
+
+    if (!quote) {
+      return apiError(c, "NOT_FOUND", "Quote not found")
+    }
+
+    // Hash PII fields for anonymization (SHA-256, hex-encoded)
+    const hashedName = await hashValue(quote.name)
+    const hashedEmail = await hashValue(quote.email)
+    const hashedPhone = await hashValue(quote.phone)
+
+    // Truncate address to city/state (strip street-level detail)
+    const anonymizedAddress = truncateAddressToCityState(quote.job_site_address)
+
+    // Anonymize the quote record — keep for aggregate analytics
+    await c.env.DB.prepare(
+      `UPDATE quotes SET
+        name = ?,
+        email = ?,
+        phone = ?,
+        cell = NULL,
+        job_site_address = ?,
+        how_did_you_find_us = NULL,
+        referred_by_contractor = NULL,
+        scope = NULL,
+        public_token = NULL,
+        status = 'anonymized'
+      WHERE id = ?`
+    )
+      .bind(hashedName, hashedEmail, hashedPhone, anonymizedAddress, quoteId)
+      .run()
+
+    // Delete activity feed entries that contain notes (contractor_notes equivalent)
+    await c.env.DB.prepare(
+      "UPDATE quote_activity SET content = NULL WHERE quote_id = ? AND type = 'note'"
+    )
+      .bind(quoteId)
+      .run()
+
+    // Delete photos from R2 if a photo session exists
+    if (quote.photo_session_id) {
+      const photoPrefix = `${quote.photo_session_id}/`
+      const listed = await c.env.STORAGE.list({ prefix: photoPrefix })
+      if (listed.objects.length > 0) {
+        await Promise.all(
+          listed.objects.map((obj) => c.env.STORAGE.delete(obj.key))
+        )
+      }
+    }
+
+    // Log in audit_log for compliance
+    await c.env.DB.prepare(
+      `INSERT INTO audit_log (contractor_id, action, target_type, target_id, details, performed_by)
+       VALUES (?, 'quote_anonymized', 'quote', ?, ?, ?)`
+    )
+      .bind(
+        contractorId,
+        quoteId,
+        JSON.stringify({
+          original_name_hash: hashedName,
+          original_email_hash: hashedEmail,
+          photos_deleted: quote.photo_session_id ? true : false,
+        }),
+        contractorId
+      )
+      .run()
+
+    return c.body(null, 204)
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Appointment windows (stub — returns mock slots; replace with real logic)
 // ---------------------------------------------------------------------------
 app.get("/appointment-windows", (c) => {
@@ -356,6 +443,29 @@ export default app
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** SHA-256 hash a string, return hex-encoded digest. */
+async function hashValue(value: string): Promise<string> {
+  const encoded = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest("SHA-256", encoded)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+/**
+ * Strip street-level detail from an address, keeping only city/state/zip.
+ * Assumes US-style addresses: "123 Main St, Springfield, IL 62701"
+ * Returns the last two comma-separated segments (city + state/zip).
+ */
+function truncateAddressToCityState(address: string): string {
+  const parts = address.split(",").map((p) => p.trim())
+  if (parts.length >= 2) {
+    return parts.slice(-2).join(", ")
+  }
+  return "REDACTED"
+}
+
 function generateMockSlots(): AppointmentSlot[] {
   const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   const MONTHS = [
