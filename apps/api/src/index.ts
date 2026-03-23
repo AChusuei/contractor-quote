@@ -14,6 +14,7 @@ import {
   MAX_PAYLOAD_BYTES,
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
+import { sendNewQuoteNotification } from "./lib/email"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -27,6 +28,7 @@ type Bindings = {
   // Secrets (set via `wrangler secret put`)
   HUBSPOT_ACCESS_TOKEN: string
   TOKEN_SIGNING_SECRET: string
+  SENDGRID_API_KEY: string
 }
 
 type Variables = {
@@ -118,10 +120,10 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
 
   // --- Verify contractorId exists in D1 ---
   const contractor = await c.env.DB.prepare(
-    "SELECT id FROM contractors WHERE id = ?"
+    "SELECT id, name, email FROM contractors WHERE id = ?"
   )
     .bind(data.contractorId)
-    .first<{ id: string }>()
+    .first<{ id: string; name: string; email: string | null }>()
 
   if (!contractor) {
     return c.json(
@@ -175,6 +177,25 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
   )
     .bind(quoteId, data.contractorId)
     .run()
+
+  // --- Send email notification to contractor (fire-and-forget) ---
+  if (contractor.email) {
+    c.executionCtx.waitUntil(
+      sendNewQuoteNotification(
+        {
+          contractorEmail: contractor.email,
+          contractorName: contractor.name,
+          customerName: data.name,
+          jobSiteAddress: data.jobSiteAddress,
+          budgetRange: data.budgetRange,
+          quoteId,
+        },
+        c.env.SENDGRID_API_KEY
+      ).catch((err) => {
+        console.error("Failed to send quote notification email:", err)
+      })
+    )
+  }
 
   const res: ApiOk<{ id: string; publicToken: string }> = {
     ok: true,
