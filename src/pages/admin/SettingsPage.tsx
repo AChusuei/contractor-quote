@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { Button } from "components"
+import { cn } from "@/lib/utils"
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
 
 type Theme = "light" | "dark" | "system"
 
-const STORAGE_KEY = "cq_theme"
+const THEME_KEY = "cq_theme"
 
 function getStoredTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = localStorage.getItem(THEME_KEY)
   if (stored === "light" || stored === "dark" || stored === "system") return stored
   return "system"
 }
@@ -26,11 +35,85 @@ const themeOptions: { value: Theme; label: string; description: string }[] = [
   { value: "system", label: "System", description: "Follow your device settings" },
 ]
 
+// ---------------------------------------------------------------------------
+// Contractor Profile
+// ---------------------------------------------------------------------------
+
+const PROFILE_KEY = "cq_contractor_profile"
+
+const profileSchema = z.object({
+  companyName: z.string().min(1, "Company name is required"),
+  contactName: z.string().min(1, "Contact name is required"),
+  email: z.string().min(1, "Email is required").email("Enter a valid email address"),
+  phone: z.string().refine(
+    (v) => v === "" || v.replace(/\D/g, "").length >= 10,
+    "Enter a valid phone number",
+  ),
+  website: z.string().refine(
+    (v) => v === "" || /^https?:\/\/.+/.test(v),
+    "Enter a valid URL starting with http:// or https://",
+  ).optional().or(z.literal("")),
+  logoUrl: z.string().optional().or(z.literal("")),
+  address: z.string().optional().or(z.literal("")),
+  licenseNumber: z.string().optional().or(z.literal("")),
+})
+
+type ContractorProfile = z.infer<typeof profileSchema>
+
+function loadProfile(): ContractorProfile {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY)
+    if (raw) return JSON.parse(raw) as ContractorProfile
+  } catch {
+    // ignore corrupt data
+  }
+  return {
+    companyName: "",
+    contactName: "",
+    email: "",
+    phone: "",
+    website: "",
+    logoUrl: "",
+    address: "",
+    licenseNumber: "",
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared UI helpers (match IntakePage conventions)
+// ---------------------------------------------------------------------------
+
+function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="block text-sm font-medium">
+      {children}
+    </label>
+  )
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null
+  return <p className="mt-1 text-xs text-destructive">{message}</p>
+}
+
+function inputClass(hasError?: boolean) {
+  return cn(
+    "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm",
+    "focus:outline-none focus:ring-1 focus:ring-ring",
+    hasError ? "border-destructive" : "border-input",
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function SettingsPage() {
+  // ---- Theme state ----
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, theme)
+    localStorage.setItem(THEME_KEY, theme)
     applyTheme(theme)
 
     if (theme === "system") {
@@ -41,13 +124,185 @@ export function SettingsPage() {
     }
   }, [theme])
 
+  // ---- Profile form ----
+  const [saved, setSaved] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<ContractorProfile>({
+    resolver: zodResolver(profileSchema),
+    mode: "onTouched",
+    defaultValues: loadProfile(),
+  })
+
+  function onSave(data: ContractorProfile) {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(data))
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  }
+
+  // ---- Logo preview ----
+  const [logoPreview, setLogoPreview] = useState<string>(() => loadProfile().logoUrl ?? "")
+
+  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      setLogoPreview(dataUrl)
+      setValue("logoUrl", dataUrl, { shouldDirty: true })
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-2xl space-y-10">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage your admin preferences.</p>
       </div>
 
+      {/* ---- Contractor Profile ---- */}
+      <form onSubmit={handleSubmit(onSave)} className="space-y-6">
+        <div>
+          <h2 className="text-lg font-medium">Contractor Profile</h2>
+          <p className="text-sm text-muted-foreground">
+            Your company info for emails, branding, and the contractor record.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Company Name */}
+          <div>
+            <Label htmlFor="companyName">Company Name</Label>
+            <input
+              id="companyName"
+              type="text"
+              className={inputClass(!!errors.companyName)}
+              {...register("companyName")}
+            />
+            <FieldError message={errors.companyName?.message} />
+          </div>
+
+          {/* Contact Name */}
+          <div>
+            <Label htmlFor="contactName">Owner / Contact Name</Label>
+            <input
+              id="contactName"
+              type="text"
+              className={inputClass(!!errors.contactName)}
+              {...register("contactName")}
+            />
+            <FieldError message={errors.contactName?.message} />
+          </div>
+
+          {/* Email */}
+          <div>
+            <Label htmlFor="profileEmail">Email</Label>
+            <input
+              id="profileEmail"
+              type="email"
+              placeholder="Used as from address for emails"
+              className={inputClass(!!errors.email)}
+              {...register("email")}
+            />
+            <FieldError message={errors.email?.message} />
+          </div>
+
+          {/* Phone */}
+          <div>
+            <Label htmlFor="profilePhone">Phone</Label>
+            <input
+              id="profilePhone"
+              type="tel"
+              className={inputClass(!!errors.phone)}
+              {...register("phone")}
+            />
+            <FieldError message={errors.phone?.message} />
+          </div>
+
+          {/* Website */}
+          <div>
+            <Label htmlFor="website">Website</Label>
+            <input
+              id="website"
+              type="url"
+              placeholder="https://example.com"
+              className={inputClass(!!errors.website)}
+              {...register("website")}
+            />
+            <FieldError message={errors.website?.message} />
+          </div>
+
+          {/* License Number */}
+          <div>
+            <Label htmlFor="licenseNumber">License Number</Label>
+            <input
+              id="licenseNumber"
+              type="text"
+              className={inputClass(!!errors.licenseNumber)}
+              {...register("licenseNumber")}
+            />
+            <FieldError message={errors.licenseNumber?.message} />
+          </div>
+        </div>
+
+        {/* Address — full width */}
+        <div>
+          <Label htmlFor="address">Business Address</Label>
+          <input
+            id="address"
+            type="text"
+            className={inputClass(!!errors.address)}
+            {...register("address")}
+          />
+          <FieldError message={errors.address?.message} />
+        </div>
+
+        {/* Logo Upload */}
+        <div>
+          <Label htmlFor="logoUpload">Logo</Label>
+          <div className="flex items-center gap-4">
+            {logoPreview && (
+              <img
+                src={logoPreview}
+                alt="Logo preview"
+                className="h-16 w-16 rounded-md border border-border object-contain"
+              />
+            )}
+            <div className="flex-1">
+              <input
+                id="logoUpload"
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent/80"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                PNG, JPG, or SVG. Used in email signatures and white-label branding.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Save */}
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Saving\u2026" : "Save Profile"}
+          </Button>
+          {saved && (
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+              Profile saved
+            </span>
+          )}
+        </div>
+      </form>
+
+      {/* ---- Appearance ---- */}
       <div className="space-y-4">
         <h2 className="text-lg font-medium">Appearance</h2>
         <p className="text-sm text-muted-foreground">
