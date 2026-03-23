@@ -137,6 +137,92 @@ function StatusTimeline({ quote }: { quote: Quote }) {
 // Contractor notes
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Delete customer data
+// ---------------------------------------------------------------------------
+
+function DeleteCustomerDataPanel({ quote, onDeleted }: { quote: Quote; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { getToken } = useAuth()
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setError(null)
+    try {
+      const token = await getToken()
+      const res = await fetch(
+        `/api/v1/customers/${encodeURIComponent(quote.email)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ requestType: "contractor" }),
+        }
+      )
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error ?? `Delete failed (${res.status})`)
+      }
+      onDeleted()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+    } finally {
+      setDeleting(false)
+      setConfirming(false)
+    }
+  }
+
+  return (
+    <div>
+      <SectionHeading>Customer data</SectionHeading>
+      {!confirming ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-red-600 border-red-300 hover:bg-red-50"
+          onClick={() => setConfirming(true)}
+        >
+          Delete customer data
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-red-600">
+            This will permanently delete all quotes, photos, appointments, and activity
+            for <strong>{quote.email}</strong>. This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setConfirming(false); setError(null) }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Confirm delete"}
+            </Button>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Contractor notes
+// ---------------------------------------------------------------------------
+
 function NotesPanel({ quote, onSave }: { quote: Quote; onSave: (notes: string) => void }) {
   const [notes, setNotes] = useState(quote.contractorNotes)
   const [saved, setSaved] = useState(false)
@@ -364,6 +450,13 @@ export function QuoteDetailPage() {
           <StatusPanel quote={quote} onStatusChange={handleStatusChange} />
           <StatusTimeline quote={quote} />
           <NotesPanel quote={quote} onSave={handleNotesSave} />
+          <DeleteCustomerDataPanel
+            quote={quote}
+            onDeleted={() => {
+              // Navigate back to quotes list after successful deletion
+              window.location.href = "/admin/quotes"
+            }}
+          />
         </div>
       </div>
     </div>
