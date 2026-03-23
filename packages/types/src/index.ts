@@ -43,6 +43,14 @@ export type Lead = LeadInput & {
 // API response envelope
 // ---------------------------------------------------------------------------
 
+export type ErrorCode =
+  | "NOT_FOUND"
+  | "FORBIDDEN"
+  | "VALIDATION_ERROR"
+  | "RATE_LIMITED"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+
 export type ApiOk<T> = { ok: true; data: T }
-export type ApiErr = { ok: false; error: string }
+export type ApiErr = { ok: false; error: string; code: ErrorCode }
 export type ApiResult<T> = ApiOk<T> | ApiErr

@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import type { AppointmentSlot, ApiOk } from "@contractor-quote/types"
+import { apiError } from "./lib/errors"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -16,7 +17,7 @@ type Bindings = {
   TOKEN_SIGNING_SECRET: string
 }
 
-const app = new Hono<{ Bindings: Bindings }>()
+const app = new Hono<{ Bindings: Bindings }>().basePath("/api/v1")
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -30,6 +31,21 @@ app.use("*", async (c, next) => {
     allowHeaders: ["Content-Type", "Authorization"],
     maxAge: 86400,
   })(c, next)
+})
+
+// ---------------------------------------------------------------------------
+// Global error handler — catches unhandled exceptions
+// ---------------------------------------------------------------------------
+app.onError((err, c) => {
+  console.error("Unhandled error:", err)
+  return apiError(c, "INTERNAL_ERROR", "An unexpected error occurred")
+})
+
+// ---------------------------------------------------------------------------
+// 404 fallback
+// ---------------------------------------------------------------------------
+app.notFound((c) => {
+  return apiError(c, "NOT_FOUND", `Route not found: ${c.req.method} ${c.req.path}`)
 })
 
 // ---------------------------------------------------------------------------
