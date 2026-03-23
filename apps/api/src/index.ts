@@ -10,6 +10,7 @@ import {
 import {
   quoteSubmissionSchema,
   quoteUpdateSchema,
+  customerDeletionSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
 } from "./validation"
@@ -512,6 +513,137 @@ app.delete(
       .run()
 
     return c.body(null, 204)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Delete customer data (right-to-delete / CCPA compliance)
+// ---------------------------------------------------------------------------
+app.delete(
+  "/customers/:email",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const email = decodeURIComponent(c.req.param("email")).toLowerCase().trim()
+
+    if (!email || !email.includes("@")) {
+      return apiError(c, "VALIDATION_ERROR", "A valid email address is required")
+    }
+
+    // Parse optional request body for metadata
+    let requestType = "contractor" // default
+    const rawBody = await c.req.text()
+    if (rawBody) {
+      let body: unknown
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+      }
+      const result = customerDeletionSchema.safeParse(body)
+      if (!result.success) {
+        return c.json(
+          { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+          422
+        )
+      }
+      requestType = result.data.requestType
+    }
+
+    // Find all quotes for this email belonging to this contractor
+    const { results: quotes } = await c.env.DB.prepare(
+      "SELECT id, photo_session_id FROM quotes WHERE email = ? AND contractor_id = ?"
+    )
+      .bind(email, contractorId)
+      .all<{ id: string; photo_session_id: string | null }>()
+
+    if (!quotes || quotes.length === 0) {
+      return apiError(c, "NOT_FOUND", "No customer data found for this email address")
+    }
+
+    const quoteIds = quotes.map((q) => q.id)
+
+    // Collect photo session IDs for R2 cleanup
+    const photoSessionIds = quotes
+      .map((q) => q.photo_session_id)
+      .filter((id): id is string => id !== null)
+
+    // Delete photos from R2 storage
+    let photosDeleted = 0
+    for (const sessionId of photoSessionIds) {
+      const listed = await c.env.STORAGE.list({ prefix: `${sessionId}/` })
+      for (const obj of listed.objects) {
+        await c.env.STORAGE.delete(obj.key)
+        photosDeleted++
+      }
+    }
+
+    // Delete appointments
+    const placeholders = quoteIds.map(() => "?").join(", ")
+    const appointmentResult = await c.env.DB.prepare(
+      `DELETE FROM appointments WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+    )
+      .bind(...quoteIds, contractorId)
+      .run()
+    const appointmentsDeleted = appointmentResult.meta?.changes ?? 0
+
+    // Delete quote activity records
+    const activityResult = await c.env.DB.prepare(
+      `DELETE FROM quote_activity WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+    )
+      .bind(...quoteIds, contractorId)
+      .run()
+    const activityDeleted = activityResult.meta?.changes ?? 0
+
+    // Delete quotes
+    const quotesResult = await c.env.DB.prepare(
+      `DELETE FROM quotes WHERE id IN (${placeholders}) AND contractor_id = ?`
+    )
+      .bind(...quoteIds, contractorId)
+      .run()
+    const quotesDeleted = quotesResult.meta?.changes ?? 0
+
+    // Hash the email for the audit log (SHA-256, no PII stored)
+    const emailBytes = new TextEncoder().encode(email)
+    const hashBuffer = await crypto.subtle.digest("SHA-256", emailBytes)
+    const emailHash = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+
+    // Write audit log entry
+    await c.env.DB.prepare(
+      `INSERT INTO data_deletion_log (
+        contractor_id, request_type, requested_by, email_hash,
+        quotes_deleted, photos_deleted, appointments_deleted, activity_records_deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        contractorId,
+        requestType,
+        contractorId, // the authenticated contractor is the requester
+        emailHash,
+        quotesDeleted,
+        photosDeleted,
+        appointmentsDeleted,
+        activityDeleted
+      )
+      .run()
+
+    const res: ApiOk<{
+      quotesDeleted: number
+      photosDeleted: number
+      appointmentsDeleted: number
+      activityRecordsDeleted: number
+    }> = {
+      ok: true,
+      data: {
+        quotesDeleted,
+        photosDeleted,
+        appointmentsDeleted,
+        activityRecordsDeleted: activityDeleted,
+      },
+    }
+    return c.json(res)
   }
 )
 
