@@ -30,10 +30,12 @@ id = "placeholder-replace-with-real-kv-id"
 # ---------------------------------------------------------------------------
 # HUBSPOT_ACCESS_TOKEN   — HubSpot private-app token for CRM submission
 # TOKEN_SIGNING_SECRET   — HMAC secret for signed URL tokens
+# SENDGRID_API_KEY       — SendGrid API key for email notifications
 #
 # Example:
 #   wrangler secret put HUBSPOT_ACCESS_TOKEN
 #   wrangler secret put TOKEN_SIGNING_SECRET
+#   wrangler secret put SENDGRID_API_KEY
 
 # ---------------------------------------------------------------------------
 # Local dev vars (not for production)
