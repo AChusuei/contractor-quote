@@ -5,6 +5,7 @@ import { apiError } from "./lib/errors"
 import { requireAuth, requireQuoteOwnership } from "./middleware/tenantIsolation"
 import {
   quoteSubmissionSchema,
+  quoteUpdateSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
 } from "./validation"
@@ -232,6 +233,112 @@ app.get(
 
     const res: ApiOk<typeof quote> = { ok: true, data: quote }
     return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Quote update (partial edit)
+// ---------------------------------------------------------------------------
+app.patch(
+  "/quotes/:quoteId",
+  requireAuth(),
+  requireQuoteOwnership(),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const contractorId = c.get("contractorId") as string
+
+    // --- Payload size gate (100KB) ---
+    const contentLength = c.req.header("content-length")
+    if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_BYTES) {
+      return c.json(
+        { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+        413
+      )
+    }
+
+    const rawBody = await c.req.text()
+    if (rawBody.length > MAX_PAYLOAD_BYTES) {
+      return c.json(
+        { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+        413
+      )
+    }
+
+    // --- Parse JSON ---
+    let body: unknown
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    // --- Validate with Zod schema ---
+    const result = quoteUpdateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // --- Build dynamic UPDATE query ---
+    const fieldMap: Record<string, { column: string; value: unknown }> = {
+      name: { column: "name", value: data.name },
+      email: { column: "email", value: data.email },
+      phone: { column: "phone", value: data.phone },
+      cell: { column: "cell", value: data.cell },
+      jobSiteAddress: { column: "job_site_address", value: data.jobSiteAddress },
+      propertyType: { column: "property_type", value: data.propertyType },
+      budgetRange: { column: "budget_range", value: data.budgetRange },
+      howDidYouFindUs: { column: "how_did_you_find_us", value: data.howDidYouFindUs },
+      referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
+      scope: { column: "scope", value: data.scope !== undefined ? JSON.stringify(data.scope) : undefined },
+      quotePath: { column: "quote_path", value: data.quotePath },
+      photoSessionId: { column: "photo_session_id", value: data.photoSessionId },
+    }
+
+    const setClauses: string[] = []
+    const bindValues: unknown[] = []
+
+    for (const [key, mapping] of Object.entries(fieldMap)) {
+      if (key in data) {
+        setClauses.push(`${mapping.column} = ?`)
+        bindValues.push(mapping.value ?? null)
+      }
+    }
+
+    // Update the quote
+    bindValues.push(quoteId)
+    await c.env.DB.prepare(
+      `UPDATE quotes SET ${setClauses.join(", ")} WHERE id = ?`
+    )
+      .bind(...bindValues)
+      .run()
+
+    // --- Log activity ---
+    await c.env.DB.prepare(
+      `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
+       VALUES (?, ?, 'quote_edited', ?)`
+    )
+      .bind(quoteId, contractorId, JSON.stringify(Object.keys(data)))
+      .run()
+
+    // --- Fetch and return updated quote ---
+    const updated = await c.env.DB.prepare(
+      `SELECT id, contractor_id, schema_version,
+              name, email, phone, cell,
+              job_site_address, property_type, budget_range,
+              how_did_you_find_us, referred_by_contractor,
+              scope, quote_path, photo_session_id,
+              public_token, status, created_at
+       FROM quotes WHERE id = ?`
+    )
+      .bind(quoteId)
+      .first()
+
+    return c.json({ ok: true, data: updated })
   }
 )
 

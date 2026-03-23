@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { quoteSubmissionSchema, formatZodErrors, MAX_PAYLOAD_BYTES } from "./validation"
+import { quoteSubmissionSchema, quoteUpdateSchema, formatZodErrors, MAX_PAYLOAD_BYTES } from "./validation"
 
 const validPayload = {
   contractorId: "contractor-001",
@@ -146,6 +146,109 @@ describe("quoteSubmissionSchema", () => {
     if (!result.success) {
       const fields = formatZodErrors(result.error)
       expect(fields.scope).toContain("10KB")
+    }
+  })
+})
+
+describe("quoteUpdateSchema", () => {
+  it("accepts a single editable field", () => {
+    const result = quoteUpdateSchema.safeParse({ name: "Updated Name" })
+    expect(result.success).toBe(true)
+  })
+
+  it("accepts multiple editable fields", () => {
+    const result = quoteUpdateSchema.safeParse({
+      name: "Updated Name",
+      email: "new@example.com",
+      phone: "(555) 999-8888",
+      jobSiteAddress: "456 Oak Ave",
+      propertyType: "apt",
+      budgetRange: "25-50k",
+      quotePath: "site_visit",
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it("rejects an empty object", () => {
+    const result = quoteUpdateSchema.safeParse({})
+    expect(result.success).toBe(false)
+  })
+
+  it("rejects invalid email", () => {
+    const result = quoteUpdateSchema.safeParse({ email: "not-an-email" })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const fields = formatZodErrors(result.error)
+      expect(fields.email).toBe("Enter a valid email address")
+    }
+  })
+
+  it("rejects invalid phone", () => {
+    const result = quoteUpdateSchema.safeParse({ phone: "123" })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const fields = formatZodErrors(result.error)
+      expect(fields.phone).toContain("at least 10 digits")
+    }
+  })
+
+  it("rejects invalid propertyType", () => {
+    const result = quoteUpdateSchema.safeParse({ propertyType: "castle" })
+    expect(result.success).toBe(false)
+  })
+
+  it("rejects invalid budgetRange", () => {
+    const result = quoteUpdateSchema.safeParse({ budgetRange: "1million" })
+    expect(result.success).toBe(false)
+  })
+
+  it("rejects name over 200 characters", () => {
+    const result = quoteUpdateSchema.safeParse({ name: "A".repeat(201) })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const fields = formatZodErrors(result.error)
+      expect(fields.name).toContain("200 characters")
+    }
+  })
+
+  it("strips HTML tags from string fields", () => {
+    const result = quoteUpdateSchema.safeParse({
+      name: '<script>alert("xss")</script>Jane',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.name).toBe('alert("xss")Jane')
+    }
+  })
+
+  it("rejects scope over 10KB", () => {
+    const largeScope: Record<string, string> = {}
+    for (let i = 0; i < 200; i++) {
+      largeScope[`field_${i}`] = "x".repeat(100)
+    }
+    const result = quoteUpdateSchema.safeParse({ scope: largeScope })
+    expect(result.success).toBe(false)
+  })
+
+  it("accepts scope update", () => {
+    const result = quoteUpdateSchema.safeParse({
+      scope: { cabinets: true, flooring: "hardwood" },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it("ignores unknown fields", () => {
+    const result = quoteUpdateSchema.safeParse({
+      name: "Test",
+      id: "should-be-ignored",
+      contractorId: "should-be-ignored",
+      status: "should-be-ignored",
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("id")
+      expect(result.data).not.toHaveProperty("contractorId")
+      expect(result.data).not.toHaveProperty("status")
     }
   })
 })
