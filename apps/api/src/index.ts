@@ -2,7 +2,11 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import type { AppointmentSlot, ApiOk } from "@contractor-quote/types"
 import { apiError } from "./lib/errors"
-import { requireAuth, requireQuoteOwnership } from "./middleware/tenantIsolation"
+import {
+  requireAuth,
+  requireContractorOwnership,
+  requireQuoteOwnership,
+} from "./middleware/tenantIsolation"
 import {
   quoteSubmissionSchema,
   formatZodErrors,
@@ -23,7 +27,11 @@ type Bindings = {
   TOKEN_SIGNING_SECRET: string
 }
 
-const app = new Hono<{ Bindings: Bindings }>().basePath("/api/v1")
+type Variables = {
+  contractorId: string
+}
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath("/api/v1")
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -231,6 +239,102 @@ app.get(
     }
 
     const res: ApiOk<typeof quote> = { ok: true, data: quote }
+    return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// List quotes for a contractor
+// ---------------------------------------------------------------------------
+app.get(
+  "/contractors/:contractorId/quotes",
+  requireAuth(),
+  requireContractorOwnership(),
+  async (c) => {
+    const contractorId = c.get("contractorId")
+
+    // Parse pagination params
+    const pageParam = parseInt(c.req.query("page") ?? "1", 10)
+    const limitParam = parseInt(c.req.query("limit") ?? "20", 10)
+    const page = Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1
+    const limit = Number.isFinite(limitParam) && limitParam >= 1
+      ? Math.min(limitParam, 100)
+      : 20
+    const offset = (page - 1) * limit
+
+    // Build WHERE conditions
+    const conditions: string[] = ["contractor_id = ?"]
+    const bindings: (string | number)[] = [contractorId]
+
+    const status = c.req.query("status")
+    if (status) {
+      conditions.push("status = ?")
+      bindings.push(status)
+    }
+
+    const budget = c.req.query("budget")
+    if (budget) {
+      conditions.push("budget_range = ?")
+      bindings.push(budget)
+    }
+
+    const q = c.req.query("q")
+    if (q) {
+      conditions.push("(name LIKE ? OR job_site_address LIKE ?)")
+      const pattern = `%${q}%`
+      bindings.push(pattern, pattern)
+    }
+
+    const where = conditions.join(" AND ")
+
+    // Count total matching rows
+    const countResult = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total FROM quotes WHERE ${where}`
+    )
+      .bind(...bindings)
+      .first<{ total: number }>()
+
+    const total = countResult?.total ?? 0
+
+    // Fetch paginated results
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, contractor_id, schema_version, name, email, phone, cell,
+              job_site_address, property_type, budget_range,
+              how_did_you_find_us, referred_by_contractor,
+              scope, quote_path, photo_session_id, public_token, status, created_at
+       FROM quotes
+       WHERE ${where}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+      .bind(...bindings, limit, offset)
+      .all()
+
+    const quotes = (results ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      contractorId: row.contractor_id,
+      schemaVersion: row.schema_version,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      cell: row.cell ?? null,
+      jobSiteAddress: row.job_site_address,
+      propertyType: row.property_type,
+      budgetRange: row.budget_range,
+      howDidYouFindUs: row.how_did_you_find_us ?? null,
+      referredByContractor: row.referred_by_contractor ?? null,
+      scope: row.scope ? JSON.parse(row.scope as string) : null,
+      quotePath: row.quote_path ?? null,
+      photoSessionId: row.photo_session_id ?? null,
+      publicToken: row.public_token,
+      status: row.status,
+      createdAt: row.created_at,
+    }))
+
+    const res: ApiOk<{ quotes: typeof quotes; total: number; page: number }> = {
+      ok: true,
+      data: { quotes, total, page },
+    }
     return c.json(res)
   }
 )
