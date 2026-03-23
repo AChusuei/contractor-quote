@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils"
 import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 import { createQuote } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
+import { useTurnstile } from "@/components/Turnstile"
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -110,6 +113,9 @@ export function IntakePage() {
     },
   })
 
+  const { getToken: getTurnstileToken, resetToken: resetTurnstile, TurnstileWidget } =
+    useTurnstile(readOnly ? undefined : TURNSTILE_SITE_KEY)
+
   const valuesRef = ctx?.valuesRef
   useEffect(() => {
     if (!readOnly && valuesRef) {
@@ -120,6 +126,16 @@ export function IntakePage() {
 
   const onSubmit = async (data: IntakeFormData) => {
     setSubmitError(null)
+
+    // Require Turnstile token when configured
+    if (TURNSTILE_SITE_KEY) {
+      const turnstileToken = getTurnstileToken()
+      if (!turnstileToken) {
+        setSubmitError("Please wait for the security check to complete, then try again.")
+        return
+      }
+    }
+
     try {
       createQuote({
         name: data.name,
@@ -135,6 +151,7 @@ export function IntakePage() {
       await submitToHubSpot(data)
       navigate("/intake/scope")
     } catch (err) {
+      resetTurnstile()
       setSubmitError(err instanceof Error ? err.message : "Submission failed. Please try again.")
     }
   }
@@ -333,6 +350,8 @@ export function IntakePage() {
           />
           <FieldError message={errors.referredByContractor?.message} />
         </div>
+
+        {!readOnly && TurnstileWidget}
 
         {!readOnly && submitError && (
           <p className="text-sm text-destructive">{submitError}</p>
