@@ -262,7 +262,7 @@ export function EmailComposePage() {
 
   // Load selected quotes from query params
   const selectedQuotes = useMemo(() => {
-    const ids = searchParams.get("ids")
+    const ids = searchParams.get("quoteIds") || searchParams.get("ids")
     if (!ids) return []
     const idList = ids.split(",").filter(Boolean)
     const allQuotes = listQuotes()
