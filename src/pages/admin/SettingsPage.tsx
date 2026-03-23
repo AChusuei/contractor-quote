@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -80,6 +80,91 @@ function loadProfile(): ContractorProfile {
 }
 
 // ---------------------------------------------------------------------------
+// Staff
+// ---------------------------------------------------------------------------
+
+const STAFF_API_BASE = import.meta.env.VITE_CQ_QUOTES_API as string | undefined
+const STAFF_STORAGE_KEY = "cq_staff"
+
+const STAFF_ROLES = ["owner", "admin", "estimator", "field_tech"] as const
+type StaffRole = (typeof STAFF_ROLES)[number]
+
+const ROLE_LABELS: Record<StaffRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  estimator: "Estimator",
+  field_tech: "Field Tech",
+}
+
+interface StaffMember {
+  id: string
+  name: string
+  email: string
+  role: StaffRole
+  phone: string
+  active: boolean
+  createdAt: string
+}
+
+const staffFormSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Enter a valid email address"),
+  role: z.enum(STAFF_ROLES, { error: "Select a role" }),
+  phone: z
+    .string()
+    .refine(
+      (v) => v === "" || v.replace(/\D/g, "").length >= 10,
+      "Enter a valid phone number (at least 10 digits)",
+    )
+    .optional()
+    .or(z.literal("")),
+})
+
+type StaffFormData = z.infer<typeof staffFormSchema>
+
+function loadStaffFromStorage(): StaffMember[] {
+  try {
+    const raw = localStorage.getItem(STAFF_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as StaffMember[]
+  } catch {
+    // ignore corrupt data
+  }
+  return []
+}
+
+function saveStaffToStorage(staff: StaffMember[]) {
+  localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staff))
+}
+
+async function fetchStaffApi(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; data?: unknown; error?: string; fields?: Record<string, string> }> {
+  const res = await fetch(`${STAFF_API_BASE}${path}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return res.json() as Promise<{ ok: boolean; data?: unknown; error?: string; fields?: Record<string, string> }>
+}
+
+function mapApiStaff(raw: Record<string, unknown>): StaffMember {
+  return {
+    id: raw.id as string,
+    name: raw.name as string,
+    email: raw.email as string,
+    role: raw.role as StaffRole,
+    phone: (raw.phone as string) ?? "",
+    active: raw.active === 1 || raw.active === true,
+    createdAt: raw.createdAt as string,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Shared UI helpers (match IntakePage conventions)
 // ---------------------------------------------------------------------------
 
@@ -105,6 +190,108 @@ function inputClass(hasError?: boolean) {
 }
 
 // ---------------------------------------------------------------------------
+// Staff inline form
+// ---------------------------------------------------------------------------
+
+function StaffForm({
+  initialData,
+  onSubmit,
+  onCancel,
+  isEdit,
+}: {
+  initialData?: StaffMember
+  onSubmit: (data: StaffFormData) => Promise<void>
+  onCancel: () => void
+  isEdit: boolean
+}) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<StaffFormData>({
+    resolver: zodResolver(staffFormSchema),
+    mode: "onTouched",
+    defaultValues: {
+      name: initialData?.name ?? "",
+      email: initialData?.email ?? "",
+      role: initialData?.role ?? "estimator",
+      phone: initialData?.phone ?? "",
+    },
+  })
+
+  return (
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4 rounded-lg border border-border bg-muted/30 p-4"
+    >
+      <h3 className="text-sm font-medium">
+        {isEdit ? "Edit Staff Member" : "Add Staff Member"}
+      </h3>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="staffName">Name</Label>
+          <input
+            id="staffName"
+            type="text"
+            className={inputClass(!!errors.name)}
+            {...register("name")}
+          />
+          <FieldError message={errors.name?.message} />
+        </div>
+
+        <div>
+          <Label htmlFor="staffEmail">Email</Label>
+          <input
+            id="staffEmail"
+            type="email"
+            className={inputClass(!!errors.email)}
+            {...register("email")}
+          />
+          <FieldError message={errors.email?.message} />
+        </div>
+
+        <div>
+          <Label htmlFor="staffRole">Role</Label>
+          <select
+            id="staffRole"
+            className={inputClass(!!errors.role)}
+            {...register("role")}
+          >
+            {STAFF_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {ROLE_LABELS[role]}
+              </option>
+            ))}
+          </select>
+          <FieldError message={errors.role?.message} />
+        </div>
+
+        <div>
+          <Label htmlFor="staffPhone">Phone</Label>
+          <input
+            id="staffPhone"
+            type="tel"
+            className={inputClass(!!errors.phone)}
+            {...register("phone")}
+          />
+          <FieldError message={errors.phone?.message} />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          {isSubmitting ? "Saving..." : isEdit ? "Update" : "Add"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -123,6 +310,126 @@ export function SettingsPage() {
       return () => mq.removeEventListener("change", handler)
     }
   }, [theme])
+
+  // ---- Staff state ----
+  const [staffList, setStaffList] = useState<StaffMember[]>([])
+  const [staffLoading, setStaffLoading] = useState(true)
+  const [showStaffForm, setShowStaffForm] = useState(false)
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null)
+  const [staffError, setStaffError] = useState<string | null>(null)
+
+  const loadStaff = useCallback(async () => {
+    setStaffLoading(true)
+    setStaffError(null)
+    try {
+      if (STAFF_API_BASE) {
+        const res = await fetchStaffApi("GET", "/staff")
+        if (res.ok && Array.isArray(res.data)) {
+          setStaffList((res.data as Record<string, unknown>[]).map(mapApiStaff))
+        } else {
+          setStaffList(loadStaffFromStorage())
+        }
+      } else {
+        setStaffList(loadStaffFromStorage())
+      }
+    } catch {
+      setStaffList(loadStaffFromStorage())
+    } finally {
+      setStaffLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadStaff()
+  }, [loadStaff])
+
+  async function handleStaffSubmit(data: StaffFormData) {
+    setStaffError(null)
+    try {
+      if (STAFF_API_BASE) {
+        if (editingStaffId) {
+          const res = await fetchStaffApi("PATCH", `/staff/${editingStaffId}`, data)
+          if (!res.ok) {
+            setStaffError(res.fields ? Object.values(res.fields).join(", ") : (res.error ?? "Failed to update staff member"))
+            return
+          }
+        } else {
+          const res = await fetchStaffApi("POST", "/staff", data)
+          if (!res.ok) {
+            setStaffError(res.fields ? Object.values(res.fields).join(", ") : (res.error ?? "Failed to create staff member"))
+            return
+          }
+        }
+        await loadStaff()
+      } else {
+        // localStorage fallback
+        if (editingStaffId) {
+          setStaffList((prev) => {
+            const updated = prev.map((s) =>
+              s.id === editingStaffId
+                ? { ...s, name: data.name, email: data.email, role: data.role, phone: data.phone ?? "" }
+                : s,
+            )
+            saveStaffToStorage(updated)
+            return updated
+          })
+        } else {
+          const newMember: StaffMember = {
+            id: crypto.randomUUID(),
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            phone: data.phone ?? "",
+            active: true,
+            createdAt: new Date().toISOString(),
+          }
+          setStaffList((prev) => {
+            const updated = [...prev, newMember]
+            saveStaffToStorage(updated)
+            return updated
+          })
+        }
+      }
+      setShowStaffForm(false)
+      setEditingStaffId(null)
+    } catch {
+      setStaffError("An unexpected error occurred")
+    }
+  }
+
+  async function handleDeactivateStaff(id: string) {
+    setStaffError(null)
+    try {
+      if (STAFF_API_BASE) {
+        const res = await fetchStaffApi("PATCH", `/staff/${id}`, { active: false })
+        if (!res.ok) {
+          setStaffError(res.error ?? "Failed to deactivate staff member")
+          return
+        }
+        await loadStaff()
+      } else {
+        setStaffList((prev) => {
+          const updated = prev.map((s) => (s.id === id ? { ...s, active: false } : s))
+          saveStaffToStorage(updated)
+          return updated
+        })
+      }
+    } catch {
+      setStaffError("Failed to deactivate staff member")
+    }
+  }
+
+  function startEditStaff(member: StaffMember) {
+    setEditingStaffId(member.id)
+    setShowStaffForm(true)
+    setStaffError(null)
+  }
+
+  function cancelStaffForm() {
+    setShowStaffForm(false)
+    setEditingStaffId(null)
+    setStaffError(null)
+  }
 
   // ---- Profile form ----
   const [saved, setSaved] = useState(false)
@@ -301,6 +608,122 @@ export function SettingsPage() {
           )}
         </div>
       </form>
+
+      {/* ---- Staff ---- */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium">Staff</h2>
+            <p className="text-sm text-muted-foreground">
+              Manage your team members and their roles.
+            </p>
+          </div>
+          {!showStaffForm && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingStaffId(null)
+                setShowStaffForm(true)
+                setStaffError(null)
+              }}
+            >
+              Add Staff
+            </Button>
+          )}
+        </div>
+
+        {staffError && (
+          <p className="text-sm text-destructive">{staffError}</p>
+        )}
+
+        {showStaffForm && (
+          <StaffForm
+            key={editingStaffId ?? "new"}
+            initialData={
+              editingStaffId
+                ? staffList.find((s) => s.id === editingStaffId)
+                : undefined
+            }
+            onSubmit={handleStaffSubmit}
+            onCancel={cancelStaffForm}
+            isEdit={!!editingStaffId}
+          />
+        )}
+
+        {staffLoading ? (
+          <p className="text-sm text-muted-foreground">Loading staff...</p>
+        ) : staffList.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No staff members yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="px-4 py-2 text-left font-medium">Name</th>
+                  <th className="px-4 py-2 text-left font-medium">Email</th>
+                  <th className="px-4 py-2 text-left font-medium">Role</th>
+                  <th className="px-4 py-2 text-left font-medium">Phone</th>
+                  <th className="px-4 py-2 text-left font-medium">Status</th>
+                  <th className="px-4 py-2 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staffList.map((member) => (
+                  <tr key={member.id} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2">{member.name}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{member.email}</td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={cn(
+                          "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                          member.role === "owner"
+                            ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                            : member.role === "admin"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                              : member.role === "estimator"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+                        )}
+                      >
+                        {ROLE_LABELS[member.role]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">{member.phone || "—"}</td>
+                    <td className="px-4 py-2">
+                      {member.active ? (
+                        <span className="text-xs font-medium text-green-600 dark:text-green-400">Active</span>
+                      ) : (
+                        <span className="text-xs font-medium text-muted-foreground">Inactive</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => startEditStaff(member)}
+                        >
+                          Edit
+                        </Button>
+                        {member.active && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeactivateStaff(member.id)}
+                          >
+                            Deactivate
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ---- Appearance ---- */}
       <div className="space-y-4">
