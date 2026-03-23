@@ -2,22 +2,21 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import type { AppointmentSlot, ApiOk } from "@contractor-quote/types"
 import { apiError } from "./lib/errors"
+import type { Bindings } from "./types"
+import type { AuthVariables } from "./middleware/auth"
+import { authMiddleware } from "./middleware/auth"
+import {
+  requireQuoteOwnership,
+  requireSelfContractor,
+  requireAppointmentOwnership,
+} from "./middleware/tenant"
 
 // ---------------------------------------------------------------------------
-// Bindings — mirrors wrangler.toml
+// App type — shared across all route groups
 // ---------------------------------------------------------------------------
-type Bindings = {
-  DB: D1Database
-  STORAGE: R2Bucket
-  TOKENS: KVNamespace
-  ENVIRONMENT: string
-  CORS_ORIGINS: string
-  // Secrets (set via `wrangler secret put`)
-  HUBSPOT_ACCESS_TOKEN: string
-  TOKEN_SIGNING_SECRET: string
-}
+type AppEnv = { Bindings: Bindings; Variables: AuthVariables }
 
-const app = new Hono<{ Bindings: Bindings }>().basePath("/api/v1")
+const app = new Hono<AppEnv>().basePath("/api/v1")
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -49,7 +48,7 @@ app.notFound((c) => {
 })
 
 // ---------------------------------------------------------------------------
-// Health check
+// Public routes (no auth required)
 // ---------------------------------------------------------------------------
 app.get("/health", (c) => {
   const res: ApiOk<{ status: string; env: string }> = {
@@ -59,14 +58,89 @@ app.get("/health", (c) => {
   return c.json(res)
 })
 
-// ---------------------------------------------------------------------------
-// Appointment windows (stub — returns mock slots; replace with real logic)
-// ---------------------------------------------------------------------------
 app.get("/appointment-windows", (c) => {
   const slots: AppointmentSlot[] = generateMockSlots()
   const res: ApiOk<AppointmentSlot[]> = { ok: true, data: slots }
   return c.json(res)
 })
+
+// ---------------------------------------------------------------------------
+// Public intake — unauthenticated quote submission
+// POST /contractors/:contractorId/quotes
+// ---------------------------------------------------------------------------
+app.post("/contractors/:contractorId/quotes", async (c) => {
+  // Public intake endpoint — no auth required
+  // Route handler will be implemented in a separate bead
+  return c.json({ ok: false, error: "Not implemented", code: "INTERNAL_ERROR" as const }, 501)
+})
+
+// ---------------------------------------------------------------------------
+// Authenticated route groups — each group applies auth + tenant middleware
+// Uses Hono sub-apps to keep public intake route outside the auth boundary.
+// ---------------------------------------------------------------------------
+
+// --- Quotes (auth + ownership) ---
+const quotes = new Hono<AppEnv>()
+quotes.use("*", authMiddleware)
+quotes.use("/:quoteId", requireQuoteOwnership)
+quotes.use("/:quoteId/*", requireQuoteOwnership)
+
+quotes.get("/:quoteId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+quotes.patch("/:quoteId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+quotes.delete("/:quoteId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+quotes.post("/:quoteId/status", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+quotes.get("/:quoteId/photos", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+quotes.post("/:quoteId/photos", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+quotes.delete("/:quoteId/photos/:photoId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+
+app.route("/quotes", quotes)
+
+// --- Contractors (auth + self-access, EXCLUDING public intake) ---
+const contractors = new Hono<AppEnv>()
+contractors.use("*", authMiddleware)
+contractors.use("/:contractorId", requireSelfContractor)
+contractors.use("/:contractorId/*", requireSelfContractor)
+
+contractors.get("/:contractorId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+contractors.patch("/:contractorId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+
+app.route("/contractors", contractors)
+
+// --- Appointments (auth + ownership) ---
+const appointments = new Hono<AppEnv>()
+appointments.use("*", authMiddleware)
+appointments.use("/:appointmentId", requireAppointmentOwnership)
+appointments.use("/:appointmentId/*", requireAppointmentOwnership)
+
+appointments.get("/:appointmentId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+appointments.patch("/:appointmentId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+appointments.delete("/:appointmentId", async (c) => {
+  return apiError(c, "INTERNAL_ERROR", "Not implemented")
+})
+
+app.route("/appointments", appointments)
 
 export default app
 

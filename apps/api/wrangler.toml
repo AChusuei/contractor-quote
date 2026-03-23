@@ -30,10 +30,12 @@ id = "placeholder-replace-with-real-kv-id"
 # ---------------------------------------------------------------------------
 # HUBSPOT_ACCESS_TOKEN   — HubSpot private-app token for CRM submission
 # TOKEN_SIGNING_SECRET   — HMAC secret for signed URL tokens
+# CLERK_ISSUER           — Clerk instance URL for JWT verification (e.g. https://clerk.your-domain.com)
 #
 # Example:
 #   wrangler secret put HUBSPOT_ACCESS_TOKEN
 #   wrangler secret put TOKEN_SIGNING_SECRET
+#   wrangler secret put CLERK_ISSUER
 
 # ---------------------------------------------------------------------------
 # Local dev vars (not for production)
