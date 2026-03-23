@@ -3,6 +3,11 @@ import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { DataTable, type DataTableColumnDef } from "components"
 import { fetchQuotes, type Quote, type QuoteStatus } from "@/lib/quotes"
+import { apiGet, isNetworkError, setAuthProvider } from "@/lib/api"
+
+// ─── API quote shape (from backend) ──────────────────────────────────────────
+
+type ApiQuote = Record<string, unknown>
 
 // ─── Status display config ────────────────────────────────────────────────────
 
@@ -177,11 +182,18 @@ const columns: DataTableColumnDef<Quote>[] = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function QuotesPage() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth()
   const navigate = useNavigate()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Wire up Clerk auth for API calls
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      setAuthProvider(() => getToken())
+    }
+  }, [isLoaded, isSignedIn, getToken])
 
   // Redirect unauthenticated users to sign-in
   useEffect(() => {
@@ -194,14 +206,40 @@ export function QuotesPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchQuotes()
-      setQuotes(data)
+      // Try API first
+      const contractorId = userId ?? "default"
+      const res = await apiGet<{ quotes: ApiQuote[]; total: number; page: number }>(
+        `/contractors/${encodeURIComponent(contractorId)}/quotes?limit=100`
+      )
+      if (res.ok) {
+        // Map API response to the Quote shape expected by DataTable columns
+        const mapped: Quote[] = res.data.quotes.map((q) => ({
+          id: q.id as string,
+          customerName: q.name as string,
+          address: q.jobSiteAddress as string,
+          propertyType: q.propertyType as Quote["propertyType"],
+          budgetRange: q.budgetRange as Quote["budgetRange"],
+          scopeType: (q.scope as Record<string, unknown>)?.scopeType as Quote["scopeType"] ?? "supply_install",
+          layoutChanges: (q.scope as Record<string, unknown>)?.layoutChanges === "yes",
+          kitchenSize: (q.scope as Record<string, unknown>)?.kitchenSize as Quote["kitchenSize"] ?? "medium",
+          submittedAt: q.createdAt as string,
+          status: q.status as Quote["status"],
+        }))
+        setQuotes(mapped)
+      } else if (isNetworkError(res)) {
+        // Fallback to mock data
+        console.warn("API unreachable — falling back to mock quotes")
+        const data = await fetchQuotes()
+        setQuotes(data)
+      } else {
+        setError(res.error || "Failed to load quotes.")
+      }
     } catch {
       setError("Failed to load quotes. Please try again.")
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [userId])
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {

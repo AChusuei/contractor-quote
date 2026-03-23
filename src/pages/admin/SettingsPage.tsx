@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
+import { useAuth } from "@clerk/clerk-react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
+import { apiGet, apiPost, apiPatch, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -83,7 +85,6 @@ function loadProfile(): ContractorProfile {
 // Staff
 // ---------------------------------------------------------------------------
 
-const STAFF_API_BASE = import.meta.env.VITE_CQ_QUOTES_API as string | undefined
 const STAFF_STORAGE_KEY = "cq_staff"
 
 const STAFF_ROLES = ["owner", "admin", "estimator", "field_tech"] as const
@@ -139,17 +140,21 @@ function saveStaffToStorage(staff: StaffMember[]) {
   localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staff))
 }
 
+type StaffApiResult = { ok: boolean; data?: unknown; error?: string; code?: string; fields?: Record<string, string> }
+
 async function fetchStaffApi(
   method: string,
   path: string,
   body?: unknown,
-): Promise<{ ok: boolean; data?: unknown; error?: string; fields?: Record<string, string> }> {
-  const res = await fetch(`${STAFF_API_BASE}${path}`, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return res.json() as Promise<{ ok: boolean; data?: unknown; error?: string; fields?: Record<string, string> }>
+): Promise<StaffApiResult> {
+  if (method === "GET") {
+    return apiGet(path) as Promise<StaffApiResult>
+  } else if (method === "POST") {
+    return apiPost(path, body) as Promise<StaffApiResult>
+  } else if (method === "PATCH") {
+    return apiPatch(path, body) as Promise<StaffApiResult>
+  }
+  return { ok: false, error: `Unsupported method: ${method}` }
 }
 
 function mapApiStaff(raw: Record<string, unknown>): StaffMember {
@@ -296,6 +301,15 @@ function StaffForm({
 // ---------------------------------------------------------------------------
 
 export function SettingsPage() {
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth()
+
+  // Wire up Clerk auth for API calls
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      setAuthProvider(() => getToken())
+    }
+  }, [isLoaded, isSignedIn, getToken])
+
   // ---- Theme state ----
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
 
@@ -322,13 +336,12 @@ export function SettingsPage() {
     setStaffLoading(true)
     setStaffError(null)
     try {
-      if (STAFF_API_BASE) {
-        const res = await fetchStaffApi("GET", "/staff")
-        if (res.ok && Array.isArray(res.data)) {
-          setStaffList((res.data as Record<string, unknown>[]).map(mapApiStaff))
-        } else {
-          setStaffList(loadStaffFromStorage())
-        }
+      const res = await fetchStaffApi("GET", "/staff")
+      if (res.ok && Array.isArray(res.data)) {
+        setStaffList((res.data as Record<string, unknown>[]).map(mapApiStaff))
+      } else if (isNetworkError(res)) {
+        console.warn("API unreachable — falling back to localStorage for staff")
+        setStaffList(loadStaffFromStorage())
       } else {
         setStaffList(loadStaffFromStorage())
       }
@@ -346,48 +359,54 @@ export function SettingsPage() {
   async function handleStaffSubmit(data: StaffFormData) {
     setStaffError(null)
     try {
-      if (STAFF_API_BASE) {
-        if (editingStaffId) {
-          const res = await fetchStaffApi("PATCH", `/staff/${editingStaffId}`, data)
-          if (!res.ok) {
-            setStaffError(res.fields ? Object.values(res.fields).join(", ") : (res.error ?? "Failed to update staff member"))
+      if (editingStaffId) {
+        const res = await fetchStaffApi("PATCH", `/staff/${editingStaffId}`, data)
+        if (!res.ok) {
+          if (isNetworkError(res)) {
+            // localStorage fallback for edit
+            setStaffList((prev) => {
+              const updated = prev.map((s) =>
+                s.id === editingStaffId
+                  ? { ...s, name: data.name, email: data.email, role: data.role, phone: data.phone ?? "" }
+                  : s,
+              )
+              saveStaffToStorage(updated)
+              return updated
+            })
+          } else {
+            const errRes = res
+            setStaffError(errRes.fields ? Object.values(errRes.fields).join(", ") : (errRes.error ?? "Failed to update staff member"))
             return
           }
         } else {
-          const res = await fetchStaffApi("POST", "/staff", data)
-          if (!res.ok) {
-            setStaffError(res.fields ? Object.values(res.fields).join(", ") : (res.error ?? "Failed to create staff member"))
-            return
-          }
+          await loadStaff()
         }
-        await loadStaff()
       } else {
-        // localStorage fallback
-        if (editingStaffId) {
-          setStaffList((prev) => {
-            const updated = prev.map((s) =>
-              s.id === editingStaffId
-                ? { ...s, name: data.name, email: data.email, role: data.role, phone: data.phone ?? "" }
-                : s,
-            )
-            saveStaffToStorage(updated)
-            return updated
-          })
-        } else {
-          const newMember: StaffMember = {
-            id: crypto.randomUUID(),
-            name: data.name,
-            email: data.email,
-            role: data.role,
-            phone: data.phone ?? "",
-            active: true,
-            createdAt: new Date().toISOString(),
+        const res = await fetchStaffApi("POST", "/staff", data)
+        if (!res.ok) {
+          if (isNetworkError(res)) {
+            // localStorage fallback for create
+            const newMember: StaffMember = {
+              id: crypto.randomUUID(),
+              name: data.name,
+              email: data.email,
+              role: data.role,
+              phone: data.phone ?? "",
+              active: true,
+              createdAt: new Date().toISOString(),
+            }
+            setStaffList((prev) => {
+              const updated = [...prev, newMember]
+              saveStaffToStorage(updated)
+              return updated
+            })
+          } else {
+            const errRes = res
+            setStaffError(errRes.fields ? Object.values(errRes.fields).join(", ") : (errRes.error ?? "Failed to create staff member"))
+            return
           }
-          setStaffList((prev) => {
-            const updated = [...prev, newMember]
-            saveStaffToStorage(updated)
-            return updated
-          })
+        } else {
+          await loadStaff()
         }
       }
       setShowStaffForm(false)
@@ -400,19 +419,21 @@ export function SettingsPage() {
   async function handleDeactivateStaff(id: string) {
     setStaffError(null)
     try {
-      if (STAFF_API_BASE) {
-        const res = await fetchStaffApi("PATCH", `/staff/${id}`, { active: false })
-        if (!res.ok) {
+      const res = await fetchStaffApi("PATCH", `/staff/${id}`, { active: false })
+      if (!res.ok) {
+        if (isNetworkError(res)) {
+          // localStorage fallback
+          setStaffList((prev) => {
+            const updated = prev.map((s) => (s.id === id ? { ...s, active: false } : s))
+            saveStaffToStorage(updated)
+            return updated
+          })
+        } else {
           setStaffError(res.error ?? "Failed to deactivate staff member")
           return
         }
-        await loadStaff()
       } else {
-        setStaffList((prev) => {
-          const updated = prev.map((s) => (s.id === id ? { ...s, active: false } : s))
-          saveStaffToStorage(updated)
-          return updated
-        })
+        await loadStaff()
       }
     } catch {
       setStaffError("Failed to deactivate staff member")
@@ -445,8 +466,14 @@ export function SettingsPage() {
     defaultValues: loadProfile(),
   })
 
-  function onSave(data: ContractorProfile) {
+  async function onSave(data: ContractorProfile) {
+    // Save to localStorage as immediate cache
     localStorage.setItem(PROFILE_KEY, JSON.stringify(data))
+
+    // Also try to save to API
+    const contractorId = userId ?? "default"
+    await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
+
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
@@ -454,9 +481,11 @@ export function SettingsPage() {
   // ---- Logo preview ----
   const [logoPreview, setLogoPreview] = useState<string>(() => loadProfile().logoUrl ?? "")
 
-  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // Show preview immediately
     const reader = new FileReader()
     reader.onload = () => {
       const dataUrl = reader.result as string
@@ -464,6 +493,18 @@ export function SettingsPage() {
       setValue("logoUrl", dataUrl, { shouldDirty: true })
     }
     reader.readAsDataURL(file)
+
+    // Upload via API
+    const contractorId = userId ?? "default"
+    const formData = new FormData()
+    formData.append("file", file)
+    const res = await apiUpload<{ logoUrl: string }>(
+      `/contractors/${encodeURIComponent(contractorId)}/logo`,
+      formData,
+    )
+    if (res.ok) {
+      setValue("logoUrl", res.data.logoUrl, { shouldDirty: true })
+    }
   }
 
   return (
