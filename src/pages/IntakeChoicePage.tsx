@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { attachQuotePath } from "@/lib/quoteStore"
+import { apiPatch, isNetworkError } from "@/lib/api"
 
 export type QuotePath = "site_visit" | "estimate_requested"
 
@@ -19,17 +20,23 @@ export function getQuotePath(): QuotePath | null {
 export function IntakeChoicePage() {
   const navigate = useNavigate()
 
-  const handleSiteVisit = () => {
-    saveQuotePath("site_visit")
-    attachQuotePath("site_visit")
-    navigate("/intake/appointment")
+  const handleChoice = async (path: QuotePath) => {
+    saveQuotePath(path)
+    const quoteId = sessionStorage.getItem("cq_active_quote_id")
+    if (quoteId) {
+      const res = await apiPatch(`/quotes/${encodeURIComponent(quoteId)}`, { quotePath: path })
+      if (isNetworkError(res)) {
+        console.warn("API unreachable — falling back to localStorage for quotePath")
+        attachQuotePath(path)
+      }
+    } else {
+      attachQuotePath(path)
+    }
+    navigate(path === "site_visit" ? "/intake/appointment" : "/intake/estimate")
   }
 
-  const handleEstimate = () => {
-    saveQuotePath("estimate_requested")
-    attachQuotePath("estimate_requested")
-    navigate("/intake/estimate")
-  }
+  const handleSiteVisit = () => handleChoice("site_visit")
+  const handleEstimate = () => handleChoice("estimate_requested")
 
   return (
     <div className="max-w-xl mx-auto">

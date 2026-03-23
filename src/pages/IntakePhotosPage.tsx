@@ -5,6 +5,8 @@ import { Button } from "components"
 import { uploadQuotePhoto, getQuotePhotos } from "@/lib/supabase"
 import { attachPhotoSession } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
+// API photo endpoints not yet implemented — keeping IndexedDB for now
+// import { apiGet, isNetworkError } from "@/lib/api"
 
 const MAX_PHOTOS = 10
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB

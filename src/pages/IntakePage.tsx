@@ -9,6 +9,7 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 import { createQuote } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
 import { useTurnstile } from "@/components/Turnstile"
+import { apiPost, isNetworkError } from "@/lib/api"
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
@@ -137,17 +138,46 @@ export function IntakePage() {
     }
 
     try {
-      createQuote({
+      const turnstileToken = TURNSTILE_SITE_KEY ? getTurnstileToken() : undefined
+
+      // Try API first
+      const res = await apiPost<{ id: string; publicToken: string }>("/quotes", {
+        schemaVersion: 1,
+        contractorId: "default",
         name: data.name,
         email: data.email,
         phone: data.phone,
-        cell: data.cell,
+        cell: data.cell || undefined,
         jobSiteAddress: data.jobSiteAddress,
         propertyType: data.propertyType,
         budgetRange: data.budgetRange,
         howDidYouFindUs: data.howDidYouFindUs,
-        referredByContractor: data.referredByContractor,
+        referredByContractor: data.referredByContractor || undefined,
+        turnstileToken,
       })
+
+      if (res.ok) {
+        // Store the quote ID for subsequent steps
+        sessionStorage.setItem("cq_active_quote_id", res.data.id)
+      } else if (isNetworkError(res)) {
+        // Fallback to localStorage when API is unreachable
+        console.warn("API unreachable — falling back to localStorage")
+        const localQuote = createQuote({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          cell: data.cell,
+          jobSiteAddress: data.jobSiteAddress,
+          propertyType: data.propertyType,
+          budgetRange: data.budgetRange,
+          howDidYouFindUs: data.howDidYouFindUs,
+          referredByContractor: data.referredByContractor,
+        })
+        sessionStorage.setItem("cq_active_quote_id", localQuote.id)
+      } else {
+        throw new Error(res.error || "Submission failed")
+      }
+
       await submitToHubSpot(data)
       navigate("/intake/scope")
     } catch (err) {

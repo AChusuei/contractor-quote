@@ -16,6 +16,7 @@ import { QuoteProvider } from "@/lib/QuoteContext"
 import { IntakePage } from "@/pages/IntakePage"
 import { IntakeScreen2Page } from "@/pages/IntakeScreen2Page"
 import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
+import { apiGet, apiPatch, apiPost, isNetworkError, setAuthProvider } from "@/lib/api"
 
 // ---------------------------------------------------------------------------
 // Status config
@@ -38,6 +39,30 @@ const STATUS_COLORS: Record<QuoteStatus, string> = {
 }
 
 const ALL_STATUSES: QuoteStatus[] = ["lead", "measure_scheduled", "quoted", "accepted", "rejected"]
+
+/** Map API quote response to the frontend Quote type */
+function mapApiQuote(raw: Record<string, unknown>): Quote {
+  const scope = raw.scope as Quote["scope"] | null
+  return {
+    id: raw.id as string,
+    createdAt: raw.createdAt as string,
+    name: raw.name as string,
+    email: raw.email as string,
+    phone: raw.phone as string,
+    cell: (raw.cell as string) ?? undefined,
+    jobSiteAddress: raw.jobSiteAddress as string,
+    propertyType: raw.propertyType as Quote["propertyType"],
+    budgetRange: raw.budgetRange as Quote["budgetRange"],
+    howDidYouFindUs: (raw.howDidYouFindUs as string) ?? "",
+    referredByContractor: (raw.referredByContractor as string) ?? undefined,
+    scope: scope ?? undefined,
+    quotePath: (raw.quotePath as Quote["quotePath"]) ?? undefined,
+    photoSessionId: (raw.photoSessionId as string) ?? undefined,
+    status: raw.status as QuoteStatus,
+    statusHistory: (raw.statusHistory as Quote["statusHistory"]) ?? [],
+    contractorNotes: (raw.contractorNotes as string) ?? "",
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Display helpers
@@ -289,20 +314,75 @@ function BasicQuoteView({ id }: { id: string }) {
 
 export function QuoteDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
   const [quote, setQuote] = useState<Quote | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>("contact")
   const [editing, setEditing] = useState(false)
   const valuesRef = useRef<(() => Record<string, unknown>) | null>(null)
   const pendingEditsRef = useRef<Record<string, unknown>>({})
+  const [useLocalFallback, setUseLocalFallback] = useState(false)
 
+  // Wire up Clerk auth
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      setAuthProvider(() => getToken())
+    }
+  }, [isLoaded, isSignedIn, getToken])
+
+  // Load quote from API, fall back to localStorage
   useEffect(() => {
     if (!id) { setNotFound(true); return }
-    const q = getQuote(id)
-    if (!q) { setNotFound(true); return }
-    setQuote(q)
-  }, [id])
+    if (!isLoaded || !isSignedIn) return
+
+    let cancelled = false
+    async function load() {
+      const res = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id!)}`)
+      if (cancelled) return
+
+      if (res.ok) {
+        // Also fetch activity for statusHistory
+        const actRes = await apiGet<{ activities: Array<Record<string, unknown>> }>(
+          `/quotes/${encodeURIComponent(id!)}/activity?limit=100`
+        )
+        const apiQuote = res.data
+        if (actRes.ok) {
+          // Build statusHistory from activity feed
+          const statusEvents = actRes.data.activities
+            .filter((a) => a.type === "status_change")
+            .map((a) => ({
+              status: (a.newValue as string) as QuoteStatus,
+              timestamp: a.createdAt as string,
+            }))
+          apiQuote.statusHistory = statusEvents
+
+          // Extract contractor notes from most recent "note" activity
+          const notes = actRes.data.activities
+            .filter((a) => a.type === "note")
+            .map((a) => a.content as string)
+          apiQuote.contractorNotes = notes.join("\n")
+        }
+        if (!cancelled) setQuote(mapApiQuote(apiQuote))
+      } else if (isNetworkError(res)) {
+        // Fallback to localStorage
+        console.warn("API unreachable — falling back to localStorage for quote detail")
+        setUseLocalFallback(true)
+        const q = getQuote(id!)
+        if (!q) { setNotFound(true); return }
+        if (!cancelled) setQuote(q)
+      } else {
+        // Try localStorage as last resort
+        const q = getQuote(id!)
+        if (!q) { setNotFound(true); return }
+        if (!cancelled) {
+          setUseLocalFallback(true)
+          setQuote(q)
+        }
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [id, isLoaded, isSignedIn])
 
   /** Flush current tab's form values into the pending edits accumulator. */
   const flushCurrentTab = useCallback(() => {
@@ -326,21 +406,42 @@ export function QuoteDetailPage() {
     setEditing(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!id || !quote) return
     flushCurrentTab()
     const edits = pendingEditsRef.current
-    updateQuote(id, edits)
-    setQuote(getQuote(id))
+
+    if (useLocalFallback) {
+      updateQuote(id, edits)
+      setQuote(getQuote(id))
+    } else {
+      const res = await apiPatch(`/quotes/${encodeURIComponent(id)}`, edits)
+      if (res.ok) {
+        // Re-fetch to get updated data
+        const refreshed = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
+        if (refreshed.ok) setQuote(mapApiQuote(refreshed.data))
+      } else {
+        // Fallback to localStorage
+        updateQuote(id, edits)
+        setQuote(getQuote(id))
+      }
+    }
     pendingEditsRef.current = {}
     setEditing(false)
   }
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     pendingEditsRef.current = {}
     setEditing(false)
-    // Re-read quote from store to discard any visual changes
-    if (id) setQuote(getQuote(id))
+    // Re-read quote to discard visual changes
+    if (!id) return
+    if (useLocalFallback) {
+      setQuote(getQuote(id))
+    } else {
+      const res = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
+      if (res.ok) setQuote(mapApiQuote(res.data))
+      else setQuote(getQuote(id))
+    }
   }
 
   if (!isLoaded || !isSignedIn) {
@@ -366,15 +467,54 @@ export function QuoteDetailPage() {
     )
   }
 
-  const handleStatusChange = (status: QuoteStatus) => {
+  const handleStatusChange = async (status: QuoteStatus) => {
     if (!id) return
-    updateStatus(id, status)
-    setQuote(getQuote(id))
+
+    if (useLocalFallback) {
+      updateStatus(id, status)
+      setQuote(getQuote(id))
+    } else {
+      const res = await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
+        type: "status_change",
+        newStatus: status,
+      })
+      if (res.ok) {
+        // Re-fetch the quote to get updated status + activity
+        const refreshed = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
+        if (refreshed.ok) {
+          const actRes = await apiGet<{ activities: Array<Record<string, unknown>> }>(
+            `/quotes/${encodeURIComponent(id)}/activity?limit=100`
+          )
+          const apiQuote = refreshed.data
+          if (actRes.ok) {
+            apiQuote.statusHistory = actRes.data.activities
+              .filter((a) => a.type === "status_change")
+              .map((a) => ({ status: a.newValue as QuoteStatus, timestamp: a.createdAt as string }))
+            apiQuote.contractorNotes = actRes.data.activities
+              .filter((a) => a.type === "note")
+              .map((a) => a.content as string)
+              .join("\n")
+          }
+          setQuote(mapApiQuote(apiQuote))
+        }
+      } else {
+        updateStatus(id, status)
+        setQuote(getQuote(id))
+      }
+    }
   }
 
-  const handleNotesSave = (notes: string) => {
+  const handleNotesSave = async (notes: string) => {
     if (!id) return
-    updateNotes(id, notes)
+
+    if (useLocalFallback) {
+      updateNotes(id, notes)
+    } else {
+      await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
+        type: "note",
+        content: notes,
+      })
+    }
   }
 
   return (

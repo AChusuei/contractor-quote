@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { Button } from "components"
 import { listQuotes, type Quote } from "@/lib/quoteStore"
 import { cn } from "@/lib/utils"
 import { ChevronDown, Plus, Eye, Send, ArrowLeft } from "lucide-react"
+import { apiPost, setAuthProvider } from "@/lib/api"
 
 // ---------------------------------------------------------------------------
 // Merge field helpers
@@ -252,6 +253,13 @@ function PreviewPanel({
 
 export function EmailComposePage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
+
+  // Wire up Clerk auth for API calls
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      setAuthProvider(() => getToken())
+    }
+  }, [isLoaded, isSignedIn, getToken])
   const [searchParams] = useSearchParams()
   const [selectedTemplateId, setSelectedTemplateId] = useState(TEMPLATES[0].id)
   const [subject, setSubject] = useState(TEMPLATES[0].subject)
@@ -309,31 +317,16 @@ export function EmailComposePage() {
     setSendError(null)
 
     try {
-      const token = await getToken()
-      const apiBase = import.meta.env.VITE_CQ_QUOTES_API as string | undefined
-      const url = apiBase
-        ? `${apiBase}/email/send`
-        : "/api/v1/email/send"
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          to: selectedQuotes.map((q) => q.id),
-          subject,
-          html: body,
-        }),
+      const res = await apiPost<{ sent: number; failed: number }>("/email/send", {
+        to: selectedQuotes.map((q) => q.id),
+        subject,
+        html: body,
       })
 
-      const json = await res.json() as { ok: boolean; data?: { sent: number; failed: number }; error?: string }
-
-      if (!json.ok) {
-        setSendError(json.error ?? "Failed to send emails")
-      } else if (json.data) {
-        setSendResult(json.data)
+      if (!res.ok) {
+        setSendError(res.error ?? "Failed to send emails")
+      } else {
+        setSendResult(res.data)
         setSent(true)
       }
     } catch (err) {

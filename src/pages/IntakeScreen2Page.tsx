@@ -7,6 +7,7 @@ import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { attachScope } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
+import { apiPatch, isNetworkError } from "@/lib/api"
 
 const applianceSchema = z.enum(["new", "existing", "none"])
 
@@ -278,8 +279,17 @@ export function IntakeScreen2Page() {
   const layoutChanges = watch("layoutChanges")
   const flooringAction = watch("flooringAction")
 
-  const onSubmit = (data: IntakeScreen2Data) => {
-    attachScope(data)
+  const onSubmit = async (data: IntakeScreen2Data) => {
+    const quoteId = sessionStorage.getItem("cq_active_quote_id")
+    if (quoteId) {
+      const res = await apiPatch(`/quotes/${encodeURIComponent(quoteId)}`, { scope: data })
+      if (isNetworkError(res)) {
+        console.warn("API unreachable — falling back to localStorage for scope")
+        attachScope(data)
+      }
+    } else {
+      attachScope(data)
+    }
     navigate("/intake/photos")
   }
 
