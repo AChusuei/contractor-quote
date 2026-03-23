@@ -10,8 +10,12 @@ import {
 import {
   quoteSubmissionSchema,
   quoteUpdateSchema,
+  activityCreateSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
+  QUOTE_STATUSES,
+  STATUS_TRANSITIONS,
+  type QuoteStatus,
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
 
@@ -512,6 +516,187 @@ app.delete(
       .run()
 
     return c.body(null, 204)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Add activity to a quote (note or status change)
+// ---------------------------------------------------------------------------
+app.post(
+  "/quotes/:quoteId/activity",
+  requireAuth(),
+  requireQuoteOwnership(),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const contractorId = c.get("contractorId") as string
+
+    // --- Payload size gate ---
+    const contentLength = c.req.header("content-length")
+    if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_BYTES) {
+      return c.json(
+        { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+        413
+      )
+    }
+
+    const rawBody = await c.req.text()
+    if (rawBody.length > MAX_PAYLOAD_BYTES) {
+      return c.json(
+        { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+        413
+      )
+    }
+
+    // --- Parse JSON ---
+    let body: unknown
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    // --- Validate ---
+    const result = activityCreateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // --- Status change: validate transition ---
+    let oldStatus: string | null = null
+    if (data.type === "status_change") {
+      const quote = await c.env.DB.prepare(
+        "SELECT status FROM quotes WHERE id = ?"
+      )
+        .bind(quoteId)
+        .first<{ status: string }>()
+
+      if (!quote) {
+        return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+
+      oldStatus = quote.status
+      const currentStatus = quote.status as QuoteStatus
+
+      if (!QUOTE_STATUSES.includes(currentStatus)) {
+        return apiError(c, "VALIDATION_ERROR", `Current quote status "${currentStatus}" is not recognized`)
+      }
+
+      const allowed = STATUS_TRANSITIONS[currentStatus]
+      if (!allowed.includes(data.newStatus!)) {
+        return apiError(
+          c,
+          "VALIDATION_ERROR",
+          `Cannot change status from "${currentStatus}" to "${data.newStatus}". Allowed: ${allowed.join(", ")}`
+        )
+      }
+
+      // Update quote status
+      await c.env.DB.prepare(
+        "UPDATE quotes SET status = ? WHERE id = ?"
+      )
+        .bind(data.newStatus!, quoteId)
+        .run()
+    }
+
+    // --- Insert activity record ---
+    const activityResult = await c.env.DB.prepare(
+      `INSERT INTO quote_activity (quote_id, contractor_id, type, content, old_value, new_value)
+       VALUES (?, ?, ?, ?, ?, ?)
+       RETURNING id, quote_id, contractor_id, staff_id, type, content, old_value, new_value, created_at`
+    )
+      .bind(
+        quoteId,
+        contractorId,
+        data.type,
+        data.content ?? null,
+        oldStatus,
+        data.type === "status_change" ? data.newStatus! : null
+      )
+      .first()
+
+    if (!activityResult) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to create activity record")
+    }
+
+    const activity = {
+      id: activityResult.id,
+      quoteId: activityResult.quote_id,
+      contractorId: activityResult.contractor_id,
+      staffId: activityResult.staff_id ?? null,
+      type: activityResult.type,
+      content: activityResult.content ?? null,
+      oldValue: activityResult.old_value ?? null,
+      newValue: activityResult.new_value ?? null,
+      createdAt: activityResult.created_at,
+    }
+
+    const res: ApiOk<typeof activity> = { ok: true, data: activity }
+    return c.json(res, 201)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// List activity feed for a quote (chronological, paginated)
+// ---------------------------------------------------------------------------
+app.get(
+  "/quotes/:quoteId/activity",
+  requireAuth(),
+  requireQuoteOwnership(),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+
+    // Parse pagination params
+    const pageParam = parseInt(c.req.query("page") ?? "1", 10)
+    const limitParam = parseInt(c.req.query("limit") ?? "50", 10)
+    const page = Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1
+    const limit = Number.isFinite(limitParam) && limitParam >= 1
+      ? Math.min(limitParam, 100)
+      : 50
+    const offset = (page - 1) * limit
+
+    // Count total
+    const countResult = await c.env.DB.prepare(
+      "SELECT COUNT(*) as total FROM quote_activity WHERE quote_id = ?"
+    )
+      .bind(quoteId)
+      .first<{ total: number }>()
+
+    const total = countResult?.total ?? 0
+
+    // Fetch paginated results (chronological order)
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, quote_id, contractor_id, staff_id, type, content,
+              old_value, new_value, created_at
+       FROM quote_activity
+       WHERE quote_id = ?
+       ORDER BY created_at ASC, id ASC
+       LIMIT ? OFFSET ?`
+    )
+      .bind(quoteId, limit, offset)
+      .all()
+
+    const activities = (results ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      quoteId: row.quote_id,
+      contractorId: row.contractor_id,
+      staffId: row.staff_id ?? null,
+      type: row.type,
+      content: row.content ?? null,
+      oldValue: row.old_value ?? null,
+      newValue: row.new_value ?? null,
+      createdAt: row.created_at,
+    }))
+
+    const res: ApiOk<{ activities: typeof activities; total: number; page: number }> = {
+      ok: true,
+      data: { activities, total, page },
+    }
+    return c.json(res)
   }
 )
 
