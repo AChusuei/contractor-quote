@@ -95,6 +95,66 @@ export const quoteSubmissionSchema = z.object({
 export type QuoteSubmission = z.infer<typeof quoteSubmissionSchema>
 
 // ---------------------------------------------------------------------------
+// Quote update schema (partial — only editable fields, all optional)
+// ---------------------------------------------------------------------------
+
+export const quoteUpdateSchema = z
+  .object({
+    name: sanitizedMinMax(
+      1, "Name is required",
+      200, "Name must be 200 characters or fewer"
+    ),
+
+    email: z
+      .string({ error: "Enter a valid email address" })
+      .transform(stripHtml)
+      .pipe(z.string().email("Enter a valid email address")),
+
+    phone: z
+      .string({ error: "Enter a valid phone number" })
+      .transform(stripHtml)
+      .pipe(
+        z.string().refine(
+          (v) => v.replace(/\D/g, "").length >= 10,
+          "Enter a valid phone number (at least 10 digits)"
+        )
+      ),
+
+    jobSiteAddress: sanitizedMinMax(
+      1, "Job site address is required",
+      500, "Job site address must be 500 characters or fewer"
+    ),
+
+    propertyType: z.enum(["house", "apt", "building", "townhouse"], {
+      error: "Property type must be house, apt, building, or townhouse",
+    }),
+
+    budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"], {
+      error: "Budget range must be <10k, 10-25k, 25-50k, or 50k+",
+    }),
+
+    scope: z
+      .record(z.string(), z.unknown())
+      .refine(
+        (val) => JSON.stringify(val).length <= 10 * 1024,
+        "Scope data must be 10KB or smaller"
+      ),
+
+    cell: sanitizedMax(50, "Cell number is too long"),
+    howDidYouFindUs: sanitizedMax(500, "Response is too long"),
+    referredByContractor: sanitizedMax(200, "Referral name is too long"),
+    quotePath: z.enum(["site_visit", "estimate_requested"]),
+    photoSessionId: sanitizedMax(200, "Photo session ID is too long"),
+  })
+  .partial()
+  .refine(
+    (val) => Object.keys(val).length > 0,
+    "At least one field must be provided for update"
+  )
+
+export type QuoteUpdate = z.infer<typeof quoteUpdateSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 
