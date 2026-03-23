@@ -7,7 +7,7 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "test": "vitest run"
   },
   "dependencies": {
