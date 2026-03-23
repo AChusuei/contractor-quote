@@ -13,6 +13,7 @@ import {
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
 } from "./validation"
+import { rateLimit } from "./middleware/rateLimit"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -77,7 +78,7 @@ app.get("/health", (c) => {
 // ---------------------------------------------------------------------------
 // Quote submission
 // ---------------------------------------------------------------------------
-app.post("/quotes", async (c) => {
+app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote-submit" }), async (c) => {
   // --- Payload size gate (100KB) ---
   const contentLength = c.req.header("content-length")
   if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_BYTES) {
@@ -347,6 +348,31 @@ app.patch(
       .first()
 
     return c.json({ ok: true, data: updated })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Photo upload
+// ---------------------------------------------------------------------------
+app.post(
+  "/quotes/:quoteId/photos",
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "photo-upload" }),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+
+    // Verify the quote exists
+    const quote = await c.env.DB.prepare(
+      "SELECT id FROM quotes WHERE id = ?"
+    )
+      .bind(quoteId)
+      .first<{ id: string }>()
+
+    if (!quote) {
+      return apiError(c, "NOT_FOUND", "Quote not found")
+    }
+
+    // TODO: implement actual photo upload to R2
+    return apiError(c, "INTERNAL_ERROR", "Photo upload not yet implemented")
   }
 )
 
