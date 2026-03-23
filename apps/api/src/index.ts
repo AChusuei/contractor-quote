@@ -447,6 +447,49 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
+// Delete a photo
+// ---------------------------------------------------------------------------
+app.delete(
+  "/quotes/:quoteId/photos/:photoId",
+  requireAuth(),
+  requireQuoteOwnership(),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const photoId = c.req.param("photoId")
+    const contractorId = c.get("contractorId") as string
+
+    // Fetch the photo record, enforcing tenant isolation via quote_id
+    const photo = await c.env.DB.prepare(
+      "SELECT id, r2_key FROM photos WHERE id = ? AND quote_id = ?"
+    )
+      .bind(photoId, quoteId)
+      .first<{ id: string; r2_key: string }>()
+
+    if (!photo) {
+      return apiError(c, "NOT_FOUND", "Photo not found")
+    }
+
+    // Delete from R2 storage
+    await c.env.STORAGE.delete(photo.r2_key)
+
+    // Delete from D1
+    await c.env.DB.prepare("DELETE FROM photos WHERE id = ?")
+      .bind(photoId)
+      .run()
+
+    // Log activity
+    await c.env.DB.prepare(
+      `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
+       VALUES (?, ?, 'photo_removed', ?)`
+    )
+      .bind(quoteId, contractorId, photoId)
+      .run()
+
+    return c.body(null, 204)
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Appointment windows (stub — returns mock slots; replace with real logic)
 // ---------------------------------------------------------------------------
 app.get("/appointment-windows", (c) => {
