@@ -30,6 +30,30 @@ describe("quoteSubmissionSchema", () => {
     expect(result.success).toBe(true)
   })
 
+  it("accepts a valid payload with turnstileToken", () => {
+    const result = quoteSubmissionSchema.safeParse({
+      ...validPayload,
+      turnstileToken: "0.fake-token-value",
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it("accepts a valid payload without turnstileToken (optional)", () => {
+    const result = quoteSubmissionSchema.safeParse(validPayload)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.turnstileToken).toBeUndefined()
+    }
+  })
+
+  it("rejects turnstileToken over 2048 characters", () => {
+    const result = quoteSubmissionSchema.safeParse({
+      ...validPayload,
+      turnstileToken: "x".repeat(2049),
+    })
+    expect(result.success).toBe(false)
+  })
+
   it("rejects missing required fields", () => {
     const result = quoteSubmissionSchema.safeParse({})
     expect(result.success).toBe(false)

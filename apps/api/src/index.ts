@@ -15,6 +15,7 @@ import {
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
 import { sendNewQuoteNotification } from "./lib/email"
+import { verifyTurnstileToken } from "./lib/turnstile"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -29,6 +30,7 @@ type Bindings = {
   HUBSPOT_ACCESS_TOKEN: string
   TOKEN_SIGNING_SECRET: string
   SENDGRID_API_KEY: string
+  TURNSTILE_SECRET_KEY: string
 }
 
 type Variables = {
@@ -117,6 +119,24 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
   }
 
   const data = result.data
+
+  // --- Verify Turnstile token (when secret key is configured) ---
+  if (c.env.TURNSTILE_SECRET_KEY) {
+    if (!data.turnstileToken) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { turnstileToken: "Security verification is required" } },
+        422
+      )
+    }
+    const clientIp = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")
+    const verification = await verifyTurnstileToken(data.turnstileToken, c.env.TURNSTILE_SECRET_KEY, clientIp ?? undefined)
+    if (!verification.success) {
+      return c.json(
+        { ok: false, error: "Security verification failed. Please try again.", code: "VALIDATION_ERROR" as const, fields: { turnstileToken: "Security verification failed" } },
+        422
+      )
+    }
+  }
 
   // --- Verify contractorId exists in D1 ---
   const contractor = await c.env.DB.prepare(

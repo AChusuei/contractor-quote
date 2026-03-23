@@ -18,6 +18,15 @@ vi.mock("@/lib/address/provider", () => ({
   getAddressProvider: () => null,
 }))
 
+// Mock Turnstile — no site key configured in test env, so widget is null
+vi.mock("@/components/Turnstile", () => ({
+  useTurnstile: () => ({
+    getToken: () => null,
+    resetToken: () => {},
+    TurnstileWidget: null,
+  }),
+}))
+
 function renderIntakePage() {
   return render(
     <MemoryRouter>
