@@ -13,6 +13,8 @@ import {
   activityCreateSchema,
   customerDeletionSchema,
   emailSendSchema,
+  staffCreateSchema,
+  staffUpdateSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
   QUOTE_STATUSES,
@@ -1110,6 +1112,231 @@ app.post(
       data: { sent, failed, errors },
     }
     return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Staff management
+// ---------------------------------------------------------------------------
+
+// List staff for the authenticated contractor
+app.get(
+  "/staff",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+
+    const includeInactive = c.req.query("includeInactive") === "true"
+    const where = includeInactive
+      ? "contractor_id = ?"
+      : "contractor_id = ? AND active = 1"
+
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, contractor_id, clerk_user_id, name, email, role, phone, active, created_at
+       FROM staff
+       WHERE ${where}
+       ORDER BY created_at ASC`
+    )
+      .bind(contractorId)
+      .all()
+
+    const staff = (results ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      contractorId: row.contractor_id,
+      clerkUserId: row.clerk_user_id ?? null,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      phone: row.phone ?? null,
+      active: row.active === 1,
+      createdAt: row.created_at,
+    }))
+
+    const res: ApiOk<typeof staff> = { ok: true, data: staff }
+    return c.json(res)
+  }
+)
+
+// Create a new staff member
+app.post(
+  "/staff",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = staffCreateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // Check for duplicate email within this contractor
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM staff WHERE email = ? AND contractor_id = ?"
+    )
+      .bind(data.email, contractorId)
+      .first<{ id: string }>()
+
+    if (existing) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { email: "A staff member with this email already exists" } },
+        422
+      )
+    }
+
+    const staffId = crypto.randomUUID()
+
+    await c.env.DB.prepare(
+      `INSERT INTO staff (id, contractor_id, name, email, role, phone, active)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`
+    )
+      .bind(staffId, contractorId, data.name, data.email, data.role, data.phone || null)
+      .run()
+
+    const created = await c.env.DB.prepare(
+      `SELECT id, contractor_id, clerk_user_id, name, email, role, phone, active, created_at
+       FROM staff WHERE id = ?`
+    )
+      .bind(staffId)
+      .first()
+
+    if (!created) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to create staff member")
+    }
+
+    const staffMember = {
+      id: created.id,
+      contractorId: created.contractor_id,
+      clerkUserId: created.clerk_user_id ?? null,
+      name: created.name,
+      email: created.email,
+      role: created.role,
+      phone: created.phone ?? null,
+      active: created.active === 1,
+      createdAt: created.created_at,
+    }
+
+    const res: ApiOk<typeof staffMember> = { ok: true, data: staffMember }
+    return c.json(res, 201)
+  }
+)
+
+// Update a staff member
+app.patch(
+  "/staff/:staffId",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const staffId = c.req.param("staffId")
+
+    // Verify staff belongs to this contractor
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM staff WHERE id = ? AND contractor_id = ?"
+    )
+      .bind(staffId, contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Staff member not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = staffUpdateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // Check for duplicate email if email is being changed
+    if (data.email) {
+      const duplicate = await c.env.DB.prepare(
+        "SELECT id FROM staff WHERE email = ? AND contractor_id = ? AND id != ?"
+      )
+        .bind(data.email, contractorId, staffId)
+        .first<{ id: string }>()
+
+      if (duplicate) {
+        return c.json(
+          { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { email: "A staff member with this email already exists" } },
+          422
+        )
+      }
+    }
+
+    // Build dynamic UPDATE
+    const fieldMap: Record<string, { column: string; value: unknown }> = {
+      name: { column: "name", value: data.name },
+      email: { column: "email", value: data.email },
+      role: { column: "role", value: data.role },
+      phone: { column: "phone", value: data.phone },
+      active: { column: "active", value: data.active !== undefined ? (data.active ? 1 : 0) : undefined },
+    }
+
+    const setClauses: string[] = []
+    const bindValues: unknown[] = []
+
+    for (const [key, mapping] of Object.entries(fieldMap)) {
+      if (key in data && mapping.value !== undefined) {
+        setClauses.push(`${mapping.column} = ?`)
+        bindValues.push(mapping.value ?? null)
+      }
+    }
+
+    if (setClauses.length > 0) {
+      bindValues.push(staffId)
+      await c.env.DB.prepare(
+        `UPDATE staff SET ${setClauses.join(", ")} WHERE id = ?`
+      )
+        .bind(...bindValues)
+        .run()
+    }
+
+    // Fetch updated record
+    const updated = await c.env.DB.prepare(
+      `SELECT id, contractor_id, clerk_user_id, name, email, role, phone, active, created_at
+       FROM staff WHERE id = ?`
+    )
+      .bind(staffId)
+      .first()
+
+    if (!updated) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to fetch updated staff member")
+    }
+
+    const staffMember = {
+      id: updated.id,
+      contractorId: updated.contractor_id,
+      clerkUserId: updated.clerk_user_id ?? null,
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      phone: updated.phone ?? null,
+      active: updated.active === 1,
+      createdAt: updated.created_at,
+    }
+
+    return c.json({ ok: true, data: staffMember })
   }
 )
 

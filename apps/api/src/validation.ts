@@ -281,6 +281,89 @@ export const emailSendSchema = z.object({
 export type EmailSend = z.infer<typeof emailSendSchema>
 
 // ---------------------------------------------------------------------------
+// Staff roles
+// ---------------------------------------------------------------------------
+
+export const STAFF_ROLES = ["owner", "admin", "estimator", "field_tech"] as const
+export type StaffRole = (typeof STAFF_ROLES)[number]
+
+// ---------------------------------------------------------------------------
+// Staff creation schema
+// ---------------------------------------------------------------------------
+
+export const staffCreateSchema = z.object({
+  name: sanitizedMinMax(
+    1, "Staff member name is required",
+    200, "Name must be 200 characters or fewer"
+  ),
+
+  email: z
+    .string({ error: "Email address is required" })
+    .transform(stripHtml)
+    .pipe(z.string().email("Enter a valid email address")),
+
+  role: z.enum(STAFF_ROLES, {
+    error: "Role must be one of: owner, admin, estimator, field_tech",
+  }),
+
+  phone: z
+    .string()
+    .transform(stripHtml)
+    .pipe(
+      z.string().refine(
+        (v) => v === "" || v.replace(/\D/g, "").length >= 10,
+        "Enter a valid phone number (at least 10 digits)"
+      )
+    )
+    .optional()
+    .or(z.literal("")),
+})
+
+export type StaffCreate = z.infer<typeof staffCreateSchema>
+
+// ---------------------------------------------------------------------------
+// Staff update schema (partial — all fields optional)
+// ---------------------------------------------------------------------------
+
+export const staffUpdateSchema = z
+  .object({
+    name: sanitizedMinMax(
+      1, "Staff member name is required",
+      200, "Name must be 200 characters or fewer"
+    ),
+
+    email: z
+      .string({ error: "Enter a valid email address" })
+      .transform(stripHtml)
+      .pipe(z.string().email("Enter a valid email address")),
+
+    role: z.enum(STAFF_ROLES, {
+      error: "Role must be one of: owner, admin, estimator, field_tech",
+    }),
+
+    phone: z
+      .string()
+      .transform(stripHtml)
+      .pipe(
+        z.string().refine(
+          (v) => v === "" || v.replace(/\D/g, "").length >= 10,
+          "Enter a valid phone number (at least 10 digits)"
+        )
+      )
+      .optional()
+      .or(z.literal("")),
+
+    active: z.boolean({ error: "Active must be true or false" }),
+  })
+  .partial()
+  .refine(
+    (val) => Object.keys(val).length > 0,
+    "At least one field must be provided for update"
+  )
+
+export type StaffUpdate = z.infer<typeof staffUpdateSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 
