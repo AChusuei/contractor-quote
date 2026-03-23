@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import type { AppointmentSlot, ApiOk } from "@contractor-quote/types"
 import { apiError } from "./lib/errors"
+import { requireAuth, requireQuoteOwnership } from "./middleware/tenantIsolation"
 import {
   quoteSubmissionSchema,
   formatZodErrors,
@@ -171,6 +172,68 @@ app.post("/quotes", async (c) => {
   }
   return c.json(res, 201)
 })
+
+// ---------------------------------------------------------------------------
+// Get single quote
+// ---------------------------------------------------------------------------
+app.get(
+  "/quotes/:quoteId",
+  requireAuth(),
+  requireQuoteOwnership(),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+
+    const row = await c.env.DB.prepare(
+      `SELECT id, contractor_id, schema_version,
+              name, email, phone, cell,
+              job_site_address, property_type, budget_range,
+              how_did_you_find_us, referred_by_contractor,
+              scope, quote_path, photo_session_id, public_token,
+              status, created_at
+       FROM quotes WHERE id = ?`
+    )
+      .bind(quoteId)
+      .first()
+
+    if (!row) {
+      return apiError(c, "NOT_FOUND", "Quote not found")
+    }
+
+    // Parse scope JSON if present
+    let scope: unknown = null
+    if (row.scope) {
+      try {
+        scope = JSON.parse(row.scope as string)
+      } catch {
+        scope = null
+      }
+    }
+
+    const quote = {
+      id: row.id,
+      contractorId: row.contractor_id,
+      schemaVersion: row.schema_version,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      cell: row.cell ?? null,
+      jobSiteAddress: row.job_site_address,
+      propertyType: row.property_type,
+      budgetRange: row.budget_range,
+      howDidYouFindUs: row.how_did_you_find_us ?? null,
+      referredByContractor: row.referred_by_contractor ?? null,
+      scope,
+      quotePath: row.quote_path ?? null,
+      photoSessionId: row.photo_session_id ?? null,
+      publicToken: row.public_token,
+      status: row.status,
+      createdAt: row.created_at,
+    }
+
+    const res: ApiOk<typeof quote> = { ok: true, data: quote }
+    return c.json(res)
+  }
+)
 
 // ---------------------------------------------------------------------------
 // Appointment windows (stub — returns mock slots; replace with real logic)
