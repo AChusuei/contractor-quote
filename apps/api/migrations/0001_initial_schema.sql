@@ -33,16 +33,33 @@ CREATE TABLE quotes (
   public_token TEXT UNIQUE, -- 256-bit crypto-random for magic link
   -- Admin fields
   status TEXT NOT NULL DEFAULT 'lead',
-  contractor_notes TEXT DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Status history (append-only log)
-CREATE TABLE quote_status_history (
+-- Staff members (per contractor team)
+CREATE TABLE staff (
+  id TEXT PRIMARY KEY,
+  contractor_id TEXT NOT NULL REFERENCES contractors(id),
+  clerk_user_id TEXT,              -- linked when they accept invite, nullable until then
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin', -- 'owner' | 'admin' | 'estimator' | 'field_tech'
+  phone TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Quote activity feed (replaces status_history + contractor_notes)
+CREATE TABLE quote_activity (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   quote_id TEXT NOT NULL REFERENCES quotes(id),
-  status TEXT NOT NULL,
-  timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+  contractor_id TEXT NOT NULL REFERENCES contractors(id),
+  staff_id TEXT REFERENCES staff(id), -- null for system/customer actions
+  type TEXT NOT NULL,              -- 'status_change' | 'note' | 'photo_added' | 'photo_removed' | 'quote_edited' | 'estimate_sent' | 'email_sent'
+  content TEXT,                    -- note text or change description
+  old_value TEXT,                  -- for status_change: previous status enum key
+  new_value TEXT,                  -- for status_change: new status enum key
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Appointments
@@ -63,7 +80,9 @@ CREATE INDEX idx_quotes_status ON quotes(status);
 CREATE INDEX idx_quotes_budget ON quotes(budget_range);
 CREATE INDEX idx_quotes_token ON quotes(public_token);
 CREATE INDEX idx_quotes_created ON quotes(created_at);
-CREATE INDEX idx_status_history_quote ON quote_status_history(quote_id);
+CREATE INDEX idx_staff_contractor ON staff(contractor_id);
+CREATE INDEX idx_activity_quote ON quote_activity(quote_id, created_at);
+CREATE INDEX idx_activity_staff ON quote_activity(staff_id);
 CREATE INDEX idx_appointments_contractor ON appointments(contractor_id);
 CREATE INDEX idx_appointments_date ON appointments(slot_date);
 CREATE INDEX idx_appointments_quote ON appointments(quote_id);
