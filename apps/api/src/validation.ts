@@ -155,6 +155,32 @@ export const quoteUpdateSchema = z
 export type QuoteUpdate = z.infer<typeof quoteUpdateSchema>
 
 // ---------------------------------------------------------------------------
+// Email send schema
+// ---------------------------------------------------------------------------
+
+export const emailSendSchema = z.object({
+  to: z
+    .array(
+      z.string({ error: "Each recipient must be a quote ID" }).min(1, "Quote ID must not be empty"),
+      { error: "Recipients list is required" }
+    )
+    .min(1, "Select at least one recipient")
+    .max(100, "Cannot send to more than 100 recipients at once"),
+
+  subject: z
+    .string({ error: "Subject is required" })
+    .min(1, "Subject is required")
+    .max(500, "Subject must be 500 characters or fewer"),
+
+  html: z
+    .string({ error: "Email body is required" })
+    .min(1, "Email body is required")
+    .max(50_000, "Email body must be 50,000 characters or fewer"),
+})
+
+export type EmailSend = z.infer<typeof emailSendSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 

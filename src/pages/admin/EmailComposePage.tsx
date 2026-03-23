@@ -251,7 +251,7 @@ function PreviewPanel({
 // ---------------------------------------------------------------------------
 
 export function EmailComposePage() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
   const [searchParams] = useSearchParams()
   const [selectedTemplateId, setSelectedTemplateId] = useState(TEMPLATES[0].id)
   const [subject, setSubject] = useState(TEMPLATES[0].subject)
@@ -259,6 +259,8 @@ export function EmailComposePage() {
   const [showPreview, setShowPreview] = useState(true)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   // Load selected quotes from query params
   const selectedQuotes = useMemo(() => {
@@ -302,13 +304,43 @@ export function EmailComposePage() {
     })
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     setSending(true)
-    // Simulate send — in production this would call a backend API
-    setTimeout(() => {
+    setSendError(null)
+
+    try {
+      const token = await getToken()
+      const apiBase = import.meta.env.VITE_CQ_QUOTES_API as string | undefined
+      const url = apiBase
+        ? `${apiBase}/email/send`
+        : "/api/v1/email/send"
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          to: selectedQuotes.map((q) => q.id),
+          subject,
+          html: body,
+        }),
+      })
+
+      const json = await res.json() as { ok: boolean; data?: { sent: number; failed: number }; error?: string }
+
+      if (!json.ok) {
+        setSendError(json.error ?? "Failed to send emails")
+      } else if (json.data) {
+        setSendResult(json.data)
+        setSent(true)
+      }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Network error — please try again")
+    } finally {
       setSending(false)
-      setSent(true)
-    }, 1500)
+    }
   }
 
   if (!isLoaded || !isSignedIn) {
@@ -319,18 +351,31 @@ export function EmailComposePage() {
     )
   }
 
-  if (sent) {
+  if (sent && sendResult) {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="rounded-lg border p-8 text-center space-y-3">
-          <div className="mx-auto h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
-            <Send className="h-5 w-5 text-green-700" />
+          <div className={cn(
+            "mx-auto h-12 w-12 rounded-full flex items-center justify-center",
+            sendResult.failed === 0 ? "bg-green-100" : "bg-yellow-100"
+          )}>
+            <Send className={cn(
+              "h-5 w-5",
+              sendResult.failed === 0 ? "text-green-700" : "text-yellow-700"
+            )} />
           </div>
-          <h2 className="text-lg font-semibold">Emails sent</h2>
+          <h2 className="text-lg font-semibold">
+            {sendResult.failed === 0 ? "Emails sent" : "Emails partially sent"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Successfully sent to {selectedQuotes.length} recipient
-            {selectedQuotes.length !== 1 ? "s" : ""}.
+            {sendResult.sent} of {sendResult.sent + sendResult.failed} email
+            {sendResult.sent + sendResult.failed !== 1 ? "s" : ""} sent successfully.
           </p>
+          {sendResult.failed > 0 && (
+            <p className="text-sm text-destructive">
+              {sendResult.failed} email{sendResult.failed !== 1 ? "s" : ""} failed to send.
+            </p>
+          )}
           <Link
             to="/admin/quotes"
             className="inline-block mt-4 text-sm text-primary hover:underline"
@@ -428,6 +473,13 @@ export function EmailComposePage() {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none font-mono leading-relaxed"
             />
           </div>
+
+          {/* Error display */}
+          {sendError && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {sendError}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-3">
