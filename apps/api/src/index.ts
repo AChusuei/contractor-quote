@@ -258,6 +258,53 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
 })
 
 // ---------------------------------------------------------------------------
+// Public draft read (authenticated via publicToken, no Clerk auth needed)
+// ---------------------------------------------------------------------------
+app.get(
+  "/quotes/:quoteId/draft",
+  rateLimit({ limit: 60, windowSeconds: 3600, keyPrefix: "draft-read" }),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const publicToken = c.req.query("publicToken")
+
+    if (!publicToken) {
+      return apiError(c, "VALIDATION_ERROR", "publicToken query parameter is required")
+    }
+
+    const quote = await c.env.DB.prepare(
+      `SELECT q.*, c.name, c.email, c.phone, c.cell, c.how_did_you_find_us, c.referred_by_contractor
+       FROM quotes q
+       JOIN customers c ON q.customer_id = c.id
+       WHERE q.id = ? AND q.public_token = ?`
+    )
+      .bind(quoteId, publicToken)
+      .first()
+
+    if (!quote) {
+      return apiError(c, "NOT_FOUND", "Quote not found")
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        id: quote.id,
+        name: quote.name,
+        email: quote.email,
+        phone: quote.phone,
+        cell: quote.cell,
+        jobSiteAddress: quote.job_site_address,
+        propertyType: quote.property_type,
+        budgetRange: quote.budget_range,
+        howDidYouFindUs: quote.how_did_you_find_us,
+        referredByContractor: quote.referred_by_contractor,
+        scope: quote.scope ? JSON.parse(quote.scope as string) : null,
+        status: quote.status,
+      },
+    })
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Public draft update (authenticated via publicToken, no Clerk auth needed)
 // ---------------------------------------------------------------------------
 app.patch(
