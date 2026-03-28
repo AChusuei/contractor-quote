@@ -149,10 +149,10 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
 
   // --- Verify contractorId exists in D1 ---
   const contractor = await c.env.DB.prepare(
-    "SELECT id, name, email FROM contractors WHERE id = ?"
+    "SELECT id, name FROM contractors WHERE id = ?"
   )
     .bind(data.contractorId)
-    .first<{ id: string; name: string; email: string | null }>()
+    .first<{ id: string; name: string }>()
 
   if (!contractor) {
     return c.json(
@@ -247,23 +247,8 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
     .run()
 
   // --- Send email notification to contractor (only for non-draft submissions) ---
-  if (contractor.email && quoteStatus !== "draft") {
-    c.executionCtx.waitUntil(
-      sendNewQuoteNotification(
-        {
-          contractorEmail: contractor.email,
-          contractorName: contractor.name,
-          customerName: data.name,
-          jobSiteAddress: data.jobSiteAddress,
-          budgetRange: data.budgetRange,
-          quoteId,
-        },
-        c.env.SENDGRID_API_KEY
-      ).catch((err) => {
-        console.error("Failed to send quote notification email:", err)
-      })
-    )
-  }
+  // TODO: contractor email not yet on contractors table — will be added via cq-bfx (contractor profile settings)
+  // if (contractorEmail && quoteStatus !== "draft") { ... }
 
   const res: ApiOk<{ id: string; publicToken: string }> = {
     ok: true,
