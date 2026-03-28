@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "test": "vitest run && npm test -w @contractor-quote/api",
     "test:e2e": "playwright test",
+    "test:integration": "bash scripts/integration-test.sh",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
