@@ -10,29 +10,37 @@ CREATE TABLE contractors (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Quotes
-CREATE TABLE quotes (
+-- Customers (one per unique email per contractor)
+CREATE TABLE customers (
   id TEXT PRIMARY KEY,
   contractor_id TEXT NOT NULL REFERENCES contractors(id),
-  schema_version INTEGER NOT NULL DEFAULT 1,
-  -- Filterable contact fields
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   phone TEXT NOT NULL,
   cell TEXT,
+  how_did_you_find_us TEXT,
+  referred_by_contractor TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(contractor_id, email)
+);
+
+-- Quotes
+CREATE TABLE quotes (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL REFERENCES customers(id),
+  contractor_id TEXT NOT NULL REFERENCES contractors(id),
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  -- Job site (may differ from customer address)
   job_site_address TEXT NOT NULL,
   property_type TEXT NOT NULL,
   budget_range TEXT NOT NULL,
-  how_did_you_find_us TEXT,
-  referred_by_contractor TEXT,
   -- Scope blob (all project scope fields as JSON)
   scope JSON,
   -- Quote flow
-  quote_path TEXT, -- 'site_visit' | 'estimate_requested'
   photo_session_id TEXT,
-  public_token TEXT UNIQUE, -- 256-bit crypto-random for magic link
+  public_token TEXT UNIQUE, -- 256-bit crypto-random for magic link (per quote)
   -- Admin fields
-  status TEXT NOT NULL DEFAULT 'lead',
+  status TEXT NOT NULL DEFAULT 'draft', -- draft | lead | reviewing | site_visit_requested | site_visit_scheduled | site_visit_completed | estimate_requested | estimate_sent | accepted | rejected | closed
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -75,6 +83,9 @@ CREATE TABLE appointments (
 );
 
 -- Indexes for common queries
+CREATE INDEX idx_customers_contractor ON customers(contractor_id);
+CREATE INDEX idx_customers_email ON customers(contractor_id, email);
+CREATE INDEX idx_quotes_customer ON quotes(customer_id);
 CREATE INDEX idx_quotes_contractor ON quotes(contractor_id);
 CREATE INDEX idx_quotes_status ON quotes(status);
 CREATE INDEX idx_quotes_budget ON quotes(budget_range);
