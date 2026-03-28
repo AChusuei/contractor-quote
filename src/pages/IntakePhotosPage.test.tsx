@@ -11,7 +11,9 @@ vi.mock("react-router-dom", async (importOriginal) => {
 })
 
 vi.mock("@/lib/supabase", () => ({
-  uploadQuotePhoto: vi.fn().mockResolvedValue("test/photo.jpg"),
+  uploadQuotePhoto: vi.fn().mockResolvedValue("test-photo-id"),
+  getQuotePhotos: vi.fn().mockResolvedValue([]),
+  deleteQuotePhoto: vi.fn().mockResolvedValue(undefined),
 }))
 
 function renderPhotosPage() {

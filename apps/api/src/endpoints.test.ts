@@ -620,32 +620,95 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 })
 
 // ---------------------------------------------------------------------------
-// POST /api/v1/quotes/:quoteId/photos — Photo upload (stub)
+// POST /api/v1/quotes/:quoteId/photos — Photo upload
 // ---------------------------------------------------------------------------
 
 describe("POST /api/v1/quotes/:quoteId/photos", () => {
-  it("returns 404 when quote does not exist", async () => {
-    const res = await SELF.fetch(apiUrl("/quotes/nonexistent/photos"), {
+  const TINY_JPG = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0])
+
+  function uploadRequest(quoteId: string, opts: { publicToken?: string; headers?: Record<string, string>; file?: File } = {}) {
+    const formData = new FormData()
+    formData.append("file", opts.file ?? new File([TINY_JPG], "test.jpg", { type: "image/jpeg" }))
+    const tokenParam = opts.publicToken ? `?publicToken=${encodeURIComponent(opts.publicToken)}` : ""
+    return SELF.fetch(apiUrl(`/quotes/${quoteId}/photos${tokenParam}`), {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+      headers: opts.headers ?? {},
+      body: formData,
     })
+  }
+
+  it("returns 404 when quote does not exist", async () => {
+    const res = await uploadRequest("nonexistent", { publicToken: "badtoken" })
     expect(res.status).toBe(404)
   })
 
-  it("returns 500 (not yet implemented) for existing quote", async () => {
+  it("uploads a photo with publicToken auth and returns 201", async () => {
     const contractor = await seedContractor()
     const quote = await seedQuote(contractor.id)
 
-    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos`), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+    const res = await uploadRequest(quote.id, { publicToken: quote.publicToken })
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { ok: boolean; data: { id: string; filename: string } }
+    expect(body.ok).toBe(true)
+    expect(body.data.id).toBeTruthy()
+    expect(body.data.filename).toBe("test.jpg")
+
+    // Verify D1 record
+    const row = await env.DB.prepare("SELECT id, quote_id, r2_key FROM photos WHERE id = ?")
+      .bind(body.data.id)
+      .first()
+    expect(row).toBeTruthy()
+    expect(row!.quote_id).toBe(quote.id)
+  })
+
+  it("uploads a photo with Clerk auth and returns 201", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+
+    const res = await uploadRequest(quote.id, { headers: authHeaders(contractor.id) })
+    expect(res.status).toBe(201)
+  })
+
+  it("rejects invalid content type", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+
+    const res = await uploadRequest(quote.id, {
+      publicToken: quote.publicToken,
+      file: new File(["data"], "doc.pdf", { type: "application/pdf" }),
     })
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(422)
+  })
+
+  it("rejects when at 10-photo limit", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+
+    // Seed 10 photos
+    for (let i = 0; i < 10; i++) {
+      await seedPhoto(quote.id, contractor.id)
+    }
+
+    const res = await uploadRequest(quote.id, { publicToken: quote.publicToken })
+    expect(res.status).toBe(422)
     const body = (await res.json()) as { ok: boolean; error: string }
-    expect(body.ok).toBe(false)
-    expect(body.error).toContain("not yet implemented")
+    expect(body.error).toContain("Maximum of 10")
+  })
+
+  it("logs activity on photo upload", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+
+    const res = await uploadRequest(quote.id, { publicToken: quote.publicToken })
+    const body = (await res.json()) as { ok: boolean; data: { id: string } }
+
+    const activity = await env.DB.prepare(
+      "SELECT type, content FROM quote_activity WHERE quote_id = ? AND type = 'photo_added'"
+    )
+      .bind(quote.id)
+      .first()
+    expect(activity).toBeTruthy()
+    expect(activity!.content).toBe(body.data.id)
   })
 
   it("rate limits after 20 photo uploads from same IP", async () => {
@@ -656,12 +719,60 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
     const windowId = Math.floor(Date.now() / (3600 * 1000))
     await env.TOKENS.put(`rl:photo-upload:${ip}:${windowId}`, "20")
 
-    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos`), {
+    const formData = new FormData()
+    formData.append("file", new File([TINY_JPG], "test.jpg", { type: "image/jpeg" }))
+    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`), {
       method: "POST",
-      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
-      body: "{}",
+      headers: { "cf-connecting-ip": ip },
+      body: formData,
     })
     expect(res.status).toBe(429)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/quotes/:quoteId/photos — Photo list
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/quotes/:quoteId/photos", () => {
+  it("returns 404 with invalid publicToken", async () => {
+    const res = await SELF.fetch(apiUrl("/quotes/nonexistent/photos?publicToken=bad"))
+    expect(res.status).toBe(404)
+  })
+
+  it("lists photos for a quote via publicToken", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+    const photo = await seedPhoto(quote.id, contractor.id)
+
+    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; data: { photos: { id: string }[] } }
+    expect(body.ok).toBe(true)
+    expect(body.data.photos).toHaveLength(1)
+    expect(body.data.photos[0].id).toBe(photo.id)
+  })
+
+  it("lists photos for a quote via Clerk auth", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+    await seedPhoto(quote.id, contractor.id)
+
+    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos`), {
+      headers: authHeaders(contractor.id),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; data: { photos: { id: string }[] } }
+    expect(body.data.photos).toHaveLength(1)
+  })
+
+  it("returns empty array when no photos", async () => {
+    const contractor = await seedContractor()
+    const quote = await seedQuote(contractor.id)
+
+    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`))
+    const body = (await res.json()) as { ok: boolean; data: { photos: unknown[] } }
+    expect(body.data.photos).toHaveLength(0)
   })
 })
 

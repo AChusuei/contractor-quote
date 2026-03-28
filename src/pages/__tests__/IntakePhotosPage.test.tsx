@@ -13,7 +13,9 @@ vi.mock("react-router-dom", async (importOriginal) => {
 })
 
 vi.mock("@/lib/supabase", () => ({
-  uploadQuotePhoto: vi.fn().mockResolvedValue("session/file.jpg"),
+  uploadQuotePhoto: vi.fn().mockResolvedValue("test-photo-id"),
+  getQuotePhotos: vi.fn().mockResolvedValue([]),
+  deleteQuotePhoto: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Capture the onChange prop so tests can fire file drops

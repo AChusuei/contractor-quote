@@ -1,12 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { FileUpload, type UploadFile } from "components"
 import { Button } from "components"
-import { uploadQuotePhoto, getQuotePhotos } from "@/lib/supabase"
-import { attachPhotoSession } from "@/lib/quoteStore"
+import { uploadQuotePhoto, getQuotePhotos, deleteQuotePhoto, type PhotoMeta } from "@/lib/supabase"
 import { useQuoteContext } from "@/lib/QuoteContext"
-// API photo endpoints not yet implemented — keeping IndexedDB for now
-// import { apiGet, isNetworkError } from "@/lib/api"
 
 const MAX_PHOTOS = 10
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
@@ -16,51 +13,84 @@ const ACCEPT = {
   "image/heic": [".heic"],
 }
 
-/** Stable session key used as the Supabase folder for this quote draft */
-function getQuoteSessionId(): string {
-  const key = "cq_quote_session_id"
-  let id = sessionStorage.getItem(key)
-  if (!id) {
-    id = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    sessionStorage.setItem(key, id)
+/** Read quoteId and publicToken from sessionStorage (set during intake step 1). */
+function getIntakeAuth(): { quoteId: string | null; publicToken: string | null } {
+  return {
+    quoteId: sessionStorage.getItem("cq_active_quote_id"),
+    publicToken: sessionStorage.getItem("cq_public_token"),
   }
-  return id
 }
 
 export function IntakePhotosPage() {
   const navigate = useNavigate()
   const ctx = useQuoteContext()
   const readOnly = ctx?.readOnly ?? false
-  const photoSessionId = ctx?.quote?.photoSessionId
+
+  // For intake flow: use sessionStorage quoteId + publicToken
+  // For admin view: use ctx.quote.id (Clerk auth handles the rest)
+  const intakeAuth = !readOnly ? getIntakeAuth() : null
+  const quoteId = readOnly ? ctx?.quote?.id : intakeAuth?.quoteId
+  const publicToken = intakeAuth?.publicToken ?? undefined
 
   const [files, setFiles] = useState<UploadFile[]>([])
-  const [photos, setPhotos] = useState<{ key: string; url: string }[]>([])
-  const quoteSessionId = useRef(readOnly ? "" : getQuoteSessionId()).current
-  if (!readOnly) attachPhotoSession(quoteSessionId)
+  const [photos, setPhotos] = useState<PhotoMeta[]>([])
+  const [loading, setLoading] = useState(false)
 
+  // Load existing photos on mount
   useEffect(() => {
-    if (!readOnly || !photoSessionId) return
-    let revoke: (() => void) | undefined
-    getQuotePhotos(photoSessionId).then((results) => {
-      const items = results.map(({ key, file }) => ({
-        key,
-        url: URL.createObjectURL(file),
-      }))
-      setPhotos(items)
-      revoke = () => items.forEach(({ url }) => URL.revokeObjectURL(url))
-    })
-    return () => revoke?.()
-  }, [readOnly, photoSessionId])
+    if (!quoteId) return
+    let cancelled = false
+    setLoading(true)
+
+    getQuotePhotos(quoteId, { publicToken })
+      .then((results) => {
+        if (!cancelled) setPhotos(results)
+      })
+      .catch(() => {
+        // Silently fail — photos are optional
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [quoteId, publicToken])
 
   const isUploading = files.some((f) => f.status === "uploading")
   const hasError = files.some((f) => f.status === "error")
-  const atLimit = files.filter((f) => f.status !== "error").length >= MAX_PHOTOS
+  const totalPhotos = photos.length + files.filter((f) => f.status !== "error").length
+  const atLimit = totalPhotos >= MAX_PHOTOS
 
   const handleUpload = useCallback(
     async (file: File, onProgress: (pct: number) => void) => {
-      await uploadQuotePhoto(quoteSessionId, file, onProgress)
+      if (!quoteId) return
+      const photoId = await uploadQuotePhoto(quoteId, file, onProgress, { publicToken })
+      // Add to photos list so it shows immediately
+      setPhotos((prev) => [
+        ...prev,
+        {
+          id: photoId,
+          filename: file.name,
+          contentType: file.type,
+          size: file.size,
+          url: `/api/v1/quotes/${encodeURIComponent(quoteId)}/photos/${encodeURIComponent(photoId)}/file${publicToken ? `?publicToken=${encodeURIComponent(publicToken)}` : ""}`,
+        },
+      ])
     },
-    [quoteSessionId]
+    [quoteId, publicToken]
+  )
+
+  const handleDelete = useCallback(
+    async (photoId: string) => {
+      if (!quoteId) return
+      try {
+        await deleteQuotePhoto(quoteId, photoId, { publicToken })
+        setPhotos((prev) => prev.filter((p) => p.id !== photoId))
+      } catch {
+        // Best-effort — photo will still show but user can retry
+      }
+    },
+    [quoteId, publicToken]
   )
 
   const handleContinue = () => {
@@ -77,15 +107,17 @@ export function IntakePhotosPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold">Photos</h1>
         </div>
-        {photos.length === 0 ? (
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading photos…</p>
+        ) : photos.length === 0 ? (
           <p className="text-sm text-muted-foreground">No photos uploaded.</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {photos.map(({ key, url }) => (
-              <a key={key} href={url} target="_blank" rel="noopener noreferrer">
+            {photos.map((photo) => (
+              <a key={photo.id} href={photo.url} target="_blank" rel="noopener noreferrer">
                 <img
-                  src={url}
-                  alt="Quote photo"
+                  src={photo.url}
+                  alt={photo.filename}
                   className="rounded-md border aspect-square object-cover w-full hover:opacity-90 transition-opacity"
                 />
               </a>
@@ -108,6 +140,29 @@ export function IntakePhotosPage() {
       </div>
 
       <div className="space-y-4">
+        {/* Previously uploaded photos */}
+        {photos.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {photos.map((photo) => (
+              <div key={photo.id} className="relative group">
+                <img
+                  src={photo.url}
+                  alt={photo.filename}
+                  className="rounded-md border aspect-square object-cover w-full"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleDelete(photo.id)}
+                  className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label={`Remove ${photo.filename}`}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <FileUpload
           multiple
           accept={ACCEPT}
@@ -137,7 +192,7 @@ export function IntakePhotosPage() {
           >
             {isUploading ? "Uploading…" : "Continue"}
           </Button>
-          {files.length === 0 && (
+          {files.length === 0 && photos.length === 0 && (
             <Button
               variant="ghost"
               onClick={handleSkip}

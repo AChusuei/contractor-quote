@@ -667,27 +667,242 @@ app.patch(
 )
 
 // ---------------------------------------------------------------------------
-// Photo upload
+// Photo upload (publicToken auth for intake flow)
 // ---------------------------------------------------------------------------
+const MAX_PHOTO_BYTES = 20 * 1024 * 1024 // 20MB
+const ALLOWED_PHOTO_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/heic": "heic",
+}
+
 app.post(
   "/quotes/:quoteId/photos",
   rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "photo-upload" }),
   async (c) => {
     const quoteId = c.req.param("quoteId")
 
-    // Verify the quote exists
-    const quote = await c.env.DB.prepare(
-      "SELECT id FROM quotes WHERE id = ?"
-    )
-      .bind(quoteId)
-      .first<{ id: string }>()
+    // --- Auth: publicToken (intake) or Clerk (admin) ---
+    const publicToken = c.req.query("publicToken")
+    let quote: { id: string; contractor_id: string; public_token: string } | null
 
-    if (!quote) {
-      return apiError(c, "NOT_FOUND", "Quote not found")
+    if (publicToken) {
+      quote = await c.env.DB.prepare(
+        "SELECT id, contractor_id, public_token FROM quotes WHERE id = ? AND public_token = ?"
+      )
+        .bind(quoteId, publicToken)
+        .first()
+      if (!quote) {
+        return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+    } else {
+      // Fall back to Clerk auth + ownership check
+      const authMw = requireAuth()
+      const ownerMw = requireQuoteOwnership()
+      const authResult = await authMw(c, async () => {})
+      if (authResult) return authResult
+      const ownerResult = await ownerMw(c, async () => {})
+      if (ownerResult) return ownerResult
+
+      quote = await c.env.DB.prepare(
+        "SELECT id, contractor_id, public_token FROM quotes WHERE id = ?"
+      )
+        .bind(quoteId)
+        .first()
+      if (!quote) {
+        return apiError(c, "NOT_FOUND", "Quote not found")
+      }
     }
 
-    // TODO: implement actual photo upload to R2
-    return apiError(c, "INTERNAL_ERROR", "Photo upload not yet implemented")
+    // --- Parse multipart form data ---
+    let formData: FormData
+    try {
+      formData = await c.req.formData()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Request must be multipart form data")
+    }
+
+    const file = formData.get("file")
+    if (!file || !(file instanceof File)) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { file: "A photo file is required" } },
+        422
+      )
+    }
+
+    // --- Validate content type ---
+    const ext = ALLOWED_PHOTO_TYPES[file.type]
+    if (!ext) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { file: "Photo must be a JPEG, PNG, or HEIC image" } },
+        422
+      )
+    }
+
+    // --- Validate file size ---
+    if (file.size > MAX_PHOTO_BYTES) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { file: "Photo must be under 20MB" } },
+        422
+      )
+    }
+
+    // --- Check photo count limit (max 10 per quote) ---
+    const countRow = await c.env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM photos WHERE quote_id = ?"
+    )
+      .bind(quoteId)
+      .first<{ cnt: number }>()
+    if (countRow && countRow.cnt >= 10) {
+      return c.json(
+        { ok: false, error: "Maximum of 10 photos per quote reached", code: "VALIDATION_ERROR" as const },
+        422
+      )
+    }
+
+    // --- Upload to R2 ---
+    const photoId = crypto.randomUUID()
+    const r2Key = `${quote.contractor_id}/${quoteId}/${photoId}.${ext}`
+    const fileBuffer = await file.arrayBuffer()
+    await c.env.STORAGE.put(r2Key, fileBuffer, {
+      httpMetadata: { contentType: file.type },
+    })
+
+    // --- Insert into D1 ---
+    await c.env.DB.prepare(
+      `INSERT INTO photos (id, quote_id, contractor_id, filename, content_type, size, r2_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(photoId, quoteId, quote.contractor_id, file.name, file.type, file.size, r2Key)
+      .run()
+
+    // --- Log activity ---
+    await c.env.DB.prepare(
+      `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
+       VALUES (?, ?, 'photo_added', ?)`
+    )
+      .bind(quoteId, quote.contractor_id, photoId)
+      .run()
+
+    return c.json({
+      ok: true,
+      data: {
+        id: photoId,
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      },
+    }, 201)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// List photos for a quote (publicToken or Clerk auth)
+// ---------------------------------------------------------------------------
+app.get(
+  "/quotes/:quoteId/photos",
+  rateLimit({ limit: 60, windowSeconds: 3600, keyPrefix: "photo-list" }),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+
+    // --- Auth: publicToken (intake) or Clerk (admin) ---
+    const publicToken = c.req.query("publicToken")
+
+    if (publicToken) {
+      const quote = await c.env.DB.prepare(
+        "SELECT id FROM quotes WHERE id = ? AND public_token = ?"
+      )
+        .bind(quoteId, publicToken)
+        .first()
+      if (!quote) {
+        return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+    } else {
+      const authMw = requireAuth()
+      const ownerMw = requireQuoteOwnership()
+      const authResult = await authMw(c, async () => {})
+      if (authResult) return authResult
+      const ownerResult = await ownerMw(c, async () => {})
+      if (ownerResult) return ownerResult
+    }
+
+    // --- Fetch photos from D1 ---
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, filename, content_type, size, r2_key, created_at
+       FROM photos WHERE quote_id = ? ORDER BY created_at ASC`
+    )
+      .bind(quoteId)
+      .all<{ id: string; filename: string; content_type: string; size: number; r2_key: string; created_at: string }>()
+
+    // --- Generate presigned URLs (R2 public URL via key) ---
+    const photos = (results ?? []).map((row) => ({
+      id: row.id,
+      filename: row.filename,
+      contentType: row.content_type,
+      size: row.size,
+      url: `/api/v1/quotes/${quoteId}/photos/${row.id}/file${publicToken ? `?publicToken=${encodeURIComponent(publicToken)}` : ""}`,
+      createdAt: row.created_at,
+    }))
+
+    return c.json({ ok: true, data: { photos } })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Serve photo file (publicToken or Clerk auth)
+// ---------------------------------------------------------------------------
+app.get(
+  "/quotes/:quoteId/photos/:photoId/file",
+  rateLimit({ limit: 120, windowSeconds: 3600, keyPrefix: "photo-file" }),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const photoId = c.req.param("photoId")
+
+    // --- Auth: publicToken (intake) or Clerk (admin) ---
+    const publicToken = c.req.query("publicToken")
+
+    if (publicToken) {
+      const quote = await c.env.DB.prepare(
+        "SELECT id FROM quotes WHERE id = ? AND public_token = ?"
+      )
+        .bind(quoteId, publicToken)
+        .first()
+      if (!quote) {
+        return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+    } else {
+      const authMw = requireAuth()
+      const ownerMw = requireQuoteOwnership()
+      const authResult = await authMw(c, async () => {})
+      if (authResult) return authResult
+      const ownerResult = await ownerMw(c, async () => {})
+      if (ownerResult) return ownerResult
+    }
+
+    // --- Fetch photo record ---
+    const photo = await c.env.DB.prepare(
+      "SELECT r2_key, content_type, filename FROM photos WHERE id = ? AND quote_id = ?"
+    )
+      .bind(photoId, quoteId)
+      .first<{ r2_key: string; content_type: string; filename: string }>()
+
+    if (!photo) {
+      return apiError(c, "NOT_FOUND", "Photo not found")
+    }
+
+    // --- Stream from R2 ---
+    const object = await c.env.STORAGE.get(photo.r2_key)
+    if (!object) {
+      return apiError(c, "NOT_FOUND", "Photo file not found in storage")
+    }
+
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": photo.content_type,
+        "Content-Disposition": `inline; filename="${photo.filename}"`,
+        "Cache-Control": "private, max-age=900",
+      },
+    })
   }
 )
 
@@ -792,16 +1007,37 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
-// Delete a photo
+// Delete a photo (publicToken or Clerk auth)
 // ---------------------------------------------------------------------------
 app.delete(
   "/quotes/:quoteId/photos/:photoId",
-  requireAuth(),
-  requireQuoteOwnership(),
   async (c) => {
     const quoteId = c.req.param("quoteId")
     const photoId = c.req.param("photoId")
-    const contractorId = c.get("contractorId") as string
+
+    // --- Auth: publicToken (intake) or Clerk (admin) ---
+    const publicToken = c.req.query("publicToken")
+    let contractorId: string
+
+    if (publicToken) {
+      const quote = await c.env.DB.prepare(
+        "SELECT id, contractor_id FROM quotes WHERE id = ? AND public_token = ?"
+      )
+        .bind(quoteId, publicToken)
+        .first<{ id: string; contractor_id: string }>()
+      if (!quote) {
+        return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      contractorId = quote.contractor_id
+    } else {
+      const authMw = requireAuth()
+      const ownerMw = requireQuoteOwnership()
+      const authResult = await authMw(c, async () => {})
+      if (authResult) return authResult
+      const ownerResult = await ownerMw(c, async () => {})
+      if (ownerResult) return ownerResult
+      contractorId = c.get("contractorId") as string
+    }
 
     // Fetch the photo record, enforcing tenant isolation via quote_id
     const photo = await c.env.DB.prepare(
