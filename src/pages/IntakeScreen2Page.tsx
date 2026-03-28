@@ -281,8 +281,12 @@ export function IntakeScreen2Page() {
 
   const onSubmit = async (data: IntakeScreen2Data) => {
     const quoteId = sessionStorage.getItem("cq_active_quote_id")
-    if (quoteId) {
-      const res = await apiPatch(`/quotes/${encodeURIComponent(quoteId)}`, { scope: data })
+    const publicToken = sessionStorage.getItem("cq_public_token")
+    if (quoteId && publicToken) {
+      const res = await apiPatch(`/quotes/${encodeURIComponent(quoteId)}/draft`, {
+        publicToken,
+        scope: data,
+      })
       if (isNetworkError(res)) {
         console.warn("API unreachable — falling back to localStorage for scope")
         attachScope(data)
@@ -297,7 +301,7 @@ export function IntakeScreen2Page() {
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
         {!readOnly && (
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 3</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 4</p>
         )}
         <h1 className="text-2xl font-semibold">Project Scope</h1>
         {!readOnly && (

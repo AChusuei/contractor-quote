@@ -23,6 +23,7 @@ import { apiGet, apiPatch, apiPost, isNetworkError, setAuthProvider } from "@/li
 // ---------------------------------------------------------------------------
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
+  draft: "Draft",
   lead: "Lead",
   measure_scheduled: "Measure scheduled",
   quoted: "Quoted",
@@ -31,6 +32,7 @@ const STATUS_LABELS: Record<QuoteStatus, string> = {
 }
 
 const STATUS_COLORS: Record<QuoteStatus, string> = {
+  draft: "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700",
   lead: "rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800",
   measure_scheduled: "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800",
   quoted: "rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800",
@@ -38,7 +40,7 @@ const STATUS_COLORS: Record<QuoteStatus, string> = {
   rejected: "rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800",
 }
 
-const ALL_STATUSES: QuoteStatus[] = ["lead", "measure_scheduled", "quoted", "accepted", "rejected"]
+const ALL_STATUSES: QuoteStatus[] = ["draft", "lead", "measure_scheduled", "quoted", "accepted", "rejected"]
 
 /** Map API quote response to the frontend Quote type */
 function mapApiQuote(raw: Record<string, unknown>): Quote {

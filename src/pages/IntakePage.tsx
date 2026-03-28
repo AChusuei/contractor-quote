@@ -140,10 +140,11 @@ export function IntakePage() {
     try {
       const turnstileToken = TURNSTILE_SITE_KEY ? getTurnstileToken() : undefined
 
-      // Try API first
+      // Try API first — create as draft
       const res = await apiPost<{ id: string; publicToken: string }>("/quotes", {
         schemaVersion: 1,
         contractorId: "default",
+        status: "draft",
         name: data.name,
         email: data.email,
         phone: data.phone,
@@ -157,8 +158,9 @@ export function IntakePage() {
       })
 
       if (res.ok) {
-        // Store the quote ID for subsequent steps
+        // Store the quote ID and public token for subsequent steps
         sessionStorage.setItem("cq_active_quote_id", res.data.id)
+        sessionStorage.setItem("cq_public_token", res.data.publicToken)
       } else if (isNetworkError(res)) {
         // Fallback to localStorage when API is unreachable
         console.warn("API unreachable — falling back to localStorage")
@@ -190,7 +192,7 @@ export function IntakePage() {
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
         {!readOnly && (
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 3</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 4</p>
         )}
         <h1 className="text-2xl font-semibold">Request a Quote</h1>
         {!readOnly && (

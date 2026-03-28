@@ -93,6 +93,7 @@ export const quoteSubmissionSchema = z.object({
   referredByContractor: sanitizedMax(200, "Referral name is too long").optional(),
   quotePath: z.enum(["site_visit", "estimate_requested"]).optional(),
   photoSessionId: sanitizedMax(200, "Photo session ID is too long").optional(),
+  status: z.enum(["draft", "lead"]).optional(),
 })
 
 export type QuoteSubmission = z.infer<typeof quoteSubmissionSchema>
@@ -162,6 +163,7 @@ export type QuoteUpdate = z.infer<typeof quoteUpdateSchema>
 // ---------------------------------------------------------------------------
 
 export const QUOTE_STATUSES = [
+  "draft",
   "lead",
   "reviewing",
   "site_visit_requested",
@@ -181,6 +183,7 @@ export type QuoteStatus = (typeof QUOTE_STATUSES)[number]
  * Any transition not listed here is rejected.
  */
 export const STATUS_TRANSITIONS: Record<QuoteStatus, readonly QuoteStatus[]> = {
+  draft: ["lead", "closed"],
   lead: ["reviewing", "closed"],
   reviewing: ["site_visit_requested", "estimate_requested", "closed"],
   site_visit_requested: ["site_visit_scheduled", "closed"],
@@ -192,6 +195,42 @@ export const STATUS_TRANSITIONS: Record<QuoteStatus, readonly QuoteStatus[]> = {
   rejected: ["reviewing", "closed"],
   closed: ["reviewing"],
 }
+
+// ---------------------------------------------------------------------------
+// Draft update schema (public — authenticated via publicToken)
+// ---------------------------------------------------------------------------
+
+export const draftUpdateSchema = z.object({
+  publicToken: z.string({ required_error: "Public token is required" }).min(1, "Public token is required"),
+
+  scope: z
+    .record(z.string(), z.unknown())
+    .refine(
+      (val) => JSON.stringify(val).length <= 10 * 1024,
+      "Scope data must be 10KB or smaller"
+    )
+    .optional(),
+
+  photoSessionId: sanitizedMax(200, "Photo session ID is too long").optional(),
+
+  status: z.enum(["lead"], {
+    error: "Drafts can only be submitted (status set to lead)",
+  }).optional(),
+
+  name: sanitizedMinMax(1, "Name is required", 200, "Name must be 200 characters or fewer").optional(),
+  email: z.string().transform(stripHtml).pipe(z.string().email("Enter a valid email address")).optional(),
+  phone: z.string().transform(stripHtml).pipe(
+    z.string().refine((v) => v.replace(/\D/g, "").length >= 10, "Enter a valid phone number (at least 10 digits)")
+  ).optional(),
+  cell: sanitizedMax(50, "Cell number is too long").optional(),
+  jobSiteAddress: sanitizedMinMax(1, "Job site address is required", 500, "Job site address must be 500 characters or fewer").optional(),
+  propertyType: z.enum(["house", "apt", "building", "townhouse"]).optional(),
+  budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"]).optional(),
+  howDidYouFindUs: sanitizedMax(500, "Response is too long").optional(),
+  referredByContractor: sanitizedMax(200, "Referral name is too long").optional(),
+})
+
+export type DraftUpdate = z.infer<typeof draftUpdateSchema>
 
 // ---------------------------------------------------------------------------
 // Activity types
