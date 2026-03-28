@@ -169,33 +169,69 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
 
-  // --- Insert into D1 ---
+  // --- Upsert customer ---
   const quoteStatus = data.status ?? "draft"
+  const customerId = crypto.randomUUID()
 
+  // Find existing customer by email + contractor, or create new
+  const existingCustomer = await c.env.DB.prepare(
+    "SELECT id FROM customers WHERE contractor_id = ? AND email = ?"
+  )
+    .bind(data.contractorId, data.email)
+    .first<{ id: string }>()
+
+  const actualCustomerId = existingCustomer?.id ?? customerId
+
+  if (!existingCustomer) {
+    await c.env.DB.prepare(
+      `INSERT INTO customers (id, contractor_id, name, email, phone, cell, how_did_you_find_us, referred_by_contractor)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        customerId,
+        data.contractorId,
+        data.name,
+        data.email,
+        data.phone,
+        data.cell ?? null,
+        data.howDidYouFindUs ?? null,
+        data.referredByContractor ?? null
+      )
+      .run()
+  } else {
+    // Update existing customer with latest info
+    await c.env.DB.prepare(
+      `UPDATE customers SET name = ?, phone = ?, cell = ?, how_did_you_find_us = ?, referred_by_contractor = ?
+       WHERE id = ?`
+    )
+      .bind(
+        data.name,
+        data.phone,
+        data.cell ?? null,
+        data.howDidYouFindUs ?? null,
+        data.referredByContractor ?? null,
+        existingCustomer.id
+      )
+      .run()
+  }
+
+  // --- Insert quote ---
   await c.env.DB.prepare(
     `INSERT INTO quotes (
-      id, contractor_id, schema_version,
-      name, email, phone, cell,
+      id, customer_id, contractor_id, schema_version,
       job_site_address, property_type, budget_range,
-      how_did_you_find_us, referred_by_contractor,
-      scope, quote_path, photo_session_id, public_token, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      scope, photo_session_id, public_token, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       quoteId,
+      actualCustomerId,
       data.contractorId,
       data.schemaVersion,
-      data.name,
-      data.email,
-      data.phone,
-      data.cell ?? null,
       data.jobSiteAddress,
       data.propertyType,
       data.budgetRange,
-      data.howDidYouFindUs ?? null,
-      data.referredByContractor ?? null,
       data.scope ? JSON.stringify(data.scope) : null,
-      data.quotePath ?? null,
       data.photoSessionId ?? null,
       publicToken,
       quoteStatus
