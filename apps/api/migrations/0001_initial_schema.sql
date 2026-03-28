@@ -1,6 +1,8 @@
 -- Initial schema for contractor quote platform
 -- D1 (SQLite) migration
 
+PRAGMA foreign_keys = ON;
+
 -- Contractors (one row per tenant)
 CREATE TABLE contractors (
   id TEXT PRIMARY KEY,
@@ -12,7 +14,8 @@ CREATE TABLE contractors (
   license_number TEXT,
   logo_url TEXT,
   calendar_url TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Customers (one per unique email per contractor)
@@ -26,10 +29,12 @@ CREATE TABLE customers (
   how_did_you_find_us TEXT,
   referred_by_contractor TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(contractor_id, email)
 );
 
 -- Quotes
+-- NOTE: contractor_id is denormalized from customers for fast tenant isolation checks
 CREATE TABLE quotes (
   id TEXT PRIMARY KEY,
   customer_id TEXT NOT NULL REFERENCES customers(id),
@@ -39,13 +44,16 @@ CREATE TABLE quotes (
   job_site_address TEXT NOT NULL,
   property_type TEXT NOT NULL,
   budget_range TEXT NOT NULL,
-  -- Scope blob (all project scope fields as JSON)
+  -- Scope blob (all project scope fields as JSON, versioned by schema_version)
   scope JSON,
   -- Quote flow
-  public_token TEXT UNIQUE, -- 256-bit crypto-random for magic link (per quote)
-  -- Admin fields
+  public_token TEXT NOT NULL UNIQUE, -- 256-bit crypto-random for magic link (per quote)
+  -- Status lifecycle
   status TEXT NOT NULL DEFAULT 'draft', -- draft | lead | reviewing | site_visit_requested | site_visit_scheduled | site_visit_completed | estimate_requested | estimate_sent | accepted | rejected | closed
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  submitted_at TEXT,                    -- set when draft → lead (customer hits Submit)
+  deleted_at TEXT,                      -- set when anonymized (right-to-delete), null = active
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Staff members (per contractor team)
@@ -58,10 +66,12 @@ CREATE TABLE staff (
   role TEXT NOT NULL DEFAULT 'admin', -- 'owner' | 'admin' | 'estimator' | 'field_tech'
   phone TEXT,
   active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(contractor_id, email)
 );
 
--- Quote activity feed (replaces status_history + contractor_notes)
+-- Quote activity feed (unified timeline: status changes, notes, photo events, edits)
 CREATE TABLE quote_activity (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   quote_id TEXT NOT NULL REFERENCES quotes(id),
@@ -75,6 +85,7 @@ CREATE TABLE quote_activity (
 );
 
 -- Photos (metadata — actual files in R2 or local mock storage)
+-- NOTE: contractor_id denormalized from quotes for fast tenant isolation
 CREATE TABLE photos (
   id TEXT PRIMARY KEY,
   quote_id TEXT NOT NULL REFERENCES quotes(id),
@@ -87,15 +98,21 @@ CREATE TABLE photos (
 );
 
 -- Appointments
+-- NOTE: contractor_id denormalized from quotes for fast tenant isolation
 CREATE TABLE appointments (
   id TEXT PRIMARY KEY,
   quote_id TEXT NOT NULL REFERENCES quotes(id),
   contractor_id TEXT NOT NULL REFERENCES contractors(id),
+  customer_id TEXT NOT NULL REFERENCES customers(id),
+  scheduled_by TEXT REFERENCES staff(id), -- which staff member scheduled it
   slot_date TEXT NOT NULL,
-  slot_period TEXT NOT NULL, -- 'morning' | 'afternoon' | 'evening'
-  status TEXT NOT NULL DEFAULT 'pending',
+  slot_period TEXT NOT NULL CHECK (slot_period IN ('morning', 'afternoon', 'evening')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled')),
   notes TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  cancelled_at TEXT,               -- when cancelled, for audit trail
+  cancelled_by TEXT REFERENCES staff(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Indexes for common queries
@@ -107,6 +124,8 @@ CREATE INDEX idx_quotes_status ON quotes(status);
 CREATE INDEX idx_quotes_budget ON quotes(budget_range);
 CREATE INDEX idx_quotes_token ON quotes(public_token);
 CREATE INDEX idx_quotes_created ON quotes(created_at);
+CREATE INDEX idx_quotes_submitted ON quotes(submitted_at);
+CREATE INDEX idx_quotes_active ON quotes(contractor_id, deleted_at); -- fast filter for non-deleted
 CREATE INDEX idx_staff_contractor ON staff(contractor_id);
 CREATE INDEX idx_activity_quote ON quote_activity(quote_id, created_at);
 CREATE INDEX idx_activity_staff ON quote_activity(staff_id);
@@ -115,6 +134,7 @@ CREATE INDEX idx_photos_contractor ON photos(contractor_id);
 CREATE INDEX idx_appointments_contractor ON appointments(contractor_id);
 CREATE INDEX idx_appointments_date ON appointments(slot_date);
 CREATE INDEX idx_appointments_quote ON appointments(quote_id);
+CREATE INDEX idx_appointments_customer ON appointments(customer_id);
 
 -- Seed: default contractor for dev
 INSERT INTO contractors (id, name, logo_url) VALUES (
