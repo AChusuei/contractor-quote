@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 export type QuoteStatus =
+  | "draft"
   | "lead"
   | "measure_scheduled"
   | "quoted"
@@ -103,8 +104,8 @@ export function createQuote(
     ...lead,
     id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
-    status: "lead",
-    statusHistory: [{ status: "lead", timestamp: new Date().toISOString() }],
+    status: "draft",
+    statusHistory: [{ status: "draft", timestamp: new Date().toISOString() }],
     contractorNotes: "",
   }
   const all = readAll()

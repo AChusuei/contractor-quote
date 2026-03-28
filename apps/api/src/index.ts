@@ -10,6 +10,7 @@ import {
 import {
   quoteSubmissionSchema,
   quoteUpdateSchema,
+  draftUpdateSchema,
   activityCreateSchema,
   customerDeletionSchema,
   emailSendSchema,
@@ -169,6 +170,8 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
     .join("")
 
   // --- Insert into D1 ---
+  const quoteStatus = data.status ?? "draft"
+
   await c.env.DB.prepare(
     `INSERT INTO quotes (
       id, contractor_id, schema_version,
@@ -176,7 +179,7 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
       job_site_address, property_type, budget_range,
       how_did_you_find_us, referred_by_contractor,
       scope, quote_path, photo_session_id, public_token, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead')`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       quoteId,
@@ -194,20 +197,21 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
       data.scope ? JSON.stringify(data.scope) : null,
       data.quotePath ?? null,
       data.photoSessionId ?? null,
-      publicToken
+      publicToken,
+      quoteStatus
     )
     .run()
 
   // --- Log activity ---
   await c.env.DB.prepare(
     `INSERT INTO quote_activity (quote_id, contractor_id, type, new_value)
-     VALUES (?, ?, 'status_change', 'lead')`
+     VALUES (?, ?, 'status_change', ?)`
   )
-    .bind(quoteId, data.contractorId)
+    .bind(quoteId, data.contractorId, quoteStatus)
     .run()
 
-  // --- Send email notification to contractor (fire-and-forget) ---
-  if (contractor.email) {
+  // --- Send email notification to contractor (only for non-draft submissions) ---
+  if (contractor.email && quoteStatus !== "draft") {
     c.executionCtx.waitUntil(
       sendNewQuoteNotification(
         {
@@ -231,6 +235,200 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
   }
   return c.json(res, 201)
 })
+
+// ---------------------------------------------------------------------------
+// Public draft update (authenticated via publicToken, no Clerk auth needed)
+// ---------------------------------------------------------------------------
+app.patch(
+  "/quotes/:quoteId/draft",
+  rateLimit({ limit: 30, windowSeconds: 3600, keyPrefix: "draft-update" }),
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+
+    // --- Payload size gate ---
+    const rawBody = await c.req.text()
+    if (rawBody.length > MAX_PAYLOAD_BYTES) {
+      return c.json(
+        { ok: false, error: "Request payload must be under 100KB", code: "VALIDATION_ERROR" as const },
+        413
+      )
+    }
+
+    let body: unknown
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = draftUpdateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // --- Verify quote exists and is a draft, and publicToken matches ---
+    const quote = await c.env.DB.prepare(
+      "SELECT id, contractor_id, status, public_token FROM quotes WHERE id = ?"
+    )
+      .bind(quoteId)
+      .first<{ id: string; contractor_id: string; status: string; public_token: string }>()
+
+    if (!quote) {
+      return apiError(c, "NOT_FOUND", "Quote not found")
+    }
+
+    if (quote.public_token !== data.publicToken) {
+      return apiError(c, "FORBIDDEN", "Invalid token")
+    }
+
+    if (quote.status !== "draft") {
+      return apiError(c, "VALIDATION_ERROR", "Only draft quotes can be updated via this endpoint")
+    }
+
+    // --- Build dynamic UPDATE ---
+    const fieldMap: Record<string, { column: string; value: unknown }> = {
+      scope: { column: "scope", value: data.scope !== undefined ? JSON.stringify(data.scope) : undefined },
+      photoSessionId: { column: "photo_session_id", value: data.photoSessionId },
+      status: { column: "status", value: data.status },
+      name: { column: "name", value: data.name },
+      email: { column: "email", value: data.email },
+      phone: { column: "phone", value: data.phone },
+      cell: { column: "cell", value: data.cell },
+      jobSiteAddress: { column: "job_site_address", value: data.jobSiteAddress },
+      propertyType: { column: "property_type", value: data.propertyType },
+      budgetRange: { column: "budget_range", value: data.budgetRange },
+      howDidYouFindUs: { column: "how_did_you_find_us", value: data.howDidYouFindUs },
+      referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
+    }
+
+    const setClauses: string[] = []
+    const bindValues: unknown[] = []
+
+    for (const [key, mapping] of Object.entries(fieldMap)) {
+      if (key in data && key !== "publicToken" && mapping.value !== undefined) {
+        setClauses.push(`${mapping.column} = ?`)
+        bindValues.push(mapping.value ?? null)
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return apiError(c, "VALIDATION_ERROR", "No fields to update")
+    }
+
+    bindValues.push(quoteId)
+    await c.env.DB.prepare(
+      `UPDATE quotes SET ${setClauses.join(", ")} WHERE id = ?`
+    )
+      .bind(...bindValues)
+      .run()
+
+    // --- If status changed to 'lead', send notification and log ---
+    if (data.status === "lead") {
+      await c.env.DB.prepare(
+        `INSERT INTO quote_activity (quote_id, contractor_id, type, old_value, new_value)
+         VALUES (?, ?, 'status_change', 'draft', 'lead')`
+      )
+        .bind(quoteId, quote.contractor_id)
+        .run()
+
+      // Fetch contractor for notification email
+      const contractor = await c.env.DB.prepare(
+        "SELECT name, email FROM contractors WHERE id = ?"
+      )
+        .bind(quote.contractor_id)
+        .first<{ name: string; email: string | null }>()
+
+      if (contractor?.email) {
+        // Fetch updated quote for notification details
+        const updatedQuote = await c.env.DB.prepare(
+          "SELECT name, job_site_address, budget_range FROM quotes WHERE id = ?"
+        )
+          .bind(quoteId)
+          .first<{ name: string; job_site_address: string; budget_range: string }>()
+
+        if (updatedQuote) {
+          c.executionCtx.waitUntil(
+            sendNewQuoteNotification(
+              {
+                contractorEmail: contractor.email,
+                contractorName: contractor.name,
+                customerName: updatedQuote.name,
+                jobSiteAddress: updatedQuote.job_site_address,
+                budgetRange: updatedQuote.budget_range,
+                quoteId,
+              },
+              c.env.SENDGRID_API_KEY
+            ).catch((err) => {
+              console.error("Failed to send quote notification email:", err)
+            })
+          )
+        }
+      }
+    }
+
+    return c.json({ ok: true, data: { id: quoteId } })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Get draft quote (public — authenticated via publicToken query param)
+// ---------------------------------------------------------------------------
+app.get(
+  "/quotes/:quoteId/draft",
+  async (c) => {
+    const quoteId = c.req.param("quoteId")
+    const publicToken = c.req.query("publicToken")
+
+    if (!publicToken) {
+      return apiError(c, "VALIDATION_ERROR", "Public token is required")
+    }
+
+    const row = await c.env.DB.prepare(
+      `SELECT id, name, email, phone, cell,
+              job_site_address, property_type, budget_range,
+              how_did_you_find_us, referred_by_contractor,
+              scope, status, public_token
+       FROM quotes WHERE id = ? AND status = 'draft'`
+    )
+      .bind(quoteId)
+      .first()
+
+    if (!row) {
+      return apiError(c, "NOT_FOUND", "Draft quote not found")
+    }
+
+    if (row.public_token !== publicToken) {
+      return apiError(c, "FORBIDDEN", "Invalid token")
+    }
+
+    let scope: unknown = null
+    if (row.scope) {
+      try { scope = JSON.parse(row.scope as string) } catch { scope = null }
+    }
+
+    const quote = {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      cell: row.cell ?? null,
+      jobSiteAddress: row.job_site_address,
+      propertyType: row.property_type,
+      budgetRange: row.budget_range,
+      howDidYouFindUs: row.how_did_you_find_us ?? null,
+      referredByContractor: row.referred_by_contractor ?? null,
+      scope,
+      status: row.status,
+    }
+
+    return c.json({ ok: true, data: quote })
+  }
+)
 
 // ---------------------------------------------------------------------------
 // Get single quote
@@ -448,10 +646,14 @@ app.get(
     const conditions: string[] = ["contractor_id = ?"]
     const bindings: (string | number)[] = [contractorId]
 
+    // Filter out drafts by default unless explicitly included
+    const includeDrafts = c.req.query("include_drafts") === "true"
     const status = c.req.query("status")
     if (status) {
       conditions.push("status = ?")
       bindings.push(status)
+    } else if (!includeDrafts) {
+      conditions.push("status != 'draft'")
     }
 
     const budget = c.req.query("budget")

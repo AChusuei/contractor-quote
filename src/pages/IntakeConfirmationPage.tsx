@@ -1,10 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { Button } from "components"
 
-const CONTRACTOR_PHONE = import.meta.env.VITE_CQ_CONTRACTOR_PHONE as
-  | string
-  | undefined
-
 export function IntakeConfirmationPage() {
   const navigate = useNavigate()
 
@@ -27,9 +23,9 @@ export function IntakeConfirmationPage() {
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-semibold">Thank you!</h1>
+        <h1 className="text-2xl font-semibold">Request Received</h1>
         <p className="text-sm text-muted-foreground mt-2">
-          Your quote request has been received.
+          Your quote request has been submitted successfully.
         </p>
       </div>
 
@@ -37,24 +33,10 @@ export function IntakeConfirmationPage() {
         <h2 className="text-base font-semibold">What happens next</h2>
         <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
           <li>We'll review the details you provided.</li>
-          <li>A contractor will reach out within 24 hours to discuss your project.</li>
-          <li>We'll schedule a convenient time to visit your site and provide an accurate quote.</li>
+          <li>A contractor will reach out to discuss your project and schedule a visit.</li>
+          <li>Check your email for a tracking link to follow the status of your request.</li>
         </ol>
       </div>
-
-      {CONTRACTOR_PHONE && (
-        <div className="rounded-lg border p-6 mb-8">
-          <p className="text-sm text-muted-foreground mb-1">
-            Have questions in the meantime? Give us a call:
-          </p>
-          <a
-            href={`tel:${CONTRACTOR_PHONE.replace(/[^\d+]/g, "")}`}
-            className="text-lg font-semibold text-primary hover:underline"
-          >
-            {CONTRACTOR_PHONE}
-          </a>
-        </div>
-      )}
 
       <Button onClick={() => navigate("/")} className="w-full">
         Return home

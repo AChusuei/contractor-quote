@@ -100,7 +100,7 @@ describe("POST /api/v1/quotes", () => {
       .first()
     expect(activity).toBeTruthy()
     expect(activity!.type).toBe("status_change")
-    expect(activity!.new_value).toBe("lead")
+    expect(activity!.new_value).toBe("draft")
   })
 
   it("accepts optional fields", async () => {
