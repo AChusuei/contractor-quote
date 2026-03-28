@@ -42,7 +42,6 @@ CREATE TABLE quotes (
   -- Scope blob (all project scope fields as JSON)
   scope JSON,
   -- Quote flow
-  photo_session_id TEXT,
   public_token TEXT UNIQUE, -- 256-bit crypto-random for magic link (per quote)
   -- Admin fields
   status TEXT NOT NULL DEFAULT 'draft', -- draft | lead | reviewing | site_visit_requested | site_visit_scheduled | site_visit_completed | estimate_requested | estimate_sent | accepted | rejected | closed
@@ -75,6 +74,18 @@ CREATE TABLE quote_activity (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Photos (metadata — actual files in R2 or local mock storage)
+CREATE TABLE photos (
+  id TEXT PRIMARY KEY,
+  quote_id TEXT NOT NULL REFERENCES quotes(id),
+  contractor_id TEXT NOT NULL REFERENCES contractors(id),
+  storage_key TEXT NOT NULL,        -- R2 key: {contractor_id}/{quote_id}/{id}.{ext}
+  filename TEXT NOT NULL,           -- original filename from upload
+  content_type TEXT NOT NULL,       -- e.g. image/jpeg, image/png, image/heic
+  size INTEGER NOT NULL,            -- file size in bytes
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Appointments
 CREATE TABLE appointments (
   id TEXT PRIMARY KEY,
@@ -99,6 +110,8 @@ CREATE INDEX idx_quotes_created ON quotes(created_at);
 CREATE INDEX idx_staff_contractor ON staff(contractor_id);
 CREATE INDEX idx_activity_quote ON quote_activity(quote_id, created_at);
 CREATE INDEX idx_activity_staff ON quote_activity(staff_id);
+CREATE INDEX idx_photos_quote ON photos(quote_id);
+CREATE INDEX idx_photos_contractor ON photos(contractor_id);
 CREATE INDEX idx_appointments_contractor ON appointments(contractor_id);
 CREATE INDEX idx_appointments_date ON appointments(slot_date);
 CREATE INDEX idx_appointments_quote ON appointments(quote_id);
