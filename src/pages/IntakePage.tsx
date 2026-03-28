@@ -143,7 +143,7 @@ export function IntakePage() {
       // Try API first — create as draft
       const res = await apiPost<{ id: string; publicToken: string }>("/quotes", {
         schemaVersion: 1,
-        contractorId: "default",
+        contractorId: import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001",
         status: "draft",
         name: data.name,
         email: data.email,
