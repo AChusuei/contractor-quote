@@ -5,6 +5,11 @@
 CREATE TABLE contractors (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  email TEXT,
+  phone TEXT,
+  address TEXT,
+  website_url TEXT,
+  license_number TEXT,
   logo_url TEXT,
   calendar_url TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
