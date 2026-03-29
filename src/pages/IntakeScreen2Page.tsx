@@ -99,17 +99,25 @@ function RadioGroup({
   error?: string
   disabled?: boolean
 }) {
+  // 2 options = equal-width segmented control, 3+ = wrapping pills
+  const isSegmented = options.length <= 2
   return (
     <div>
-      <div className="flex flex-wrap gap-3">
+      <div className={cn(
+        isSegmented
+          ? "grid gap-2"
+          : "flex flex-wrap gap-2",
+        isSegmented && options.length === 2 && "grid-cols-2",
+        isSegmented && options.length === 3 && "grid-cols-3",
+      )}>
         {options.map((opt) => (
           <label
             key={opt.value}
             className={cn(
-              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm select-none",
-              disabled ? "cursor-default opacity-75" : "cursor-pointer hover:bg-accent transition-colors",
+              "flex items-center justify-center rounded-md border min-h-[44px] px-4 py-2.5 text-sm select-none text-center",
+              disabled ? "cursor-default opacity-75" : "cursor-pointer hover:bg-accent active:bg-accent/80 transition-colors",
               value === opt.value
-                ? "border-primary bg-primary/5 font-medium"
+                ? "border-primary bg-primary/5 font-medium ring-1 ring-primary/20"
                 : "border-input bg-background"
             )}
           >
@@ -151,17 +159,17 @@ function ApplianceRow({
   disabled?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
-      <span className="text-sm font-medium w-28 shrink-0">{label}</span>
-      <div className="flex gap-2">
+    <div className="py-3 border-b last:border-0 space-y-2">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="grid grid-cols-3 gap-2">
         {APPLIANCE_OPTIONS.map((opt) => (
           <label
             key={opt.value}
             className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs select-none",
-              disabled ? "cursor-default opacity-75" : "cursor-pointer hover:bg-accent transition-colors",
+              "flex items-center justify-center rounded-md border min-h-[40px] px-2 py-2 text-xs select-none text-center",
+              disabled ? "cursor-default opacity-75" : "cursor-pointer hover:bg-accent active:bg-accent/80 transition-colors",
               value === opt.value
-                ? "border-primary bg-primary/5 font-medium"
+                ? "border-primary bg-primary/5 font-medium ring-1 ring-primary/20"
                 : "border-input bg-background"
             )}
           >
