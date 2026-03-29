@@ -33,9 +33,13 @@ export function rateLimit(options: RateLimitOptions) {
   const { limit, windowSeconds, keyPrefix } = options
 
   return async (c: Context, next: Next) => {
+    // Skip rate limiting in development
+    if (c.env.ENVIRONMENT === "development") {
+      await next()
+      return
+    }
     const kv = c.env.KV as KVNamespace | undefined
     if (!kv) {
-      // KV not available (local dev without remote bindings) — skip rate limiting
       await next()
       return
     }
