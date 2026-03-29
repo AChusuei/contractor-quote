@@ -32,7 +32,7 @@ import { verifyTurnstileToken } from "./lib/turnstile"
 type Bindings = {
   DB: D1Database
   STORAGE: R2Bucket
-  TOKENS: KVNamespace
+  KV: KVNamespace
   ENVIRONMENT: string
   CORS_ORIGINS: string
   // Secrets (set via `wrangler secret put`)

@@ -198,7 +198,7 @@ describe("POST /api/v1/quotes", () => {
 
     // Pre-populate KV to simulate 5 prior requests
     const windowId = Math.floor(Date.now() / (3600 * 1000))
-    await env.TOKENS.put(`rl:quote-submit:${ip}:${windowId}`, "5")
+    await env.KV.put(`rl:quote-submit:${ip}:${windowId}`, "5")
 
     const res = await SELF.fetch(apiUrl("/quotes"), {
       method: "POST",
@@ -218,7 +218,7 @@ describe("POST /api/v1/quotes", () => {
 
     // Rate limit IP 10.0.0.1
     const windowId = Math.floor(Date.now() / (3600 * 1000))
-    await env.TOKENS.put(`rl:quote-submit:10.0.0.1:${windowId}`, "5")
+    await env.KV.put(`rl:quote-submit:10.0.0.1:${windowId}`, "5")
 
     // Different IP should work
     const res = await SELF.fetch(apiUrl("/quotes"), {
@@ -717,7 +717,7 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
     const ip = "10.0.0.1"
 
     const windowId = Math.floor(Date.now() / (3600 * 1000))
-    await env.TOKENS.put(`rl:photo-upload:${ip}:${windowId}`, "20")
+    await env.KV.put(`rl:photo-upload:${ip}:${windowId}`, "20")
 
     const formData = new FormData()
     formData.append("file", new File([TINY_JPG], "test.jpg", { type: "image/jpeg" }))

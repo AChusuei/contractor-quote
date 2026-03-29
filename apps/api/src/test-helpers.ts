@@ -174,7 +174,7 @@ declare module "cloudflare:test" {
   interface ProvidedEnv {
     DB: D1Database
     STORAGE: R2Bucket
-    TOKENS: KVNamespace
+    KV: KVNamespace
     ENVIRONMENT: string
     CORS_ORIGINS: string
   }

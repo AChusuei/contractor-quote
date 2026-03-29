@@ -26,14 +26,14 @@ function getClientIp(c: Context): string {
 /**
  * Rate limiting middleware using Workers KV.
  *
- * Stores a counter per IP per time window in the TOKENS KV namespace.
+ * Stores a counter per IP per time window in the KV namespace.
  * Keys are auto-expired by KV's `expirationTtl`.
  */
 export function rateLimit(options: RateLimitOptions) {
   const { limit, windowSeconds, keyPrefix } = options
 
   return async (c: Context, next: Next) => {
-    const kv = c.env.TOKENS as KVNamespace
+    const kv = c.env.KV as KVNamespace
     const ip = getClientIp(c)
     const windowId = Math.floor(Date.now() / (windowSeconds * 1000))
     const key = `rl:${keyPrefix}:${ip}:${windowId}`
