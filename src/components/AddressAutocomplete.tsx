@@ -42,6 +42,7 @@ export function AddressAutocomplete({
   const listRef = useRef<HTMLUListElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const ignoreNextFetchRef = useRef(false)
+  const isFocusedRef = useRef(false)
 
   const debouncedValue = useDebounce(value, 300)
   const lastSentRef = useRef<string>("")
@@ -54,6 +55,9 @@ export function AddressAutocomplete({
       setOpen(false)
       return
     }
+
+    // Don't fetch when value is set programmatically (draft restore, reset)
+    if (!isFocusedRef.current) return
 
     if (ignoreNextFetchRef.current) {
       ignoreNextFetchRef.current = false
@@ -157,7 +161,9 @@ export function AddressAutocomplete({
         aria-activedescendant={activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={() => { isFocusedRef.current = true }}
         onBlur={() => {
+          isFocusedRef.current = false
           // Delay close so click on suggestion fires first
           setTimeout(() => {
             setOpen(false)
