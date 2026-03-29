@@ -385,41 +385,65 @@ app.patch(
       return apiError(c, "VALIDATION_ERROR", "Only draft quotes can be updated via this endpoint")
     }
 
-    // --- Build dynamic UPDATE ---
-    const fieldMap: Record<string, { column: string; value: unknown }> = {
+    // --- Build dynamic UPDATEs (quotes table + customers table) ---
+    const quoteFields: Record<string, { column: string; value: unknown }> = {
       scope: { column: "scope", value: data.scope !== undefined ? JSON.stringify(data.scope) : undefined },
       status: { column: "status", value: data.status },
+      jobSiteAddress: { column: "job_site_address", value: data.jobSiteAddress },
+      propertyType: { column: "property_type", value: data.propertyType },
+      budgetRange: { column: "budget_range", value: data.budgetRange },
+    }
+
+    const customerFields: Record<string, { column: string; value: unknown }> = {
       name: { column: "name", value: data.name },
       email: { column: "email", value: data.email },
       phone: { column: "phone", value: data.phone },
       cell: { column: "cell", value: data.cell },
-      jobSiteAddress: { column: "job_site_address", value: data.jobSiteAddress },
-      propertyType: { column: "property_type", value: data.propertyType },
-      budgetRange: { column: "budget_range", value: data.budgetRange },
       howDidYouFindUs: { column: "how_did_you_find_us", value: data.howDidYouFindUs },
       referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
     }
 
-    const setClauses: string[] = []
-    const bindValues: unknown[] = []
-
-    for (const [key, mapping] of Object.entries(fieldMap)) {
-      if (key in data && key !== "publicToken" && mapping.value !== undefined) {
-        setClauses.push(`${mapping.column} = ?`)
-        bindValues.push(mapping.value ?? null)
+    // Update quotes table
+    const quoteClauses: string[] = []
+    const quoteBinds: unknown[] = []
+    for (const [key, mapping] of Object.entries(quoteFields)) {
+      if (key in data && mapping.value !== undefined) {
+        quoteClauses.push(`${mapping.column} = ?`)
+        quoteBinds.push(mapping.value ?? null)
       }
     }
-
-    if (setClauses.length === 0) {
-      return apiError(c, "VALIDATION_ERROR", "No fields to update")
+    if (quoteClauses.length > 0) {
+      quoteClauses.push("updated_at = datetime('now')")
+      quoteBinds.push(quoteId)
+      await c.env.DB.prepare(
+        `UPDATE quotes SET ${quoteClauses.join(", ")} WHERE id = ?`
+      )
+        .bind(...quoteBinds)
+        .run()
     }
 
-    bindValues.push(quoteId)
-    await c.env.DB.prepare(
-      `UPDATE quotes SET ${setClauses.join(", ")} WHERE id = ?`
-    )
-      .bind(...bindValues)
-      .run()
+    // Update customers table
+    const custClauses: string[] = []
+    const custBinds: unknown[] = []
+    for (const [key, mapping] of Object.entries(customerFields)) {
+      if (key in data && mapping.value !== undefined) {
+        custClauses.push(`${mapping.column} = ?`)
+        custBinds.push(mapping.value ?? null)
+      }
+    }
+    if (custClauses.length > 0) {
+      custClauses.push("updated_at = datetime('now')")
+      custBinds.push(quote.customer_id)
+      await c.env.DB.prepare(
+        `UPDATE customers SET ${custClauses.join(", ")} WHERE id = ?`
+      )
+        .bind(...custBinds)
+        .run()
+    }
+
+    if (quoteClauses.length === 0 && custClauses.length === 0) {
+      return apiError(c, "VALIDATION_ERROR", "No fields to update")
+    }
 
     // --- If status changed to 'lead', send notification and log ---
     if (data.status === "lead") {
