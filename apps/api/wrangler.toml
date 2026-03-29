@@ -18,14 +18,6 @@ database_id = "6c180e3d-fbaf-4ec0-9cce-f6770b2a8afe"
 binding = "STORAGE"
 bucket_name = "cq-dev-photos"
 
-# ---------------------------------------------------------------------------
-# KV Namespace — signed token store (appointment links, upload tokens)
-# NOTE: KV not yet provisioned — using placeholder. Create with:
-#   npx wrangler kv namespace create TOKENS
-# ---------------------------------------------------------------------------
-[[kv_namespaces]]
-binding = "TOKENS"
-id = "placeholder-replace-with-real-kv-id"
 
 # ---------------------------------------------------------------------------
 # Secrets (set via `wrangler secret put <NAME>`)
