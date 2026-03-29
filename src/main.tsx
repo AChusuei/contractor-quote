@@ -23,6 +23,7 @@ import "./index.css"
 })()
 import App from "./App.tsx"
 import { DevThemeToggle } from "@/components/DevThemeToggle"
+import { ContractorProvider } from "@/components/ContractorProvider"
 import { seedMockQuotes } from "@/lib/quoteStore"
 
 if (import.meta.env.DEV) {
@@ -47,8 +48,10 @@ function Root() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <DevThemeToggle />
-      <Root />
+      <ContractorProvider>
+        <DevThemeToggle />
+        <Root />
+      </ContractorProvider>
     </BrowserRouter>
   </StrictMode>,
 )
