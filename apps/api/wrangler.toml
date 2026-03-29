@@ -16,7 +16,7 @@ database_id = "6c180e3d-fbaf-4ec0-9cce-f6770b2a8afe"
 # ---------------------------------------------------------------------------
 [[r2_buckets]]
 binding = "STORAGE"
-bucket_name = "cq-dev-photos"
+bucket_name = "cq-dev"
 
 # ---------------------------------------------------------------------------
 # KV Namespace — rate limiting counters
