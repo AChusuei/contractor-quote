@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest"
 import {
   setupDb,
   seedContractor,
+  seedCustomer,
   seedQuote,
   seedPhoto,
   authHeaders,
@@ -81,7 +82,9 @@ describe("POST /api/v1/quotes", () => {
     expect(body.data.publicToken).toBeTruthy()
 
     // Verify row exists in D1
-    const row = await env.DB.prepare("SELECT id, name FROM quotes WHERE id = ?")
+    const row = await env.DB.prepare(
+      "SELECT q.id, c.name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?"
+    )
       .bind(body.data.id)
       .first()
     expect(row).toBeTruthy()
@@ -146,8 +149,8 @@ describe("POST /api/v1/quotes", () => {
   })
 
   it("returns 422 when contractor does not exist", async () => {
-    // No contractor seeded
-    const res = await quoteRequest(validPayload)
+    // Use a contractor ID that doesn't exist
+    const res = await quoteRequest({ ...validPayload, contractorId: "nonexistent-contractor" })
     expect(res.status).toBe(422)
     const body = (await res.json()) as { ok: boolean; fields: Record<string, string> }
     expect(body.fields.contractorId).toContain("not found")
@@ -186,7 +189,9 @@ describe("POST /api/v1/quotes", () => {
     })
     expect(res.status).toBe(201)
     const data = ((await res.json()) as { data: { id: string } }).data
-    const row = await env.DB.prepare("SELECT name FROM quotes WHERE id = ?")
+    const row = await env.DB.prepare(
+      "SELECT c.name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?"
+    )
       .bind(data.id)
       .first()
     expect(row!.name).toBe('alert("xss")Jane')
@@ -256,9 +261,10 @@ describe("GET /api/v1/quotes/:quoteId", () => {
   })
 
   it("returns 403 when quote belongs to another contractor", async () => {
-    const c1 = await seedContractor({ id: "c1" })
-    await seedContractor({ id: "c2", name: "Other Co" })
-    const quote = await seedQuote(c1.id)
+    const c1 = await seedContractor({ id: "c1", slug: "slug-c1" })
+    await seedContractor({ id: "c2", slug: "slug-c2", name: "Other Co" })
+    const cu1 = await seedCustomer(c1.id)
+    const quote = await seedQuote(cu1.id, c1.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       headers: authHeaders("c2"),
@@ -270,9 +276,9 @@ describe("GET /api/v1/quotes/:quoteId", () => {
 
   it("returns 200 with camelCase quote data", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id, {
+    const customer = await seedCustomer(contractor.id, { howDidYouFindUs: "Google" })
+    const quote = await seedQuote(customer.id, contractor.id, {
       scope: '{"cabinets":true}',
-      howDidYouFindUs: "Google",
     })
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
@@ -305,7 +311,8 @@ describe("GET /api/v1/quotes/:quoteId", () => {
 
   it("authenticates via JWT Bearer token", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       headers: jwtAuthHeaders(contractor.id),
@@ -341,9 +348,10 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
   })
 
   it("returns 403 when quote belongs to another contractor", async () => {
-    const c1 = await seedContractor({ id: "c1" })
-    await seedContractor({ id: "c2", name: "Other Co" })
-    const quote = await seedQuote(c1.id)
+    const c1 = await seedContractor({ id: "c1", slug: "slug-c1" })
+    await seedContractor({ id: "c2", slug: "slug-c2", name: "Other Co" })
+    const cu1 = await seedCustomer(c1.id)
+    const quote = await seedQuote(cu1.id, c1.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -355,7 +363,8 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
   it("updates a single field and returns 200", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -370,7 +379,8 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
   it("updates multiple fields", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -385,7 +395,7 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       ok: boolean
-      data: { name: string; email: string; property_type: string; budget_range: string }
+      data: { name: string; email: string; propertyType: string; budgetRange: string }
     }
     expect(body.ok).toBe(true)
     expect(body.data.name).toBe("Updated Name")
@@ -394,7 +404,8 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
   it("logs edit activity", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -412,7 +423,8 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
   it("returns 422 for empty update body", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -424,7 +436,8 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
   it("returns 422 for invalid field values", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -438,7 +451,8 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
   it("returns 413 when payload exceeds 100KB", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
       method: "PATCH",
@@ -464,8 +478,8 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
   })
 
   it("returns 403 when contractor ID does not match auth", async () => {
-    await seedContractor({ id: "c1" })
-    await seedContractor({ id: "c2", name: "Other" })
+    await seedContractor({ id: "c1", slug: "slug-c1" })
+    await seedContractor({ id: "c2", slug: "slug-c2", name: "Other" })
 
     const res = await SELF.fetch(apiUrl("/contractors/c2/quotes"), {
       headers: authHeaders("c1"),
@@ -488,7 +502,8 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 
   it("returns quotes with camelCase field names", async () => {
     const contractor = await seedContractor()
-    await seedQuote(contractor.id, { scope: '{"cabinets":true}' })
+    const customer = await seedCustomer(contractor.id)
+    await seedQuote(customer.id, contractor.id, { scope: '{"cabinets":true}', status: "lead" })
 
     const res = await SELF.fetch(apiUrl(`/contractors/${contractor.id}/quotes`), {
       headers: authHeaders(contractor.id),
@@ -515,10 +530,12 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
   })
 
   it("enforces tenant isolation — does not return other contractors quotes", async () => {
-    const c1 = await seedContractor({ id: "c1" })
-    await seedContractor({ id: "c2", name: "Other" })
-    await seedQuote("c1")
-    await seedQuote("c2")
+    const c1 = await seedContractor({ id: "c1", slug: "slug-c1" })
+    await seedContractor({ id: "c2", slug: "slug-c2", name: "Other" })
+    const cu1 = await seedCustomer("c1")
+    const cu2 = await seedCustomer("c2", { email: "other@example.com" })
+    await seedQuote(cu1.id, "c1", { status: "lead" })
+    await seedQuote(cu2.id, "c2", { status: "lead" })
 
     const res = await SELF.fetch(apiUrl(`/contractors/${c1.id}/quotes`), {
       headers: authHeaders(c1.id),
@@ -530,10 +547,11 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 
   it("paginates results", async () => {
     const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
     // Seed 3 quotes
-    await seedQuote(contractor.id, { id: "q1" })
-    await seedQuote(contractor.id, { id: "q2" })
-    await seedQuote(contractor.id, { id: "q3" })
+    await seedQuote(customer.id, contractor.id, { id: "q1", status: "lead" })
+    await seedQuote(customer.id, contractor.id, { id: "q2", status: "lead" })
+    await seedQuote(customer.id, contractor.id, { id: "q3", status: "lead" })
 
     const res = await SELF.fetch(
       apiUrl(`/contractors/${contractor.id}/quotes?page=2&limit=1`),
@@ -566,8 +584,9 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 
   it("filters by status", async () => {
     const contractor = await seedContractor()
-    await seedQuote(contractor.id, { status: "lead" })
-    await seedQuote(contractor.id, { status: "qualified" })
+    const customer = await seedCustomer(contractor.id)
+    await seedQuote(customer.id, contractor.id, { status: "lead" })
+    await seedQuote(customer.id, contractor.id, { status: "qualified" })
 
     const res = await SELF.fetch(
       apiUrl(`/contractors/${contractor.id}/quotes?status=lead`),
@@ -580,8 +599,9 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 
   it("filters by budget range", async () => {
     const contractor = await seedContractor()
-    await seedQuote(contractor.id, { budgetRange: "10-25k" })
-    await seedQuote(contractor.id, { budgetRange: "50k+" })
+    const customer = await seedCustomer(contractor.id)
+    await seedQuote(customer.id, contractor.id, { budgetRange: "10-25k", status: "lead" })
+    await seedQuote(customer.id, contractor.id, { budgetRange: "50k+", status: "lead" })
 
     const res = await SELF.fetch(
       apiUrl(`/contractors/${contractor.id}/quotes?budget=50k%2B`),
@@ -594,8 +614,10 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 
   it("searches by name or address", async () => {
     const contractor = await seedContractor()
-    await seedQuote(contractor.id, { name: "Alice Smith", jobSiteAddress: "456 Oak Ave" })
-    await seedQuote(contractor.id, { name: "Bob Jones", jobSiteAddress: "789 Pine St" })
+    const alice = await seedCustomer(contractor.id, { name: "Alice Smith", email: "alice@example.com" })
+    const bob = await seedCustomer(contractor.id, { name: "Bob Jones", email: "bob@example.com" })
+    await seedQuote(alice.id, contractor.id, { jobSiteAddress: "456 Oak Ave", status: "lead" })
+    await seedQuote(bob.id, contractor.id, { jobSiteAddress: "789 Pine St", status: "lead" })
 
     const res = await SELF.fetch(
       apiUrl(`/contractors/${contractor.id}/quotes?q=Alice`),
@@ -608,7 +630,8 @@ describe("GET /api/v1/contractors/:contractorId/quotes", () => {
 
   it("handles null scope in rows", async () => {
     const contractor = await seedContractor()
-    await seedQuote(contractor.id, { scope: null })
+    const customer = await seedCustomer(contractor.id)
+    await seedQuote(customer.id, contractor.id, { scope: null, status: "lead" })
 
     const res = await SELF.fetch(
       apiUrl(`/contractors/${contractor.id}/quotes`),
@@ -644,7 +667,8 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
 
   it("uploads a photo with publicToken auth and returns 201", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await uploadRequest(quote.id, { publicToken: quote.publicToken })
     expect(res.status).toBe(201)
@@ -654,7 +678,7 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
     expect(body.data.filename).toBe("test.jpg")
 
     // Verify D1 record
-    const row = await env.DB.prepare("SELECT id, quote_id, r2_key FROM photos WHERE id = ?")
+    const row = await env.DB.prepare("SELECT id, quote_id, storage_key FROM photos WHERE id = ?")
       .bind(body.data.id)
       .first()
     expect(row).toBeTruthy()
@@ -663,7 +687,8 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
 
   it("uploads a photo with Clerk auth and returns 201", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await uploadRequest(quote.id, { headers: authHeaders(contractor.id) })
     expect(res.status).toBe(201)
@@ -671,7 +696,8 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
 
   it("rejects invalid content type", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await uploadRequest(quote.id, {
       publicToken: quote.publicToken,
@@ -682,7 +708,8 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
 
   it("rejects when at 10-photo limit", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     // Seed 10 photos
     for (let i = 0; i < 10; i++) {
@@ -697,7 +724,8 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
 
   it("logs activity on photo upload", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await uploadRequest(quote.id, { publicToken: quote.publicToken })
     const body = (await res.json()) as { ok: boolean; data: { id: string } }
@@ -713,7 +741,8 @@ describe("POST /api/v1/quotes/:quoteId/photos", () => {
 
   it("rate limits after 20 photo uploads from same IP", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
     const ip = "10.0.0.1"
 
     const windowId = Math.floor(Date.now() / (3600 * 1000))
@@ -742,7 +771,8 @@ describe("GET /api/v1/quotes/:quoteId/photos", () => {
 
   it("lists photos for a quote via publicToken", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
     const photo = await seedPhoto(quote.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`))
@@ -755,7 +785,8 @@ describe("GET /api/v1/quotes/:quoteId/photos", () => {
 
   it("lists photos for a quote via Clerk auth", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
     await seedPhoto(quote.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos`), {
@@ -768,7 +799,8 @@ describe("GET /api/v1/quotes/:quoteId/photos", () => {
 
   it("returns empty array when no photos", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`))
     const body = (await res.json()) as { ok: boolean; data: { photos: unknown[] } }
@@ -798,9 +830,10 @@ describe("DELETE /api/v1/quotes/:quoteId/photos/:photoId", () => {
   })
 
   it("returns 403 when quote belongs to another contractor", async () => {
-    const c1 = await seedContractor({ id: "c1" })
-    await seedContractor({ id: "c2", name: "Other" })
-    const quote = await seedQuote(c1.id)
+    const c1 = await seedContractor({ id: "c1", slug: "slug-c1" })
+    await seedContractor({ id: "c2", slug: "slug-c2", name: "Other" })
+    const cu1 = await seedCustomer(c1.id)
+    const quote = await seedQuote(cu1.id, c1.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos/p1`), {
       method: "DELETE",
@@ -811,7 +844,8 @@ describe("DELETE /api/v1/quotes/:quoteId/photos/:photoId", () => {
 
   it("returns 404 when photo does not exist for the quote", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos/nonexistent`), {
       method: "DELETE",
@@ -824,7 +858,8 @@ describe("DELETE /api/v1/quotes/:quoteId/photos/:photoId", () => {
 
   it("returns 204 and deletes photo from D1", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
     const photo = await seedPhoto(quote.id, contractor.id)
 
     const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos/${photo.id}`), {
@@ -842,7 +877,8 @@ describe("DELETE /api/v1/quotes/:quoteId/photos/:photoId", () => {
 
   it("logs activity on photo deletion", async () => {
     const contractor = await seedContractor()
-    const quote = await seedQuote(contractor.id)
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
     const photo = await seedPhoto(quote.id, contractor.id)
 
     await SELF.fetch(apiUrl(`/quotes/${quote.id}/photos/${photo.id}`), {
@@ -897,8 +933,8 @@ describe("POST /api/v1/contractors/:contractorId/logo", () => {
   })
 
   it("returns 403 when contractor does not match auth", async () => {
-    await seedContractor({ id: "c1" })
-    await seedContractor({ id: "c2", name: "Other" })
+    await seedContractor({ id: "c1", slug: "slug-c1" })
+    await seedContractor({ id: "c2", slug: "slug-c2", name: "Other" })
 
     const res = await logoRequest("c1", {
       content: TINY_PNG,

@@ -248,8 +248,8 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
     `INSERT INTO quotes (
       id, customer_id, contractor_id, schema_version,
       job_site_address, property_type, budget_range,
-      scope, photo_session_id, public_token, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      scope, public_token, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       quoteId,
@@ -260,7 +260,6 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
       data.propertyType,
       data.budgetRange,
       data.scope ? JSON.stringify(data.scope) : null,
-      data.photoSessionId ?? null,
       publicToken,
       quoteStatus
     )
@@ -537,13 +536,15 @@ app.get(
     const quoteId = c.req.param("quoteId")
 
     const row = await c.env.DB.prepare(
-      `SELECT id, contractor_id, schema_version,
-              name, email, phone, cell,
-              job_site_address, property_type, budget_range,
-              how_did_you_find_us, referred_by_contractor,
-              scope, quote_path, photo_session_id, public_token,
-              status, created_at
-       FROM quotes WHERE id = ?`
+      `SELECT q.id, q.contractor_id, q.schema_version,
+              c.name, c.email, c.phone, c.cell,
+              q.job_site_address, q.property_type, q.budget_range,
+              c.how_did_you_find_us, c.referred_by_contractor,
+              q.scope, q.public_token,
+              q.status, q.created_at
+       FROM quotes q
+       JOIN customers c ON q.customer_id = c.id
+       WHERE q.id = ?`
     )
       .bind(quoteId)
       .first()
@@ -576,8 +577,6 @@ app.get(
       howDidYouFindUs: row.how_did_you_find_us ?? null,
       referredByContractor: row.referred_by_contractor ?? null,
       scope,
-      quotePath: row.quote_path ?? null,
-      photoSessionId: row.photo_session_id ?? null,
       publicToken: row.public_token,
       status: row.status,
       createdAt: row.created_at,
@@ -635,39 +634,60 @@ app.patch(
 
     const data = result.data
 
-    // --- Build dynamic UPDATE query ---
-    const fieldMap: Record<string, { column: string; value: unknown }> = {
+    // --- Build dynamic UPDATE queries (split: customer fields vs quote fields) ---
+    const customerFieldMap: Record<string, { column: string; value: unknown }> = {
       name: { column: "name", value: data.name },
       email: { column: "email", value: data.email },
       phone: { column: "phone", value: data.phone },
       cell: { column: "cell", value: data.cell },
+      howDidYouFindUs: { column: "how_did_you_find_us", value: data.howDidYouFindUs },
+      referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
+    }
+
+    const quoteFieldMap: Record<string, { column: string; value: unknown }> = {
       jobSiteAddress: { column: "job_site_address", value: data.jobSiteAddress },
       propertyType: { column: "property_type", value: data.propertyType },
       budgetRange: { column: "budget_range", value: data.budgetRange },
-      howDidYouFindUs: { column: "how_did_you_find_us", value: data.howDidYouFindUs },
-      referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
       scope: { column: "scope", value: data.scope !== undefined ? JSON.stringify(data.scope) : undefined },
-      quotePath: { column: "quote_path", value: data.quotePath },
-      photoSessionId: { column: "photo_session_id", value: data.photoSessionId },
     }
 
-    const setClauses: string[] = []
-    const bindValues: unknown[] = []
-
-    for (const [key, mapping] of Object.entries(fieldMap)) {
+    // Update customer fields if any
+    const customerClauses: string[] = []
+    const customerBinds: unknown[] = []
+    for (const [key, mapping] of Object.entries(customerFieldMap)) {
       if (key in data) {
-        setClauses.push(`${mapping.column} = ?`)
-        bindValues.push(mapping.value ?? null)
+        customerClauses.push(`${mapping.column} = ?`)
+        customerBinds.push(mapping.value ?? null)
       }
     }
 
-    // Update the quote
-    bindValues.push(quoteId)
-    await c.env.DB.prepare(
-      `UPDATE quotes SET ${setClauses.join(", ")} WHERE id = ?`
-    )
-      .bind(...bindValues)
-      .run()
+    if (customerClauses.length > 0) {
+      await c.env.DB.prepare(
+        `UPDATE customers SET ${customerClauses.join(", ")}
+         WHERE id = (SELECT customer_id FROM quotes WHERE id = ?)`
+      )
+        .bind(...customerBinds, quoteId)
+        .run()
+    }
+
+    // Update quote fields if any
+    const quoteClauses: string[] = []
+    const quoteBinds: unknown[] = []
+    for (const [key, mapping] of Object.entries(quoteFieldMap)) {
+      if (key in data) {
+        quoteClauses.push(`${mapping.column} = ?`)
+        quoteBinds.push(mapping.value ?? null)
+      }
+    }
+
+    if (quoteClauses.length > 0) {
+      quoteBinds.push(quoteId)
+      await c.env.DB.prepare(
+        `UPDATE quotes SET ${quoteClauses.join(", ")} WHERE id = ?`
+      )
+        .bind(...quoteBinds)
+        .run()
+    }
 
     // --- Log activity ---
     await c.env.DB.prepare(
@@ -679,18 +699,42 @@ app.patch(
 
     // --- Fetch and return updated quote ---
     const updated = await c.env.DB.prepare(
-      `SELECT id, contractor_id, schema_version,
-              name, email, phone, cell,
-              job_site_address, property_type, budget_range,
-              how_did_you_find_us, referred_by_contractor,
-              scope, quote_path, photo_session_id,
-              public_token, status, created_at
-       FROM quotes WHERE id = ?`
+      `SELECT q.id, q.contractor_id, q.schema_version,
+              c.name, c.email, c.phone, c.cell,
+              q.job_site_address, q.property_type, q.budget_range,
+              c.how_did_you_find_us, c.referred_by_contractor,
+              q.scope, q.public_token, q.status, q.created_at
+       FROM quotes q
+       JOIN customers c ON q.customer_id = c.id
+       WHERE q.id = ?`
     )
       .bind(quoteId)
       .first()
 
-    return c.json({ ok: true, data: updated })
+    if (!updated) {
+      return apiError(c, "NOT_FOUND", "Quote not found")
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        id: updated.id,
+        contractorId: updated.contractor_id,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+        cell: updated.cell ?? null,
+        jobSiteAddress: updated.job_site_address,
+        propertyType: updated.property_type,
+        budgetRange: updated.budget_range,
+        howDidYouFindUs: updated.how_did_you_find_us ?? null,
+        referredByContractor: updated.referred_by_contractor ?? null,
+        scope: updated.scope ? JSON.parse(updated.scope as string) : null,
+        publicToken: updated.public_token,
+        status: updated.status,
+        createdAt: updated.created_at,
+      },
+    })
   }
 )
 
@@ -798,7 +842,7 @@ app.post(
 
     // --- Insert into D1 ---
     await c.env.DB.prepare(
-      `INSERT INTO photos (id, quote_id, contractor_id, filename, content_type, size, r2_key)
+      `INSERT INTO photos (id, quote_id, contractor_id, filename, content_type, size, storage_key)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
       .bind(photoId, quoteId, quote.contractor_id, file.name, file.type, file.size, r2Key)
@@ -856,11 +900,11 @@ app.get(
 
     // --- Fetch photos from D1 ---
     const { results } = await c.env.DB.prepare(
-      `SELECT id, filename, content_type, size, r2_key, created_at
+      `SELECT id, filename, content_type, size, storage_key, created_at
        FROM photos WHERE quote_id = ? ORDER BY created_at ASC`
     )
       .bind(quoteId)
-      .all<{ id: string; filename: string; content_type: string; size: number; r2_key: string; created_at: string }>()
+      .all<{ id: string; filename: string; content_type: string; size: number; storage_key: string; created_at: string }>()
 
     // --- Generate presigned URLs (R2 public URL via key) ---
     const photos = (results ?? []).map((row) => ({
@@ -909,17 +953,17 @@ app.get(
 
     // --- Fetch photo record ---
     const photo = await c.env.DB.prepare(
-      "SELECT r2_key, content_type, filename FROM photos WHERE id = ? AND quote_id = ?"
+      "SELECT storage_key, content_type, filename FROM photos WHERE id = ? AND quote_id = ?"
     )
       .bind(photoId, quoteId)
-      .first<{ r2_key: string; content_type: string; filename: string }>()
+      .first<{ storage_key: string; content_type: string; filename: string }>()
 
     if (!photo) {
       return apiError(c, "NOT_FOUND", "Photo not found")
     }
 
     // --- Stream from R2 ---
-    const object = await c.env.STORAGE.get(photo.r2_key)
+    const object = await c.env.STORAGE.get(photo.storage_key)
     if (!object) {
       return apiError(c, "NOT_FOUND", "Photo file not found in storage")
     }
@@ -954,28 +998,28 @@ app.get(
     const offset = (page - 1) * limit
 
     // Build WHERE conditions
-    const conditions: string[] = ["contractor_id = ?"]
+    const conditions: string[] = ["q.contractor_id = ?"]
     const bindings: (string | number)[] = [contractorId]
 
     // Filter out drafts by default unless explicitly included
     const includeDrafts = c.req.query("include_drafts") === "true"
     const status = c.req.query("status")
     if (status) {
-      conditions.push("status = ?")
+      conditions.push("q.status = ?")
       bindings.push(status)
     } else if (!includeDrafts) {
-      conditions.push("status != 'draft'")
+      conditions.push("q.status != 'draft'")
     }
 
     const budget = c.req.query("budget")
     if (budget) {
-      conditions.push("budget_range = ?")
+      conditions.push("q.budget_range = ?")
       bindings.push(budget)
     }
 
     const q = c.req.query("q")
     if (q) {
-      conditions.push("(name LIKE ? OR job_site_address LIKE ?)")
+      conditions.push("(c.name LIKE ? OR q.job_site_address LIKE ?)")
       const pattern = `%${q}%`
       bindings.push(pattern, pattern)
     }
@@ -984,7 +1028,7 @@ app.get(
 
     // Count total matching rows
     const countResult = await c.env.DB.prepare(
-      `SELECT COUNT(*) as total FROM quotes WHERE ${where}`
+      `SELECT COUNT(*) as total FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE ${where}`
     )
       .bind(...bindings)
       .first<{ total: number }>()
@@ -993,13 +1037,14 @@ app.get(
 
     // Fetch paginated results
     const { results } = await c.env.DB.prepare(
-      `SELECT id, contractor_id, schema_version, name, email, phone, cell,
-              job_site_address, property_type, budget_range,
-              how_did_you_find_us, referred_by_contractor,
-              scope, quote_path, photo_session_id, public_token, status, created_at
-       FROM quotes
+      `SELECT q.id, q.contractor_id, q.schema_version, c.name, c.email, c.phone, c.cell,
+              q.job_site_address, q.property_type, q.budget_range,
+              c.how_did_you_find_us, c.referred_by_contractor,
+              q.scope, q.public_token, q.status, q.created_at
+       FROM quotes q
+       JOIN customers c ON q.customer_id = c.id
        WHERE ${where}
-       ORDER BY created_at DESC
+       ORDER BY q.created_at DESC
        LIMIT ? OFFSET ?`
     )
       .bind(...bindings, limit, offset)
@@ -1019,8 +1064,6 @@ app.get(
       howDidYouFindUs: row.how_did_you_find_us ?? null,
       referredByContractor: row.referred_by_contractor ?? null,
       scope: row.scope ? JSON.parse(row.scope as string) : null,
-      quotePath: row.quote_path ?? null,
-      photoSessionId: row.photo_session_id ?? null,
       publicToken: row.public_token,
       status: row.status,
       createdAt: row.created_at,
@@ -1069,17 +1112,17 @@ app.delete(
 
     // Fetch the photo record, enforcing tenant isolation via quote_id
     const photo = await c.env.DB.prepare(
-      "SELECT id, r2_key FROM photos WHERE id = ? AND quote_id = ?"
+      "SELECT id, storage_key FROM photos WHERE id = ? AND quote_id = ?"
     )
       .bind(photoId, quoteId)
-      .first<{ id: string; r2_key: string }>()
+      .first<{ id: string; storage_key: string }>()
 
     if (!photo) {
       return apiError(c, "NOT_FOUND", "Photo not found")
     }
 
     // Delete from R2 storage
-    await c.env.STORAGE.delete(photo.r2_key)
+    await c.env.STORAGE.delete(photo.storage_key)
 
     // Delete from D1
     await c.env.DB.prepare("DELETE FROM photos WHERE id = ?")

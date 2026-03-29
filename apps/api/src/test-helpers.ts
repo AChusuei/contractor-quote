@@ -31,7 +31,7 @@ export async function seedContractor(
     ...overrides,
   }
   await env.DB.prepare(
-    "INSERT INTO contractors (id, slug, name, email, phone) VALUES (?, ?, ?, ?, ?)"
+    "INSERT OR REPLACE INTO contractors (id, slug, name, email, phone) VALUES (?, ?, ?, ?, ?)"
   )
     .bind(c.id, c.slug, c.name, c.email, c.phone)
     .run()
