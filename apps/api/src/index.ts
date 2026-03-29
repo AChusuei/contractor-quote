@@ -412,8 +412,10 @@ app.patch(
       const binds: unknown[] = []
       for (const [key, mapping] of Object.entries(fieldMap)) {
         if (key in sourceData && sourceData[key] !== undefined) {
+          // D1 rejects undefined — always coerce to null
+          const val = mapping.value === undefined ? null : mapping.value
           clauses.push(`${mapping.column} = ?`)
-          binds.push(mapping.value ?? null)
+          binds.push(val === undefined ? null : val)
         }
       }
       return { clauses, binds }
