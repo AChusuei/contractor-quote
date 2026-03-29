@@ -280,8 +280,8 @@ export function IntakePage() {
           <FieldError message={errors.email?.message} />
         </div>
 
-        {/* Phone + Cell */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Phone + Cell — stacked on mobile, side-by-side on sm+ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="phone">Phone {!readOnly && "*"}</Label>
             <input

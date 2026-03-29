@@ -468,8 +468,8 @@ export function IntakeScreen2Page() {
           <FieldError message={errors.cabinetDoorStyle?.message} />
         </div>
 
-        {/* Countertop */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Countertop — stacked on mobile, side-by-side on sm+ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="countertopMaterial">Countertop material {!readOnly && "*"}</Label>
             <select
