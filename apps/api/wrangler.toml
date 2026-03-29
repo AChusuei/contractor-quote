@@ -10,6 +10,8 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "cq-dev"
 database_id = "6c180e3d-fbaf-4ec0-9cce-f6770b2a8afe"
+migrations_dir = "migrations"
+migrations_table = "d1_migrations"
 
 # ---------------------------------------------------------------------------
 # R2 Bucket — photo storage
