@@ -179,7 +179,8 @@ export function IntakeReviewPage() {
       sessionStorage.removeItem("cq_public_token")
       // Dynamic import to avoid circular deps
       const { clearDraft } = await import("@/lib/draftSession")
-      clearDraft()
+      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
+      clearDraft(contractorId)
       sessionStorage.removeItem("cq_quote_session_id")
 
       navigate("/intake/confirmation")

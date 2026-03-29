@@ -144,7 +144,7 @@ export function IntakePage() {
       const turnstileToken = TURNSTILE_SITE_KEY ? getTurnstileToken() : undefined
 
       const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
-      const existingDraft = getActiveDraft()
+      const existingDraft = getActiveDraft(contractorId)
 
       const payload = {
         schemaVersion: 1,
@@ -168,7 +168,7 @@ export function IntakePage() {
           { ...payload, publicToken: existingDraft.publicToken }
         )
         if (res.ok) {
-          touchDraft()
+          touchDraft(contractorId)
           sessionStorage.setItem("cq_active_quote_id", existingDraft.quoteId)
           sessionStorage.setItem("cq_public_token", existingDraft.publicToken)
         } else if (isNetworkError(res)) {
