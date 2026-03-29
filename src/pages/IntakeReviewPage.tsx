@@ -4,6 +4,7 @@ import { useNavigate, Link } from "react-router-dom"
 import { Button } from "components"
 import { getQuote } from "@/lib/quoteStore"
 import { apiPatch, apiGet, isNetworkError } from "@/lib/api"
+import { getQuotePhotos, type PhotoMeta } from "@/lib/supabase"
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   house: "House",
@@ -94,6 +95,7 @@ export function IntakeReviewPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [quote, setQuote] = useState<ApiQuote | null>(null)
   const [loading, setLoading] = useState(true)
+  const [photos, setPhotos] = useState<PhotoMeta[]>([])
 
   useEffect(() => {
     async function loadQuote() {
@@ -153,6 +155,16 @@ export function IntakeReviewPage() {
       setLoading(false)
     }
     void loadQuote()
+  }, [])
+
+  // Load photos for the review thumbnails
+  useEffect(() => {
+    const quoteId = sessionStorage.getItem("cq_active_quote_id")
+    const publicToken = sessionStorage.getItem("cq_public_token") ?? undefined
+    if (!quoteId) return
+    getQuotePhotos(quoteId, { publicToken })
+      .then(setPhotos)
+      .catch(() => {})
   }, [])
 
   const handleSubmit = async () => {
@@ -289,9 +301,22 @@ export function IntakeReviewPage() {
         {/* Photos */}
         <section className="rounded-lg border bg-background p-4">
           <SectionHeader title="Photos" editStep="/intake/photos" />
-          <p className="text-sm text-muted-foreground">
-            Photos will be attached to your submission.
-          </p>
+          {photos.length > 0 ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {photos.map((photo) => (
+                <img
+                  key={photo.id}
+                  src={photo.url}
+                  alt={photo.filename}
+                  className="rounded-md border aspect-square object-cover w-full"
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No photos uploaded. You can add photos before submitting.
+            </p>
+          )}
         </section>
 
         {/* Submit */}
