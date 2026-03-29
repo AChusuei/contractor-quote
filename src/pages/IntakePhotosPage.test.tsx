@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
+import type * as ReactRouterDom from "react-router-dom"
 import { IntakePhotosPage } from "./IntakePhotosPage"
 
 const mockNavigate = vi.fn()
 vi.mock("react-router-dom", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("react-router-dom")>()
+  const mod = await importOriginal<typeof ReactRouterDom>()
   return { ...mod, useNavigate: () => mockNavigate }
 })
 

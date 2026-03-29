@@ -1673,10 +1673,10 @@ app.post(
       const resolvedHtml = textToHtml(resolvedBody)
 
       if (isDevMode) {
-        console.log(`[DEV EMAIL] To: ${quote.email} (${quote.name})`)
-        console.log(`[DEV EMAIL] Subject: ${resolvedSubject}`)
-        console.log(`[DEV EMAIL] Body:\n${resolvedBody}`)
-        console.log("---")
+        console.warn(`[DEV EMAIL] To: ${quote.email} (${quote.name})`)
+        console.warn(`[DEV EMAIL] Subject: ${resolvedSubject}`)
+        console.warn(`[DEV EMAIL] Body:\n${resolvedBody}`)
+        console.warn("---")
         sent++
       } else {
         try {

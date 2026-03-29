@@ -49,11 +49,11 @@ export async function sendNewQuoteNotification(
   ].join("\n")
 
   if (!sendgridApiKey) {
-    console.log("=== EMAIL NOTIFICATION (dev mode — no SENDGRID_API_KEY) ===")
-    console.log(`To: ${contractorEmail}`)
-    console.log(`Subject: ${subject}`)
-    console.log(body)
-    console.log("=== END EMAIL ===")
+    console.warn("=== EMAIL NOTIFICATION (dev mode — no SENDGRID_API_KEY) ===")
+    console.warn(`To: ${contractorEmail}`)
+    console.warn(`Subject: ${subject}`)
+    console.warn(body)
+    console.warn("=== END EMAIL ===")
     return
   }
 

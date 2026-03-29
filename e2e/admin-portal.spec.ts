@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import type { APIRequestContext } from "@playwright/test"
 
 const API_BASE = "http://localhost:8787/api/v1"
 
@@ -7,7 +8,7 @@ const API_BASE = "http://localhost:8787/api/v1"
 // ---------------------------------------------------------------------------
 
 async function createQuoteViaApi(
-  request: import("@playwright/test").APIRequestContext,
+  request: APIRequestContext,
   overrides: Record<string, unknown> = {}
 ): Promise<{ id: string; publicToken: string } | null> {
   const res = await request.post(`${API_BASE}/quotes`, {

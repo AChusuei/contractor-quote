@@ -191,8 +191,9 @@ export function IntakeReviewPage() {
     }
   }
 
+  usePageTitle("Review & Submit")
+
   if (loading) {
-  usePageTitle("Review \& Submit")
     return (
       <div className="max-w-xl mx-auto flex min-h-[40vh] items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading your quote details...</p>

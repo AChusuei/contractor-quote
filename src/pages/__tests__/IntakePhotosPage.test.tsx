@@ -1,5 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { MemoryRouter, Routes, Route } from "react-router-dom"
+import type * as ReactRouterDom from "react-router-dom"
+import type * as Components from "components"
 import { vi, describe, it, expect, beforeEach } from "vitest"
 import { IntakePhotosPage } from "../IntakePhotosPage"
 import type { UploadFile } from "components"
@@ -8,7 +10,7 @@ import type { UploadFile } from "components"
 
 const mockNavigate = vi.fn()
 vi.mock("react-router-dom", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-router-dom")>()
+  const actual = await importOriginal<typeof ReactRouterDom>()
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
@@ -22,7 +24,7 @@ vi.mock("@/lib/supabase", () => ({
 let capturedOnChange: ((files: UploadFile[]) => void) | undefined
 
 vi.mock("components", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("components")>()
+  const actual = await importOriginal<typeof Components>()
   return {
     ...actual,
     FileUpload: (props: {

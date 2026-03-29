@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test"
+import type { Page } from "@playwright/test"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /** Fill the Step 1 intake form with valid data */
-async function fillStep1(page: import("@playwright/test").Page) {
+async function fillStep1(page: Page) {
   await page.getByLabel("Full Name").fill("Jane Doe")
   await page.getByLabel("Email").fill("jane@example.com")
   await page.getByLabel("Phone").fill("(718) 555-1234")
@@ -16,7 +17,7 @@ async function fillStep1(page: import("@playwright/test").Page) {
 }
 
 /** Fill the Step 2 scope form with valid data */
-async function fillStep2(page: import("@playwright/test").Page) {
+async function fillStep2(page: Page) {
   await page.getByText("Supply + install").click()
   await page.getByText("No", { exact: true }).first().click() // layout changes
   await page.getByText("Medium (70–150 sq ft)").click()
