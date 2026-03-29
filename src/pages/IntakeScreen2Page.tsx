@@ -8,6 +8,7 @@ import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { attachScope } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
+import { useDevAction } from "@/components/DevToolbar"
 import { apiPatch, isNetworkError } from "@/lib/api"
 
 const applianceSchema = z.enum(["new", "existing", "none"])
@@ -273,10 +274,34 @@ export function IntakeScreen2Page() {
   useEffect(() => {
     if (!readOnly && valuesRef) {
       valuesRef.current = () => ({ scope: getValues() }) as Record<string, unknown>
-  usePageTitle("Project Scope")
       return () => { valuesRef.current = null }
     }
   }, [readOnly, valuesRef, getValues])
+
+  usePageTitle("Project Scope")
+  useDevAction(readOnly ? null : {
+    label: "Fill",
+    onClick: () => reset({
+      scopeType: "supply_install",
+      layoutChanges: "no",
+      kitchenSize: "medium",
+      cabinets: "new",
+      cabinetDoorStyle: "Shaker",
+      countertopMaterial: "Quartz",
+      countertopEdge: "Eased",
+      sinkType: "Undermount single basin",
+      backsplash: "yes",
+      flooringAction: "keep",
+      applianceFridge: "existing",
+      applianceRange: "new",
+      applianceDishwasher: "new",
+      applianceHood: "none",
+      applianceMicrowave: "existing",
+      islandPeninsula: "none",
+      designHelp: "no",
+      additionalNotes: "Looking to do a full kitchen reno, open to suggestions on layout.",
+    }),
+  })
 
   const layoutChanges = watch("layoutChanges")
   const flooringAction = watch("flooringAction")
@@ -322,34 +347,6 @@ export function IntakeScreen2Page() {
         )}
       </div>
 
-      {!readOnly && import.meta.env.DEV && (
-        <button
-          type="button"
-          onClick={() => reset({
-            scopeType: "supply_install",
-            layoutChanges: "no",
-            kitchenSize: "medium",
-            cabinets: "new",
-            cabinetDoorStyle: "Shaker",
-            countertopMaterial: "Quartz",
-            countertopEdge: "Eased",
-            sinkType: "Undermount single basin",
-            backsplash: "yes",
-            flooringAction: "keep",
-            applianceFridge: "existing",
-            applianceRange: "new",
-            applianceDishwasher: "new",
-            applianceHood: "none",
-            applianceMicrowave: "existing",
-            islandPeninsula: "none",
-            designHelp: "no",
-            additionalNotes: "Looking to do a full kitchen reno, open to suggestions on layout.",
-          })}
-          className="mb-4 w-full rounded border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
-        >
-          ⚡ Fill test data (dev only)
-        </button>
-      )}
 
       <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-6">
 

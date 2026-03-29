@@ -22,7 +22,7 @@ import "./index.css"
   }
 })()
 import App from "./App.tsx"
-import { DevThemeToggle } from "@/components/DevThemeToggle"
+import { DevToolbar, DevActionProvider } from "@/components/DevToolbar"
 import { ContractorProvider } from "@/components/ContractorProvider"
 import { seedMockQuotes } from "@/lib/quoteStore"
 
@@ -49,8 +49,10 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <ContractorProvider>
-        <DevThemeToggle />
-        <Root />
+        <DevActionProvider>
+          <DevToolbar />
+          <Root />
+        </DevActionProvider>
       </ContractorProvider>
     </BrowserRouter>
   </StrictMode>,

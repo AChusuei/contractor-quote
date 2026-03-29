@@ -12,6 +12,7 @@ import { useQuoteContext } from "@/lib/QuoteContext"
 import { useTurnstile } from "@/components/Turnstile"
 import { apiPost, apiPatch, isNetworkError } from "@/lib/api"
 import { getActiveDraft, saveDraft, touchDraft } from "@/lib/draftSession"
+import { useDevAction } from "@/components/DevToolbar"
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
@@ -119,6 +120,21 @@ export function IntakePage() {
 
   const { getToken: getTurnstileToken, resetToken: resetTurnstile, TurnstileWidget } =
     useTurnstile(readOnly ? undefined : TURNSTILE_SITE_KEY)
+
+  useDevAction(readOnly ? null : {
+    label: "Fill",
+    onClick: () => reset({
+      name: "John Smith",
+      email: "john.smith@example.com",
+      phone: "(718) 555-1234",
+      cell: "(718) 555-5678",
+      jobSiteAddress: "148-03 Kalmia Avenue, Flushing, New York 11355, United States",
+      propertyType: "house",
+      budgetRange: "25-50k",
+      howDidYouFindUs: "referral",
+      referredByContractor: "Mike's Contracting",
+    }),
+  })
 
   const valuesRef = ctx?.valuesRef
   useEffect(() => {
@@ -234,25 +250,6 @@ export function IntakePage() {
         )}
       </div>
 
-      {!readOnly && import.meta.env.DEV && (
-        <button
-          type="button"
-          onClick={() => reset({
-            name: "John Smith",
-            email: "john.smith@example.com",
-            phone: "(718) 555-1234",
-            cell: "(718) 555-5678",
-            jobSiteAddress: "148-03 Kalmia Avenue, Flushing, New York 11355, United States",
-            propertyType: "house",
-            budgetRange: "25-50k",
-            howDidYouFindUs: "referral",
-            referredByContractor: "Mike's Contracting",
-          })}
-          className="mb-4 w-full rounded border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
-        >
-          ⚡ Fill test data (dev only)
-        </button>
-      )}
 
       <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-4">
         {/* Name */}
