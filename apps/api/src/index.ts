@@ -443,7 +443,7 @@ app.patch(
         .run()
     }
 
-    if (quoteClauses.length === 0 && custClauses.length === 0) {
+    if (quoteUp.clauses.length === 0 && custUp.clauses.length === 0) {
       return apiError(c, "VALIDATION_ERROR", "No fields to update")
     }
 
