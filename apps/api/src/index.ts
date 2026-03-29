@@ -403,41 +403,43 @@ app.patch(
       referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
     }
 
-    // Update quotes table
-    const quoteClauses: string[] = []
-    const quoteBinds: unknown[] = []
-    for (const [key, mapping] of Object.entries(quoteFields)) {
-      if (key in data && mapping.value !== undefined) {
-        quoteClauses.push(`${mapping.column} = ?`)
-        quoteBinds.push(mapping.value ?? null)
+    // Helper: collect SET clauses, converting undefined → null for D1
+    function collectUpdates(
+      fieldMap: Record<string, { column: string; value: unknown }>,
+      sourceData: Record<string, unknown>
+    ): { clauses: string[]; binds: unknown[] } {
+      const clauses: string[] = []
+      const binds: unknown[] = []
+      for (const [key, mapping] of Object.entries(fieldMap)) {
+        if (key in sourceData && sourceData[key] !== undefined) {
+          clauses.push(`${mapping.column} = ?`)
+          binds.push(mapping.value ?? null)
+        }
       }
+      return { clauses, binds }
     }
-    if (quoteClauses.length > 0) {
-      quoteClauses.push("updated_at = datetime('now')")
-      quoteBinds.push(quoteId)
+
+    // Update quotes table
+    const quoteUp = collectUpdates(quoteFields, data as Record<string, unknown>)
+    if (quoteUp.clauses.length > 0) {
+      quoteUp.clauses.push("updated_at = datetime('now')")
+      quoteUp.binds.push(quoteId)
       await c.env.DB.prepare(
-        `UPDATE quotes SET ${quoteClauses.join(", ")} WHERE id = ?`
+        `UPDATE quotes SET ${quoteUp.clauses.join(", ")} WHERE id = ?`
       )
-        .bind(...quoteBinds)
+        .bind(...quoteUp.binds)
         .run()
     }
 
     // Update customers table
-    const custClauses: string[] = []
-    const custBinds: unknown[] = []
-    for (const [key, mapping] of Object.entries(customerFields)) {
-      if (key in data && mapping.value !== undefined) {
-        custClauses.push(`${mapping.column} = ?`)
-        custBinds.push(mapping.value ?? null)
-      }
-    }
-    if (custClauses.length > 0) {
-      custClauses.push("updated_at = datetime('now')")
-      custBinds.push(quote.customer_id)
+    const custUp = collectUpdates(customerFields, data as Record<string, unknown>)
+    if (custUp.clauses.length > 0) {
+      custUp.clauses.push("updated_at = datetime('now')")
+      custUp.binds.push(quote.customer_id)
       await c.env.DB.prepare(
-        `UPDATE customers SET ${custClauses.join(", ")} WHERE id = ?`
+        `UPDATE customers SET ${custUp.clauses.join(", ")} WHERE id = ?`
       )
-        .bind(...custBinds)
+        .bind(...custUp.binds)
         .run()
     }
 
