@@ -6,7 +6,7 @@ const LOGO_URL = logoUrl || (import.meta.env.VITE_CQ_LOGO_URL as string | undefi
 export function AppShell() {
   return (
     <div className="min-h-screen bg-background">
-      <header className="flex h-16 shrink-0 items-center border-b px-6">
+      <header className="flex h-14 shrink-0 items-center border-b px-6">
         {LOGO_URL
           ? <img src={LOGO_URL} alt="Logo" className="h-8 w-auto object-contain" />
           : <span className="font-semibold text-sm">Contractor Quote</span>
