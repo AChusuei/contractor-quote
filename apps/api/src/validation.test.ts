@@ -24,7 +24,6 @@ describe("quoteSubmissionSchema", () => {
       cell: "(555) 987-6543",
       howDidYouFindUs: "Google",
       referredByContractor: "Bob",
-      quotePath: "site_visit",
       scope: { cabinets: true, countertops: false },
     })
     expect(result.success).toBe(true)
@@ -188,7 +187,6 @@ describe("quoteUpdateSchema", () => {
       jobSiteAddress: "456 Oak Ave",
       propertyType: "apt",
       budgetRange: "25-50k",
-      quotePath: "site_visit",
     })
     expect(result.success).toBe(true)
   })

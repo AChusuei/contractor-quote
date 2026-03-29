@@ -9,18 +9,20 @@ type Row = Record<string, unknown>
 
 function makeD1Mock(
   quotesForEmail: Row[] = [],
-  opts?: { appointmentChanges?: number; activityChanges?: number; quoteChanges?: number }
+  opts?: { appointmentChanges?: number; activityChanges?: number; quoteChanges?: number; photos?: Row[] }
 ) {
-  const { appointmentChanges = 0, activityChanges = 0, quoteChanges = 0 } = opts ?? {}
+  const { appointmentChanges = 0, activityChanges = 0, quoteChanges = 0, photos = [] } = opts ?? {}
 
   let callIndex = 0
-  const selectResult = { results: quotesForEmail }
+  const selectQuotes = { results: quotesForEmail }
+  const selectPhotos = { results: photos }
+  const deletePhotoRecords = { meta: { changes: photos.length } }
   const deleteAppointments = { meta: { changes: appointmentChanges } }
   const deleteActivity = { meta: { changes: activityChanges } }
   const deleteQuotes = { meta: { changes: quoteChanges } }
   const insertLog = { meta: { changes: 1 } }
 
-  const responses = [selectResult, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
+  const responses = [selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
 
   const prepare = vi.fn().mockImplementation(() => {
     const idx = callIndex++
@@ -117,15 +119,20 @@ describe("DELETE /api/v1/customers/:email", () => {
 
   it("deletes customer data and returns counts", async () => {
     const quotes = [
-      { id: "quote-1", photo_session_id: "session-abc" },
-      { id: "quote-2", photo_session_id: null },
+      { id: "quote-1" },
+      { id: "quote-2" },
+    ]
+    const photos = [
+      { storage_key: "contractor-001/quote-1/photo1.jpg" },
+      { storage_key: "contractor-001/quote-1/photo2.jpg" },
     ]
     const db = makeD1Mock(quotes, {
       appointmentChanges: 1,
       activityChanges: 3,
       quoteChanges: 2,
+      photos,
     })
-    const r2 = makeR2Mock([{ key: "session-abc/photo1.jpg" }, { key: "session-abc/photo2.jpg" }])
+    const r2 = makeR2Mock()
     const env = makeEnv(db, r2)
     const req = makeDeleteRequest("jane@example.com", { requestType: "ccpa" })
     const res = await app.fetch(req, env)
@@ -137,9 +144,10 @@ describe("DELETE /api/v1/customers/:email", () => {
     expect(body.data.appointmentsDeleted).toBe(1)
     expect(body.data.activityRecordsDeleted).toBe(3)
 
-    // R2 should have been called to list and delete photos
-    expect(r2.list).toHaveBeenCalledWith({ prefix: "session-abc/" })
+    // R2 should have been called to delete each photo by storage key
     expect(r2.delete).toHaveBeenCalledTimes(2)
+    expect(r2.delete).toHaveBeenCalledWith("contractor-001/quote-1/photo1.jpg")
+    expect(r2.delete).toHaveBeenCalledWith("contractor-001/quote-1/photo2.jpg")
   })
 
   it("validates requestType in body", async () => {
@@ -154,7 +162,7 @@ describe("DELETE /api/v1/customers/:email", () => {
   })
 
   it("handles URL-encoded email addresses", async () => {
-    const quotes = [{ id: "quote-1", photo_session_id: null }]
+    const quotes = [{ id: "quote-1" }]
     const db = makeD1Mock(quotes, { quoteChanges: 1 })
     const env = makeEnv(db)
     const req = makeDeleteRequest("user+tag@example.com", { requestType: "customer" })

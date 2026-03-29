@@ -91,8 +91,6 @@ export const quoteSubmissionSchema = z.object({
   cell: sanitizedMax(50, "Cell number is too long").optional(),
   howDidYouFindUs: sanitizedMax(500, "Response is too long").optional(),
   referredByContractor: sanitizedMax(200, "Referral name is too long").optional(),
-  quotePath: z.enum(["site_visit", "estimate_requested"]).optional(),
-  photoSessionId: sanitizedMax(200, "Photo session ID is too long").optional(),
   status: z.enum(["draft", "lead"]).optional(),
 })
 
@@ -147,8 +145,6 @@ export const quoteUpdateSchema = z
     cell: sanitizedMax(50, "Cell number is too long"),
     howDidYouFindUs: sanitizedMax(500, "Response is too long"),
     referredByContractor: sanitizedMax(200, "Referral name is too long"),
-    quotePath: z.enum(["site_visit", "estimate_requested"]),
-    photoSessionId: sanitizedMax(200, "Photo session ID is too long"),
   })
   .partial()
   .refine(
@@ -210,8 +206,6 @@ export const draftUpdateSchema = z.object({
       "Scope data must be 10KB or smaller"
     )
     .optional(),
-
-  photoSessionId: sanitizedMax(200, "Photo session ID is too long").optional(),
 
   status: z.enum(["lead"], {
     error: "Drafts can only be submitted (status set to lead)",

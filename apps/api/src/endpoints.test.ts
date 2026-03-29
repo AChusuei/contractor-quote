@@ -113,7 +113,6 @@ describe("POST /api/v1/quotes", () => {
       cell: "(555) 999-8888",
       howDidYouFindUs: "Google",
       referredByContractor: "Bob",
-      quotePath: "site_visit",
       scope: { cabinets: true },
     })
     expect(res.status).toBe(201)

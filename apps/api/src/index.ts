@@ -388,7 +388,6 @@ app.patch(
     // --- Build dynamic UPDATE ---
     const fieldMap: Record<string, { column: string; value: unknown }> = {
       scope: { column: "scope", value: data.scope !== undefined ? JSON.stringify(data.scope) : undefined },
-      photoSessionId: { column: "photo_session_id", value: data.photoSessionId },
       status: { column: "status", value: data.status },
       name: { column: "name", value: data.name },
       email: { column: "email", value: data.email },
@@ -1448,10 +1447,10 @@ app.delete(
 
     // Find all quotes for this email belonging to this contractor
     const { results: quotes } = await c.env.DB.prepare(
-      "SELECT id, photo_session_id FROM quotes WHERE email = ? AND contractor_id = ?"
+      "SELECT q.id FROM quotes q JOIN customers cu ON cu.id = q.customer_id WHERE cu.email = ? AND q.contractor_id = ?"
     )
       .bind(email, contractorId)
-      .all<{ id: string; photo_session_id: string | null }>()
+      .all<{ id: string }>()
 
     if (!quotes || quotes.length === 0) {
       return apiError(c, "NOT_FOUND", "No customer data found for this email address")
@@ -1459,23 +1458,30 @@ app.delete(
 
     const quoteIds = quotes.map((q) => q.id)
 
-    // Collect photo session IDs for R2 cleanup
-    const photoSessionIds = quotes
-      .map((q) => q.photo_session_id)
-      .filter((id): id is string => id !== null)
+    // Find photo storage keys for R2 cleanup
+    const photoPlaceholders = quoteIds.map(() => "?").join(", ")
+    const { results: photos } = await c.env.DB.prepare(
+      `SELECT storage_key FROM photos WHERE quote_id IN (${photoPlaceholders}) AND contractor_id = ?`
+    )
+      .bind(...quoteIds, contractorId)
+      .all<{ storage_key: string }>()
 
     // Delete photos from R2 storage
     let photosDeleted = 0
-    for (const sessionId of photoSessionIds) {
-      const listed = await c.env.STORAGE.list({ prefix: `${sessionId}/` })
-      for (const obj of listed.objects) {
-        await c.env.STORAGE.delete(obj.key)
-        photosDeleted++
-      }
+    for (const photo of photos) {
+      await c.env.STORAGE.delete(photo.storage_key)
+      photosDeleted++
     }
 
-    // Delete appointments
+    // Delete photo records from DB
     const placeholders = quoteIds.map(() => "?").join(", ")
+    await c.env.DB.prepare(
+      `DELETE FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+    )
+      .bind(...quoteIds, contractorId)
+      .run()
+
+    // Delete appointments
     const appointmentResult = await c.env.DB.prepare(
       `DELETE FROM appointments WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
     )
