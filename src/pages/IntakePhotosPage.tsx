@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { useState, useCallback, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { FileUpload, type UploadFile } from "components"
@@ -53,6 +54,7 @@ export function IntakePhotosPage() {
         if (!cancelled) setLoading(false)
       })
 
+  usePageTitle("Photos")
     return () => { cancelled = true }
   }, [quoteId, publicToken])
 

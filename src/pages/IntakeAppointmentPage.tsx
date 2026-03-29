@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { useMemo } from "react"
 import { getQuote, getActiveQuoteId } from "@/lib/quoteStore"
 
@@ -16,6 +17,7 @@ export function IntakeAppointmentPage() {
     return url.toString()
   }, [])
 
+  usePageTitle("Schedule Appointment")
   return (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">

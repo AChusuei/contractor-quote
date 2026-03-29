@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { useState, useEffect } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Button } from "components"
@@ -187,6 +188,7 @@ export function IntakeReviewPage() {
   }
 
   if (loading) {
+  usePageTitle("Review \& Submit")
     return (
       <div className="max-w-xl mx-auto flex min-h-[40vh] items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading your quote details...</p>

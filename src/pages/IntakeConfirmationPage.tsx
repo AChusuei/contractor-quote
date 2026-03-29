@@ -1,9 +1,11 @@
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { useNavigate } from "react-router-dom"
 import { Button } from "components"
 
 export function IntakeConfirmationPage() {
   const navigate = useNavigate()
 
+  usePageTitle("Request Confirmed")
   return (
     <div className="max-w-xl mx-auto text-center py-12">
       <div className="mb-8">

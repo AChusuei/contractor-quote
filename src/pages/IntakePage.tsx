@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { useState, useEffect } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
@@ -85,6 +86,7 @@ function inputClass(hasError?: boolean) {
 }
 
 export function IntakePage() {
+  usePageTitle("Customer Information")
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
   const ctx = useQuoteContext()

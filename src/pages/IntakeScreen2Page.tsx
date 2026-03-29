@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { useEffect } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
@@ -272,6 +273,7 @@ export function IntakeScreen2Page() {
   useEffect(() => {
     if (!readOnly && valuesRef) {
       valuesRef.current = () => ({ scope: getValues() }) as Record<string, unknown>
+  usePageTitle("Project Scope")
       return () => { valuesRef.current = null }
     }
   }, [readOnly, valuesRef, getValues])
