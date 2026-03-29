@@ -32,11 +32,15 @@ export function useContractor(): ContractorContextValue {
  */
 export function getSlugFromDomain(): string | null {
   const hostname = window.location.hostname
-  // Local dev — no subdomain
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
+  // Local dev — no subdomain (localhost, 127.0.0.1, or any IP address)
+  const isLocalDev =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(hostname) // any IPv4 address
+  if (isLocalDev) {
     return (import.meta.env.VITE_CQ_CONTRACTOR_SLUG as string | undefined) ?? "central-cabinets"
   }
-  // Production — extract subdomain
+  // Production — extract subdomain (e.g. central-cabinets.quotetool.io)
   const parts = hostname.split(".")
   if (parts.length >= 3) {
     return parts[0]
