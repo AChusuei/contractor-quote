@@ -578,14 +578,27 @@ export function IntakeScreen2Page() {
           {flooringAction === "replace" && (
             <div className="mt-2">
               <Label htmlFor="flooringType">Flooring type {!readOnly && "*"}</Label>
-              <input
+              <select
                 id="flooringType"
-                type="text"
-                placeholder={readOnly ? "" : "e.g. Hardwood, Tile, LVP"}
                 disabled={readOnly}
                 className={inputClass(!!errors.flooringType)}
                 {...register("flooringType")}
-              />
+                defaultValue=""
+              >
+                <option value="" disabled>Select flooring type</option>
+                <option value="lvp">Luxury Vinyl Plank (LVP)</option>
+                <option value="lvt">Luxury Vinyl Tile (LVT)</option>
+                <option value="hardwood">Hardwood</option>
+                <option value="engineered_hardwood">Engineered Hardwood</option>
+                <option value="ceramic_tile">Ceramic Tile</option>
+                <option value="porcelain_tile">Porcelain Tile</option>
+                <option value="natural_stone">Natural Stone (Marble, Slate, Travertine)</option>
+                <option value="laminate">Laminate</option>
+                <option value="linoleum">Linoleum / Sheet Vinyl</option>
+                <option value="cork">Cork</option>
+                <option value="concrete">Polished Concrete</option>
+                <option value="undecided">Not sure yet</option>
+              </select>
               <FieldError message={errors.flooringType?.message} />
             </div>
           )}
