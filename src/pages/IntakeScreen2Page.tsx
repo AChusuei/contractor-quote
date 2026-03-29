@@ -301,6 +301,15 @@ export function IntakeScreen2Page() {
 
   return (
     <div className="max-w-xl mx-auto">
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="mb-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Back
+        </button>
+      )}
       <div className="mb-6">
         {!readOnly && (
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 4</p>

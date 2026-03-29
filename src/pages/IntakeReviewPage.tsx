@@ -212,6 +212,13 @@ export function IntakeReviewPage() {
 
   return (
     <div className="max-w-xl mx-auto">
+      <button
+        type="button"
+        onClick={() => navigate("/intake/photos")}
+        className="mb-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        ← Back
+      </button>
       <div className="mb-6">
         <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 4 of 4</p>
         <h1 className="text-2xl font-semibold">Review Your Request</h1>
