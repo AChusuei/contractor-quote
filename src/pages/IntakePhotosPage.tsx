@@ -6,7 +6,7 @@ import { uploadQuotePhoto, getQuotePhotos, deleteQuotePhoto, type PhotoMeta } fr
 import { useQuoteContext } from "@/lib/QuoteContext"
 
 const MAX_PHOTOS = 10
-const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 const ACCEPT = {
   "image/jpeg": [".jpg", ".jpeg"],
   "image/png": [".png"],
