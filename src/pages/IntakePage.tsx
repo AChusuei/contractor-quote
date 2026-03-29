@@ -10,7 +10,7 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 import { createQuote } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
 import { useTurnstile } from "@/components/Turnstile"
-import { apiPost, apiPatch, isNetworkError } from "@/lib/api"
+import { apiPost, apiPatch, apiGet, isNetworkError } from "@/lib/api"
 import { getActiveDraft, saveDraft, touchDraft } from "@/lib/draftSession"
 import { useDevAction } from "@/components/DevToolbar"
 
@@ -117,6 +117,38 @@ export function IntakePage() {
       referredByContractor: quote?.referredByContractor ?? "",
     },
   })
+
+  // Restore form from active draft when navigating back
+  useEffect(() => {
+    if (readOnly || quote) return // admin view or already have data
+    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
+    const draft = getActiveDraft(contractorId)
+    if (!draft) return
+    const publicToken = draft.publicToken
+    apiGet<{
+      name: string; email: string; phone: string; cell?: string
+      jobSiteAddress: string; propertyType: string; budgetRange: string
+      howDidYouFindUs?: string; referredByContractor?: string
+    }>(`/quotes/${encodeURIComponent(draft.quoteId)}/draft?publicToken=${encodeURIComponent(publicToken)}`)
+      .then((res) => {
+        if (res.ok) {
+          reset({
+            name: res.data.name ?? "",
+            email: res.data.email ?? "",
+            phone: res.data.phone ?? "",
+            cell: res.data.cell ?? "",
+            jobSiteAddress: res.data.jobSiteAddress ?? "",
+            propertyType: res.data.propertyType as IntakeFormData["propertyType"],
+            budgetRange: res.data.budgetRange as IntakeFormData["budgetRange"],
+            howDidYouFindUs: res.data.howDidYouFindUs ?? "",
+            referredByContractor: res.data.referredByContractor ?? "",
+          })
+          sessionStorage.setItem("cq_active_quote_id", draft.quoteId)
+          sessionStorage.setItem("cq_public_token", draft.publicToken)
+        }
+      })
+      .catch(() => { /* draft fetch failed — start fresh */ })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { getToken: getTurnstileToken, resetToken: resetTurnstile, TurnstileWidget } =
     useTurnstile(readOnly ? undefined : TURNSTILE_SITE_KEY)

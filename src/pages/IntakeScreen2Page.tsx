@@ -8,6 +8,8 @@ import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { attachScope } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
+import { apiGet } from "@/lib/api"
+import { getActiveDraft } from "@/lib/draftSession"
 import { useDevAction } from "@/components/DevToolbar"
 import { apiPatch, isNetworkError } from "@/lib/api"
 
@@ -285,6 +287,23 @@ export function IntakeScreen2Page() {
       return () => { valuesRef.current = null }
     }
   }, [readOnly, valuesRef, getValues])
+
+  // Restore scope from active draft when navigating back
+  useEffect(() => {
+    if (readOnly || scope) return
+    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
+    const draft = getActiveDraft(contractorId)
+    if (!draft) return
+    apiGet<{ scope: Record<string, unknown> | null }>(
+      `/quotes/${encodeURIComponent(draft.quoteId)}/draft?publicToken=${encodeURIComponent(draft.publicToken)}`
+    )
+      .then((res) => {
+        if (res.ok && res.data.scope) {
+          reset(res.data.scope as IntakeScreen2Data)
+        }
+      })
+      .catch(() => { /* draft fetch failed — start fresh */ })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   usePageTitle("Project Scope")
   useDevAction(readOnly ? null : {
