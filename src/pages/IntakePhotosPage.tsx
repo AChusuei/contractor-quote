@@ -54,9 +54,10 @@ export function IntakePhotosPage() {
         if (!cancelled) setLoading(false)
       })
 
-  usePageTitle("Photos")
     return () => { cancelled = true }
   }, [quoteId, publicToken])
+
+  usePageTitle("Photos")
 
   const isUploading = files.some((f) => f.status === "uploading")
   const hasError = files.some((f) => f.status === "error")
