@@ -13,6 +13,7 @@ import { useTurnstile } from "@/components/Turnstile"
 import { apiPost, apiPatch, apiGet, isNetworkError } from "@/lib/api"
 import { getActiveDraft, saveDraft, touchDraft } from "@/lib/draftSession"
 import { useDevAction } from "@/components/DevToolbar"
+import { useSaveOnLeave } from "@/hooks/useSaveOnLeave"
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
@@ -166,6 +167,24 @@ export function IntakePage() {
       howDidYouFindUs: "referral",
       referredByContractor: "Mike's Contracting",
     }),
+  })
+
+  // Save form state when tab switches, phone locks, or page unloads
+  useSaveOnLeave(() => {
+    if (readOnly) return null
+    const v = getValues()
+    if (!v.name && !v.email) return null // nothing to save
+    return {
+      name: v.name,
+      email: v.email,
+      phone: v.phone,
+      cell: v.cell || undefined,
+      jobSiteAddress: v.jobSiteAddress,
+      propertyType: v.propertyType,
+      budgetRange: v.budgetRange,
+      howDidYouFindUs: v.howDidYouFindUs,
+      referredByContractor: v.referredByContractor || undefined,
+    }
   })
 
   const valuesRef = ctx?.valuesRef

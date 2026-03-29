@@ -10,6 +10,7 @@ import { attachScope } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
 import { apiGet } from "@/lib/api"
 import { getActiveDraft } from "@/lib/draftSession"
+import { useSaveOnLeave } from "@/hooks/useSaveOnLeave"
 import { useDevAction } from "@/components/DevToolbar"
 import { apiPatch, isNetworkError } from "@/lib/api"
 
@@ -328,6 +329,12 @@ export function IntakeScreen2Page() {
       designHelp: "no",
       additionalNotes: "Looking to do a full kitchen reno, open to suggestions on layout.",
     }),
+  })
+
+  // Save scope when tab switches, phone locks, or page unloads
+  useSaveOnLeave(() => {
+    if (readOnly) return null
+    return { scope: getValues() }
   })
 
   const layoutChanges = watch("layoutChanges")

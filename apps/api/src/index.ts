@@ -336,7 +336,7 @@ app.get(
 // ---------------------------------------------------------------------------
 app.patch(
   "/quotes/:quoteId/draft",
-  rateLimit({ limit: 30, windowSeconds: 3600, keyPrefix: "draft-update" }),
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "draft-update" }),
   async (c) => {
     const quoteId = c.req.param("quoteId")
 
