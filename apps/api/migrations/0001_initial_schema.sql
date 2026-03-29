@@ -6,6 +6,7 @@ PRAGMA foreign_keys = ON;
 -- Contractors (one row per tenant)
 CREATE TABLE contractors (
   id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,         -- URL-safe identifier, e.g. 'central-cabinets' → {slug}.contractorquote.work
   name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
@@ -116,6 +117,7 @@ CREATE TABLE appointments (
 );
 
 -- Indexes for common queries
+CREATE INDEX idx_contractors_slug ON contractors(slug);
 CREATE INDEX idx_customers_contractor ON customers(contractor_id);
 CREATE INDEX idx_customers_email ON customers(contractor_id, email);
 CREATE INDEX idx_quotes_customer ON quotes(customer_id);
@@ -137,8 +139,9 @@ CREATE INDEX idx_appointments_quote ON appointments(quote_id);
 CREATE INDEX idx_appointments_customer ON appointments(customer_id);
 
 -- Seed: default contractor for dev
-INSERT INTO contractors (id, name, logo_url) VALUES (
+INSERT INTO contractors (id, slug, name, logo_url) VALUES (
   'contractor-001',
+  'central-cabinets',
   'Central Cabinets',
   NULL
 );

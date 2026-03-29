@@ -89,6 +89,34 @@ app.get("/health", (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// Public contractor lookup by slug (unauthenticated)
+// ---------------------------------------------------------------------------
+app.get("/contractors/by-slug/:slug", async (c) => {
+  const slug = c.req.param("slug")
+  const contractor = await c.env.DB.prepare(
+    "SELECT id, slug, name, logo_url, calendar_url, phone FROM contractors WHERE slug = ?"
+  )
+    .bind(slug)
+    .first<{ id: string; slug: string; name: string; logo_url: string | null; calendar_url: string | null; phone: string | null }>()
+
+  if (!contractor) {
+    return apiError(c, "NOT_FOUND", "Contractor not found")
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      id: contractor.id,
+      slug: contractor.slug,
+      name: contractor.name,
+      logoUrl: contractor.logo_url,
+      calendarUrl: contractor.calendar_url,
+      phone: contractor.phone,
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Quote submission
 // ---------------------------------------------------------------------------
 app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote-submit" }), async (c) => {
