@@ -10,7 +10,8 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 import { createQuote } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
 import { useTurnstile } from "@/components/Turnstile"
-import { apiPost, isNetworkError } from "@/lib/api"
+import { apiPost, apiPatch, isNetworkError } from "@/lib/api"
+import { getActiveDraft, saveDraft, touchDraft } from "@/lib/draftSession"
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
@@ -142,11 +143,12 @@ export function IntakePage() {
     try {
       const turnstileToken = TURNSTILE_SITE_KEY ? getTurnstileToken() : undefined
 
-      // Try API first — create as draft
-      const res = await apiPost<{ id: string; publicToken: string }>("/quotes", {
+      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
+      const existingDraft = getActiveDraft()
+
+      const payload = {
         schemaVersion: 1,
-        contractorId: import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001",
-        status: "draft",
+        contractorId,
         name: data.name,
         email: data.email,
         phone: data.phone,
@@ -157,29 +159,57 @@ export function IntakePage() {
         howDidYouFindUs: data.howDidYouFindUs,
         referredByContractor: data.referredByContractor || undefined,
         turnstileToken,
-      })
+      }
 
-      if (res.ok) {
-        // Store the quote ID and public token for subsequent steps
-        sessionStorage.setItem("cq_active_quote_id", res.data.id)
-        sessionStorage.setItem("cq_public_token", res.data.publicToken)
-      } else if (isNetworkError(res)) {
-        // Fallback to localStorage when API is unreachable
-        console.warn("API unreachable — falling back to localStorage")
-        const localQuote = createQuote({
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          cell: data.cell,
-          jobSiteAddress: data.jobSiteAddress,
-          propertyType: data.propertyType,
-          budgetRange: data.budgetRange,
-          howDidYouFindUs: data.howDidYouFindUs,
-          referredByContractor: data.referredByContractor,
-        })
-        sessionStorage.setItem("cq_active_quote_id", localQuote.id)
+      if (existingDraft && existingDraft.contractorId === contractorId) {
+        // Resume existing draft — PATCH instead of POST
+        const res = await apiPatch(
+          `/quotes/${encodeURIComponent(existingDraft.quoteId)}/draft`,
+          { ...payload, publicToken: existingDraft.publicToken }
+        )
+        if (res.ok) {
+          touchDraft()
+          sessionStorage.setItem("cq_active_quote_id", existingDraft.quoteId)
+          sessionStorage.setItem("cq_public_token", existingDraft.publicToken)
+        } else if (isNetworkError(res)) {
+          // API down — proceed with stale draft ID, will sync later
+          sessionStorage.setItem("cq_active_quote_id", existingDraft.quoteId)
+          sessionStorage.setItem("cq_public_token", existingDraft.publicToken)
+        } else {
+          // Draft expired or deleted server-side — create a new one
+          const newRes = await apiPost<{ id: string; publicToken: string }>("/quotes", { ...payload, status: "draft" })
+          if (newRes.ok) {
+            saveDraft(newRes.data.id, newRes.data.publicToken, contractorId)
+            sessionStorage.setItem("cq_active_quote_id", newRes.data.id)
+            sessionStorage.setItem("cq_public_token", newRes.data.publicToken)
+          } else {
+            throw new Error(newRes.ok === false ? newRes.error || "Submission failed" : "Submission failed")
+          }
+        }
       } else {
-        throw new Error(res.error || "Submission failed")
+        // No existing draft — create new
+        const res = await apiPost<{ id: string; publicToken: string }>("/quotes", { ...payload, status: "draft" })
+        if (res.ok) {
+          saveDraft(res.data.id, res.data.publicToken, contractorId)
+          sessionStorage.setItem("cq_active_quote_id", res.data.id)
+          sessionStorage.setItem("cq_public_token", res.data.publicToken)
+        } else if (isNetworkError(res)) {
+          console.warn("API unreachable — falling back to localStorage")
+          const localQuote = createQuote({
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            cell: data.cell,
+            jobSiteAddress: data.jobSiteAddress,
+            propertyType: data.propertyType,
+            budgetRange: data.budgetRange,
+            howDidYouFindUs: data.howDidYouFindUs,
+            referredByContractor: data.referredByContractor,
+          })
+          sessionStorage.setItem("cq_active_quote_id", localQuote.id)
+        } else {
+          throw new Error(res.error || "Submission failed")
+        }
       }
 
       await submitToHubSpot(data)

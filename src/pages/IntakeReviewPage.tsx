@@ -174,9 +174,12 @@ export function IntakeReviewPage() {
         }
       }
 
-      // Clean up session storage
+      // Clean up session + draft storage — quote is now submitted
       sessionStorage.removeItem("cq_active_quote_id")
       sessionStorage.removeItem("cq_public_token")
+      // Dynamic import to avoid circular deps
+      const { clearDraft } = await import("@/lib/draftSession")
+      clearDraft()
       sessionStorage.removeItem("cq_quote_session_id")
 
       navigate("/intake/confirmation")
