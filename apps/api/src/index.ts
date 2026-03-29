@@ -368,10 +368,10 @@ app.patch(
 
     // --- Verify quote exists and is a draft, and publicToken matches ---
     const quote = await c.env.DB.prepare(
-      "SELECT id, contractor_id, status, public_token FROM quotes WHERE id = ?"
+      "SELECT id, contractor_id, customer_id, status, public_token FROM quotes WHERE id = ?"
     )
       .bind(quoteId)
-      .first<{ id: string; contractor_id: string; status: string; public_token: string }>()
+      .first<{ id: string; contractor_id: string; customer_id: string; status: string; public_token: string }>()
 
     if (!quote) {
       return apiError(c, "NOT_FOUND", "Quote not found")
