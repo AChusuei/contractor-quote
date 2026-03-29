@@ -356,7 +356,18 @@ export function IntakeScreen2Page() {
       {!readOnly && (
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={async () => {
+            // Save current form state before navigating back
+            const quoteId = sessionStorage.getItem("cq_active_quote_id")
+            const publicToken = sessionStorage.getItem("cq_public_token")
+            if (quoteId && publicToken) {
+              await apiPatch(`/quotes/${encodeURIComponent(quoteId)}/draft`, {
+                publicToken,
+                scope: getValues(),
+              }).catch(() => {})
+            }
+            navigate("/")
+          }}
           className="mb-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Back
