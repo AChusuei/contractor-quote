@@ -11,8 +11,18 @@ import "./index.css"
     theme === "dark" ||
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
   document.documentElement.classList.toggle("dark", prefersDark)
+
+  // Keep in sync with OS theme when set to "system"
+  if (theme === "system") {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+      if (localStorage.getItem("cq_theme") === "system") {
+        document.documentElement.classList.toggle("dark", e.matches)
+      }
+    })
+  }
 })()
 import App from "./App.tsx"
+import { DevThemeToggle } from "@/components/DevThemeToggle"
 import { seedMockQuotes } from "@/lib/quoteStore"
 
 if (import.meta.env.DEV) {
@@ -37,6 +47,7 @@ function Root() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
+      <DevThemeToggle />
       <Root />
     </BrowserRouter>
   </StrictMode>,
