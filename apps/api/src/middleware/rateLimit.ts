@@ -33,7 +33,12 @@ export function rateLimit(options: RateLimitOptions) {
   const { limit, windowSeconds, keyPrefix } = options
 
   return async (c: Context, next: Next) => {
-    const kv = c.env.KV as KVNamespace
+    const kv = c.env.KV as KVNamespace | undefined
+    if (!kv) {
+      // KV not available (local dev without remote bindings) — skip rate limiting
+      await next()
+      return
+    }
     const ip = getClientIp(c)
     const windowId = Math.floor(Date.now() / (windowSeconds * 1000))
     const key = `rl:${keyPrefix}:${ip}:${windowId}`
