@@ -547,9 +547,11 @@ app.patch(
         .first<{ name: string; email: string | null }>()
 
       if (contractor?.email) {
-        // Fetch updated quote for notification details
+        // Fetch updated quote + customer for notification details
         const updatedQuote = await c.env.DB.prepare(
-          "SELECT name, job_site_address, budget_range FROM quotes WHERE id = ?"
+          `SELECT c.name, q.job_site_address, q.budget_range
+           FROM quotes q JOIN customers c ON q.customer_id = c.id
+           WHERE q.id = ?`
         )
           .bind(quoteId)
           .first<{ name: string; job_site_address: string; budget_range: string }>()
