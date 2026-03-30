@@ -165,18 +165,6 @@ const columns: DataTableColumnDef<Quote>[] = [
     },
   },
   {
-    id: "_actions",
-    header: "",
-    accessorKey: "id",
-    cell: ({ getValue }) => (
-      <Link
-        to={`/admin/quotes/${getValue() as string}`}
-        className="text-xs font-medium text-primary hover:underline whitespace-nowrap"
-      >
-        View →
-      </Link>
-    ),
-  },
 ]
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -272,6 +260,7 @@ export function QuotesPage() {
         isLoading={isLoading}
         error={error}
         emptyMessage="No quotes yet."
+        onRowClick={(row) => navigate(`/admin/quotes/${row.id}`)}
         enableGlobalFilter
         enableColumnFilters
         enableSorting
