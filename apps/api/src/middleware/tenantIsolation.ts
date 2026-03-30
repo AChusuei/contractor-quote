@@ -19,20 +19,26 @@ function extractContractorId(c: Context): string | null {
       const token = authHeader.slice(7)
       const payload = JSON.parse(atob(token.split(".")[1]))
       // Check custom claim or org metadata
-      return (
+      const fromJwt =
         payload.contractorId ??
         payload.public_metadata?.contractorId ??
         payload.org_id ??
         null
-      )
+      if (fromJwt) return fromJwt
+
+      // Dev fallback: JWT exists but has no contractor claim yet
+      if (c.env.ENVIRONMENT === "development") {
+        return c.req.header("x-contractor-id") ?? "contractor-001"
+      }
+      return null
     } catch {
       return null
     }
   }
 
-  // Dev fallback: allow x-contractor-id header when no JWT
+  // Dev fallback: no JWT at all, allow x-contractor-id header
   if (c.env.ENVIRONMENT === "development") {
-    return c.req.header("x-contractor-id") ?? null
+    return c.req.header("x-contractor-id") ?? "contractor-001"
   }
 
   return null
