@@ -471,7 +471,7 @@ export function SettingsPage() {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(data))
 
     // Also try to save to API
-    const contractorId = userId ?? "default"
+    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
     await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
 
     setSaved(true)
@@ -495,7 +495,7 @@ export function SettingsPage() {
     reader.readAsDataURL(file)
 
     // Upload via API
-    const contractorId = userId ?? "default"
+    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
     const formData = new FormData()
     formData.append("file", file)
     const res = await apiUpload<{ logoUrl: string }>(
