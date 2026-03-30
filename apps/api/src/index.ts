@@ -117,6 +117,87 @@ app.get("/contractors/by-slug/:slug", async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// Get contractor profile (authenticated)
+// ---------------------------------------------------------------------------
+app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
+  const contractorId = c.req.param("contractorId")
+  const contractor = await c.env.DB.prepare(
+    "SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, calendar_url FROM contractors WHERE id = ?"
+  )
+    .bind(contractorId)
+    .first()
+
+  if (!contractor) {
+    return apiError(c, "NOT_FOUND", "Contractor not found")
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      id: contractor.id,
+      slug: contractor.slug,
+      name: contractor.name,
+      email: contractor.email,
+      phone: contractor.phone,
+      address: contractor.address,
+      websiteUrl: contractor.website_url,
+      licenseNumber: contractor.license_number,
+      logoUrl: contractor.logo_url,
+      calendarUrl: contractor.calendar_url,
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Update contractor profile (authenticated)
+// ---------------------------------------------------------------------------
+app.patch("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
+  const contractorId = c.req.param("contractorId")
+
+  let body: Record<string, unknown>
+  try {
+    body = await c.req.json()
+  } catch {
+    return apiError(c, "VALIDATION_ERROR", "Invalid JSON")
+  }
+
+  const allowedFields: Record<string, string> = {
+    name: "name",
+    email: "email",
+    phone: "phone",
+    address: "address",
+    websiteUrl: "website_url",
+    licenseNumber: "license_number",
+    calendarUrl: "calendar_url",
+  }
+
+  const setClauses: string[] = []
+  const binds: unknown[] = []
+
+  for (const [jsonKey, column] of Object.entries(allowedFields)) {
+    if (jsonKey in body && body[jsonKey] !== undefined) {
+      setClauses.push(`${column} = ?`)
+      binds.push(body[jsonKey] ?? null)
+    }
+  }
+
+  if (setClauses.length === 0) {
+    return apiError(c, "VALIDATION_ERROR", "No fields to update")
+  }
+
+  setClauses.push("updated_at = datetime('now')")
+  binds.push(contractorId)
+
+  await c.env.DB.prepare(
+    `UPDATE contractors SET ${setClauses.join(", ")} WHERE id = ?`
+  )
+    .bind(...binds)
+    .run()
+
+  return c.json({ ok: true, data: { updated: true } })
+})
+
+// ---------------------------------------------------------------------------
 // Quote submission
 // ---------------------------------------------------------------------------
 app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote-submit" }), async (c) => {
