@@ -207,7 +207,9 @@ export function QuotesPage() {
     setError(null)
     try {
       // Try API first
-      const contractorId = userId ?? "default"
+      // TODO: map Clerk userId → contractorId via API or custom claim
+      // For now, use the dev default
+      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
       const res = await apiGet<{ quotes: ApiQuote[]; total: number; page: number }>(
         `/contractors/${encodeURIComponent(contractorId)}/quotes?limit=100`
       )
