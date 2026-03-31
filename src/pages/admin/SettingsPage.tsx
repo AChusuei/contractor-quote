@@ -170,6 +170,18 @@ function mapApiStaff(raw: Record<string, unknown>): StaffMember {
 }
 
 // ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+
+type SettingsTab = "profile" | "staff" | "appearance"
+
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: "profile", label: "Profile" },
+  { id: "staff", label: "Staff" },
+  { id: "appearance", label: "Appearance" },
+]
+
+// ---------------------------------------------------------------------------
 // Shared UI helpers (match IntakePage conventions)
 // ---------------------------------------------------------------------------
 
@@ -301,7 +313,8 @@ function StaffForm({
 // ---------------------------------------------------------------------------
 
 export function SettingsPage() {
-  const { isLoaded, isSignedIn, getToken, userId } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile")
 
   // Wire up Clerk auth for API calls
   useEffect(() => {
@@ -508,297 +521,324 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-10">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage your admin preferences.</p>
       </div>
 
-      {/* ---- Contractor Profile ---- */}
-      <form onSubmit={handleSubmit(onSave)} className="space-y-6">
-        <div>
-          <h2 className="text-lg font-medium">Contractor Profile</h2>
-          <p className="text-sm text-muted-foreground">
-            Your company info for emails, branding, and the contractor record.
-          </p>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Company Name */}
-          <div>
-            <Label htmlFor="companyName">Company Name</Label>
-            <input
-              id="companyName"
-              type="text"
-              className={inputClass(!!errors.companyName)}
-              {...register("companyName")}
-            />
-            <FieldError message={errors.companyName?.message} />
-          </div>
-
-          {/* Contact Name */}
-          <div>
-            <Label htmlFor="contactName">Owner / Contact Name</Label>
-            <input
-              id="contactName"
-              type="text"
-              className={inputClass(!!errors.contactName)}
-              {...register("contactName")}
-            />
-            <FieldError message={errors.contactName?.message} />
-          </div>
-
-          {/* Email */}
-          <div>
-            <Label htmlFor="profileEmail">Email</Label>
-            <input
-              id="profileEmail"
-              type="email"
-              placeholder="Used as from address for emails"
-              className={inputClass(!!errors.email)}
-              {...register("email")}
-            />
-            <FieldError message={errors.email?.message} />
-          </div>
-
-          {/* Phone */}
-          <div>
-            <Label htmlFor="profilePhone">Phone</Label>
-            <input
-              id="profilePhone"
-              type="tel"
-              className={inputClass(!!errors.phone)}
-              {...register("phone")}
-            />
-            <FieldError message={errors.phone?.message} />
-          </div>
-
-          {/* Website */}
-          <div>
-            <Label htmlFor="website">Website</Label>
-            <input
-              id="website"
-              type="url"
-              placeholder="https://example.com"
-              className={inputClass(!!errors.website)}
-              {...register("website")}
-            />
-            <FieldError message={errors.website?.message} />
-          </div>
-
-          {/* License Number */}
-          <div>
-            <Label htmlFor="licenseNumber">License Number</Label>
-            <input
-              id="licenseNumber"
-              type="text"
-              className={inputClass(!!errors.licenseNumber)}
-              {...register("licenseNumber")}
-            />
-            <FieldError message={errors.licenseNumber?.message} />
-          </div>
-        </div>
-
-        {/* Address — full width */}
-        <div>
-          <Label htmlFor="address">Business Address</Label>
-          <input
-            id="address"
-            type="text"
-            className={inputClass(!!errors.address)}
-            {...register("address")}
-          />
-          <FieldError message={errors.address?.message} />
-        </div>
-
-        {/* Logo Upload */}
-        <div>
-          <Label htmlFor="logoUpload">Logo</Label>
-          <div className="flex items-center gap-4">
-            {logoPreview && (
-              <img
-                src={logoPreview}
-                alt="Logo preview"
-                className="h-16 w-16 rounded-md border border-border object-contain"
-              />
+      {/* Tab bar */}
+      <div className="flex items-center border-b">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              activeTab === tab.id
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
             )}
-            <div className="flex-1">
-              <input
-                id="logoUpload"
-                type="file"
-                accept="image/*"
-                onChange={handleLogoUpload}
-                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent/80"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                PNG, JPG, or SVG. Used in email signatures and white-label branding.
-              </p>
-            </div>
-          </div>
-        </div>
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Save */}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving\u2026" : "Save Profile"}
-          </Button>
-          {saved && (
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">
-              Profile saved
-            </span>
-          )}
-        </div>
-      </form>
-
-      {/* ---- Staff ---- */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      {/* ---- Profile Tab ---- */}
+      {activeTab === "profile" && (
+        <form onSubmit={handleSubmit(onSave)} className="space-y-6">
           <div>
-            <h2 className="text-lg font-medium">Staff</h2>
+            <h2 className="text-lg font-medium">Contractor Profile</h2>
             <p className="text-sm text-muted-foreground">
-              Manage your team members and their roles.
+              Your company info for emails, branding, and the contractor record.
             </p>
           </div>
-          {!showStaffForm && (
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingStaffId(null)
-                setShowStaffForm(true)
-                setStaffError(null)
-              }}
-            >
-              Add Staff
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Company Name */}
+            <div>
+              <Label htmlFor="companyName">Company Name</Label>
+              <input
+                id="companyName"
+                type="text"
+                className={inputClass(!!errors.companyName)}
+                {...register("companyName")}
+              />
+              <FieldError message={errors.companyName?.message} />
+            </div>
+
+            {/* Contact Name */}
+            <div>
+              <Label htmlFor="contactName">Owner / Contact Name</Label>
+              <input
+                id="contactName"
+                type="text"
+                className={inputClass(!!errors.contactName)}
+                {...register("contactName")}
+              />
+              <FieldError message={errors.contactName?.message} />
+            </div>
+
+            {/* Email */}
+            <div>
+              <Label htmlFor="profileEmail">Email</Label>
+              <input
+                id="profileEmail"
+                type="email"
+                placeholder="Used as from address for emails"
+                className={inputClass(!!errors.email)}
+                {...register("email")}
+              />
+              <FieldError message={errors.email?.message} />
+            </div>
+
+            {/* Phone */}
+            <div>
+              <Label htmlFor="profilePhone">Phone</Label>
+              <input
+                id="profilePhone"
+                type="tel"
+                className={inputClass(!!errors.phone)}
+                {...register("phone")}
+              />
+              <FieldError message={errors.phone?.message} />
+            </div>
+
+            {/* Website */}
+            <div>
+              <Label htmlFor="website">Website</Label>
+              <input
+                id="website"
+                type="url"
+                placeholder="https://example.com"
+                className={inputClass(!!errors.website)}
+                {...register("website")}
+              />
+              <FieldError message={errors.website?.message} />
+            </div>
+
+            {/* License Number */}
+            <div>
+              <Label htmlFor="licenseNumber">License Number</Label>
+              <input
+                id="licenseNumber"
+                type="text"
+                className={inputClass(!!errors.licenseNumber)}
+                {...register("licenseNumber")}
+              />
+              <FieldError message={errors.licenseNumber?.message} />
+            </div>
+          </div>
+
+          {/* Address — full width */}
+          <div>
+            <Label htmlFor="address">Business Address</Label>
+            <input
+              id="address"
+              type="text"
+              className={inputClass(!!errors.address)}
+              {...register("address")}
+            />
+            <FieldError message={errors.address?.message} />
+          </div>
+
+          {/* Logo Upload */}
+          <div>
+            <Label htmlFor="logoUpload">Logo</Label>
+            <div className="flex items-center gap-4">
+              {logoPreview && (
+                <img
+                  src={logoPreview}
+                  alt="Logo preview"
+                  className="h-16 w-16 rounded-md border border-border object-contain"
+                />
+              )}
+              <div className="flex-1">
+                <input
+                  id="logoUpload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent/80"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  PNG, JPG, or SVG. Used in email signatures and white-label branding.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Saving\u2026" : "Save Profile"}
             </Button>
+            {saved && (
+              <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                Profile saved
+              </span>
+            )}
+          </div>
+        </form>
+      )}
+
+      {/* ---- Staff Tab ---- */}
+      {activeTab === "staff" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-medium">Staff</h2>
+              <p className="text-sm text-muted-foreground">
+                Manage your team members and their roles.
+              </p>
+            </div>
+            {!showStaffForm && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingStaffId(null)
+                  setShowStaffForm(true)
+                  setStaffError(null)
+                }}
+              >
+                Add Staff
+              </Button>
+            )}
+          </div>
+
+          {staffError && (
+            <p className="text-sm text-destructive">{staffError}</p>
           )}
-        </div>
 
-        {staffError && (
-          <p className="text-sm text-destructive">{staffError}</p>
-        )}
+          {showStaffForm && (
+            <StaffForm
+              key={editingStaffId ?? "new"}
+              initialData={
+                editingStaffId
+                  ? staffList.find((s) => s.id === editingStaffId)
+                  : undefined
+              }
+              onSubmit={handleStaffSubmit}
+              onCancel={cancelStaffForm}
+              isEdit={!!editingStaffId}
+            />
+          )}
 
-        {showStaffForm && (
-          <StaffForm
-            key={editingStaffId ?? "new"}
-            initialData={
-              editingStaffId
-                ? staffList.find((s) => s.id === editingStaffId)
-                : undefined
-            }
-            onSubmit={handleStaffSubmit}
-            onCancel={cancelStaffForm}
-            isEdit={!!editingStaffId}
-          />
-        )}
-
-        {staffLoading ? (
-          <p className="text-sm text-muted-foreground">Loading staff...</p>
-        ) : staffList.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No staff members yet.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Email</th>
-                  <th className="px-4 py-2 text-left font-medium">Role</th>
-                  <th className="px-4 py-2 text-left font-medium">Phone</th>
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staffList.map((member) => (
-                  <tr key={member.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2">{member.name}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{member.email}</td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={cn(
-                          "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-                          member.role === "owner"
-                            ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                            : member.role === "admin"
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                              : member.role === "estimator"
-                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-                        )}
-                      >
-                        {ROLE_LABELS[member.role]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">{member.phone || "—"}</td>
-                    <td className="px-4 py-2">
-                      {member.active ? (
-                        <span className="text-xs font-medium text-green-600 dark:text-green-400">Active</span>
-                      ) : (
-                        <span className="text-xs font-medium text-muted-foreground">Inactive</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => startEditStaff(member)}
+          {staffLoading ? (
+            <p className="text-sm text-muted-foreground">Loading staff...</p>
+          ) : staffList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No staff members yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-2 text-left font-medium">Name</th>
+                    <th className="px-4 py-2 text-left font-medium">Email</th>
+                    <th className="px-4 py-2 text-left font-medium">Role</th>
+                    <th className="px-4 py-2 text-left font-medium">Phone</th>
+                    <th className="px-4 py-2 text-left font-medium">Status</th>
+                    <th className="px-4 py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffList.map((member) => (
+                    <tr key={member.id} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2">{member.name}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{member.email}</td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={cn(
+                            "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                            member.role === "owner"
+                              ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                              : member.role === "admin"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                : member.role === "estimator"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+                          )}
                         >
-                          Edit
-                        </Button>
-                        {member.active && (
+                          {ROLE_LABELS[member.role]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">{member.phone || "\u2014"}</td>
+                      <td className="px-4 py-2">
+                        {member.active ? (
+                          <span className="text-xs font-medium text-green-600 dark:text-green-400">Active</span>
+                        ) : (
+                          <span className="text-xs font-medium text-muted-foreground">Inactive</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDeactivateStaff(member.id)}
+                            onClick={() => startEditStaff(member)}
                           >
-                            Deactivate
+                            Edit
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ---- Appearance ---- */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-medium">Appearance</h2>
-        <p className="text-sm text-muted-foreground">
-          Choose how the admin panel looks to you.
-        </p>
-
-        <div className="grid gap-3">
-          {themeOptions.map((option) => (
-            <label
-              key={option.value}
-              className={`flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors ${
-                theme === option.value
-                  ? "border-primary bg-accent"
-                  : "border-border hover:bg-accent/50"
-              }`}
-            >
-              <input
-                type="radio"
-                name="theme"
-                value={option.value}
-                checked={theme === option.value}
-                onChange={() => setTheme(option.value)}
-                className="h-4 w-4 accent-primary"
-              />
-              <div>
-                <div className="text-sm font-medium">{option.label}</div>
-                <div className="text-xs text-muted-foreground">{option.description}</div>
-              </div>
-            </label>
-          ))}
+                          {member.active && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDeactivateStaff(member.id)}
+                            >
+                              Deactivate
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* ---- Appearance Tab ---- */}
+      {activeTab === "appearance" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-medium">Appearance</h2>
+            <p className="text-sm text-muted-foreground">
+              Choose how the admin panel looks to you.
+            </p>
+          </div>
+
+          <div className="grid gap-3">
+            {themeOptions.map((option) => (
+              <label
+                key={option.value}
+                className={cn(
+                  "flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors",
+                  theme === option.value
+                    ? "border-primary bg-accent"
+                    : "border-border hover:bg-accent/50"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  value={option.value}
+                  checked={theme === option.value}
+                  onChange={() => setTheme(option.value)}
+                  className="h-4 w-4 accent-primary"
+                />
+                <div>
+                  <div className="text-sm font-medium">{option.label}</div>
+                  <div className="text-xs text-muted-foreground">{option.description}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

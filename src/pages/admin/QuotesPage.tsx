@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { DataTable, type DataTableColumnDef } from "components"
 import { fetchQuotes, type Quote, type QuoteStatus } from "@/lib/quotes"
