@@ -39,20 +39,19 @@ export default function App({ clerkConfigured }: AppProps) {
         <Route path="/intake/confirmed" element={<AppointmentConfirmPage />} />
       </Route>
 
-      {/* Post-login redirect — checks super user status, no shell header */}
+      {/* Auth pages — no shell header */}
       {clerkConfigured && (
-        <Route path="/admin/redirect" element={<PostLoginRedirect />} />
-      )}
-      {/* Super admin portal select — no shell header, super users only */}
-      {clerkConfigured && (
-        <Route path="/admin/select" element={<PortalSelectPage />} />
+        <>
+          <Route path="/admin/sign-in/*" element={<SignInPage />} />
+          <Route path="/admin/redirect" element={<PostLoginRedirect />} />
+          <Route path="/admin/select" element={<PortalSelectPage />} />
+        </>
       )}
 
       {/* Admin portal — Clerk-protected */}
       <Route element={<AdminShell />}>
         {clerkConfigured ? (
           <>
-            <Route path="/admin/sign-in/*" element={<SignInPage />} />
             <Route path="/admin/quotes" element={<QuotesPage />} />
             <Route path="/admin/quotes/:id" element={<QuoteDetailPage />} />
             <Route path="/admin/customers" element={<CustomersPage />} />
