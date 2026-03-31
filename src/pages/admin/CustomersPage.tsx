@@ -131,6 +131,16 @@ export function CustomersPage() {
         enableSorting
         enablePagination
         defaultPageSize={25}
+        enableRowSelection
+        bulkActions={[
+          {
+            label: "Email selected",
+            onClick: (selectedCustomers) => {
+              const ids = selectedCustomers.map((c) => c.id).join(",")
+              navigate(`/admin/email/compose?customerIds=${encodeURIComponent(ids)}`)
+            },
+          },
+        ]}
         refreshSlot={
           <button
             onClick={() => void loadCustomers()}

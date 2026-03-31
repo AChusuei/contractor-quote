@@ -267,16 +267,6 @@ export function QuotesPage() {
         defaultPageSize={25}
         enableExport
         exportFilename="quotes"
-        enableRowSelection
-        bulkActions={[
-          {
-            label: "Email selected",
-            onClick: (selectedQuotes) => {
-              const ids = selectedQuotes.map((q) => q.id).join(",")
-              navigate(`/admin/email/compose?quoteIds=${encodeURIComponent(ids)}`)
-            },
-          },
-        ]}
         refreshSlot={
           <button
             onClick={() => void loadQuotes()}
