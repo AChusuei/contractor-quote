@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
-import { apiGet, isNetworkError, setAuthProvider } from "@/lib/api"
+import { Button } from "components"
+import { apiGet, apiPost, isNetworkError, setAuthProvider } from "@/lib/api"
 
 interface SuperContractor {
   id: string
@@ -18,6 +19,12 @@ export function SuperContractorsPage() {
   const [contractors, setContractors] = useState<SuperContractor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
+  const [addName, setAddName] = useState("")
+  const [addSlug, setAddSlug] = useState("")
+  const [addEmail, setAddEmail] = useState("")
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
@@ -50,7 +57,76 @@ export function SuperContractorsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Contractors</h1>
           <p className="text-sm text-muted-foreground">All contractors on the platform</p>
         </div>
+        <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+          {showAdd ? "Cancel" : "+ Add Contractor"}
+        </Button>
       </div>
+
+      {showAdd && (
+        <div className="rounded-lg border bg-background p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Name *</label>
+              <input
+                type="text"
+                value={addName}
+                onChange={(e) => {
+                  setAddName(e.target.value)
+                  setAddSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""))
+                }}
+                placeholder="Central Cabinets"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Slug *</label>
+              <input
+                type="text"
+                value={addSlug}
+                onChange={(e) => setAddSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                placeholder="central-cabinets"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Email</label>
+              <input
+                type="email"
+                value={addEmail}
+                onChange={(e) => setAddEmail(e.target.value)}
+                placeholder="admin@example.com"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          {addError && <p className="text-sm text-destructive">{addError}</p>}
+          <Button
+            size="sm"
+            disabled={adding || !addName.trim() || !addSlug.trim()}
+            onClick={async () => {
+              setAdding(true)
+              setAddError(null)
+              const res = await apiPost("/platform/contractors", {
+                name: addName.trim(),
+                slug: addSlug.trim(),
+                email: addEmail.trim() || undefined,
+              })
+              if (res.ok) {
+                setShowAdd(false)
+                setAddName("")
+                setAddSlug("")
+                setAddEmail("")
+                void load()
+              } else {
+                setAddError("error" in res ? res.error : "Failed to create contractor")
+              }
+              setAdding(false)
+            }}
+          >
+            {adding ? "Creating…" : "Create Contractor"}
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">

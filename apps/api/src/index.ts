@@ -2764,6 +2764,55 @@ app.get(
   }
 )
 
+// Create a new contractor
+app.post(
+  "/platform/contractors",
+  requireSuperAdmin(),
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "platform-contractor-create" }),
+  async (c) => {
+    let body: Record<string, unknown>
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON")
+    }
+
+    const name = (body.name as string)?.trim()
+    const slug = (body.slug as string)?.trim()?.toLowerCase()?.replace(/[^a-z0-9-]/g, "")
+
+    if (!name || !slug) {
+      return apiError(c, "VALIDATION_ERROR", "Name and slug are required")
+    }
+
+    // Check slug uniqueness
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE slug = ?"
+    ).bind(slug).first()
+
+    if (existing) {
+      return c.json(
+        { ok: false, error: "A contractor with this slug already exists", code: "VALIDATION_ERROR" as const },
+        422
+      )
+    }
+
+    const id = crypto.randomUUID()
+    await c.env.DB.prepare(
+      `INSERT INTO contractors (id, slug, name, email, phone, address)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      slug,
+      name,
+      (body.email as string)?.trim() ?? null,
+      (body.phone as string)?.trim() ?? null,
+      (body.address as string)?.trim() ?? null,
+    ).run()
+
+    return c.json({ ok: true, data: { id, slug, name } }, 201)
+  }
+)
+
 // ---------------------------------------------------------------------------
 // Platform: Super user management (legacy /platform/superusers — kept for UI compat)
 // ---------------------------------------------------------------------------
