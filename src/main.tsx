@@ -50,7 +50,6 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <ContractorProvider>
         <DevActionProvider>
-          <DevToolbar />
           <Root />
         </DevActionProvider>
       </ContractorProvider>
