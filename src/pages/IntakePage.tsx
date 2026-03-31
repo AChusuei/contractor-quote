@@ -30,9 +30,6 @@ async function submitToHubSpot(data: CustomerInfoData): Promise<void> {
     { name: "email", value: data.email },
     { name: "phone", value: data.phone },
     { name: "mobilephone", value: data.cell ?? "" },
-    { name: "address", value: data.jobSiteAddress },
-    { name: "property_type", value: data.propertyType },
-    { name: "budget_range", value: data.budgetRange },
     { name: "how_did_you_find_us", value: data.howDidYouFindUs },
     { name: "referred_by_contractor", value: data.referredByContractor ?? "" },
   ]
@@ -63,7 +60,6 @@ export function IntakePage() {
   const {
     register,
     handleSubmit,
-    control,
     reset,
     getValues,
     watch,
@@ -76,9 +72,6 @@ export function IntakePage() {
       email: quote?.email ?? "",
       phone: quote?.phone ?? "",
       cell: quote?.cell ?? "",
-      jobSiteAddress: quote?.jobSiteAddress ?? "",
-      propertyType: quote?.propertyType,
-      budgetRange: quote?.budgetRange,
       howDidYouFindUs: quote?.howDidYouFindUs ?? "",
       referredByContractor: quote?.referredByContractor ?? "",
     },
@@ -93,7 +86,6 @@ export function IntakePage() {
     const publicToken = draft.publicToken
     apiGet<{
       name: string; email: string; phone: string; cell?: string
-      jobSiteAddress: string; propertyType: string; budgetRange: string
       howDidYouFindUs?: string; referredByContractor?: string
     }>(`/quotes/${encodeURIComponent(draft.quoteId)}/draft?publicToken=${encodeURIComponent(publicToken)}`)
       .then((res) => {
@@ -103,9 +95,6 @@ export function IntakePage() {
             email: res.data.email ?? "",
             phone: res.data.phone ?? "",
             cell: res.data.cell ?? "",
-            jobSiteAddress: res.data.jobSiteAddress ?? "",
-            propertyType: res.data.propertyType as CustomerInfoData["propertyType"],
-            budgetRange: res.data.budgetRange as CustomerInfoData["budgetRange"],
             howDidYouFindUs: res.data.howDidYouFindUs ?? "",
             referredByContractor: res.data.referredByContractor ?? "",
           })
@@ -126,9 +115,6 @@ export function IntakePage() {
       email: "john.smith@example.com",
       phone: "(718) 555-1234",
       cell: "(718) 555-5678",
-      jobSiteAddress: "148-03 Kalmia Avenue, Flushing, New York 11355, United States",
-      propertyType: "house",
-      budgetRange: "25-50k",
       howDidYouFindUs: "referral",
       referredByContractor: "Mike's Contracting",
     }),
@@ -144,9 +130,6 @@ export function IntakePage() {
       email: v.email,
       phone: v.phone,
       cell: v.cell || undefined,
-      jobSiteAddress: v.jobSiteAddress,
-      propertyType: v.propertyType,
-      budgetRange: v.budgetRange,
       howDidYouFindUs: v.howDidYouFindUs,
       referredByContractor: v.referredByContractor || undefined,
     }
@@ -193,9 +176,6 @@ export function IntakePage() {
         email: data.email,
         phone: data.phone,
         cell: data.cell || undefined,
-        jobSiteAddress: data.jobSiteAddress,
-        propertyType: data.propertyType,
-        budgetRange: data.budgetRange,
         howDidYouFindUs: data.howDidYouFindUs,
         referredByContractor: data.referredByContractor || undefined,
         turnstileToken,
@@ -240,9 +220,6 @@ export function IntakePage() {
             email: data.email,
             phone: data.phone,
             cell: data.cell,
-            jobSiteAddress: data.jobSiteAddress,
-            propertyType: data.propertyType,
-            budgetRange: data.budgetRange,
             howDidYouFindUs: data.howDidYouFindUs,
             referredByContractor: data.referredByContractor,
           })
@@ -275,7 +252,6 @@ export function IntakePage() {
       <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate>
         <CustomerInfoForm
           register={register}
-          control={control}
           errors={errors}
           readOnly={readOnly}
         />

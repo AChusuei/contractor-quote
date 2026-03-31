@@ -38,8 +38,8 @@ const STATUS_LABELS: Record<string, string> = {
 function resolveMergeFields(template: string, quote: Quote): string {
   return template
     .replace(/\{\{name\}\}/g, quote.name)
-    .replace(/\{\{address\}\}/g, quote.jobSiteAddress)
-    .replace(/\{\{budget\}\}/g, BUDGET_LABELS[quote.budgetRange] ?? quote.budgetRange)
+    .replace(/\{\{address\}\}/g, quote.jobSiteAddress ?? "")
+    .replace(/\{\{budget\}\}/g, (quote.budgetRange && BUDGET_LABELS[quote.budgetRange]) ?? quote.budgetRange ?? "")
     .replace(/\{\{status\}\}/g, STATUS_LABELS[quote.status] ?? quote.status)
 }
 

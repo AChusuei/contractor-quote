@@ -57,9 +57,9 @@ type ApiQuote = {
   email: string
   phone: string
   cell?: string | null
-  jobSiteAddress: string
-  propertyType: string
-  budgetRange: string
+  jobSiteAddress?: string | null
+  propertyType?: string | null
+  budgetRange?: string | null
   howDidYouFindUs?: string | null
   referredByContractor?: string | null
   scope?: Record<string, unknown> | null
@@ -256,8 +256,8 @@ export function IntakeReviewPage() {
             <div className="col-span-2">
               <Field label="Job Site Address" value={quote.jobSiteAddress} />
             </div>
-            <Field label="Property Type" value={PROPERTY_TYPE_LABELS[quote.propertyType]} />
-            <Field label="Budget Range" value={BUDGET_LABELS[quote.budgetRange]} />
+            {quote.propertyType && <Field label="Property Type" value={PROPERTY_TYPE_LABELS[quote.propertyType]} />}
+            {quote.budgetRange && <Field label="Budget Range" value={BUDGET_LABELS[quote.budgetRange]} />}
             <Field label="How did you find us?" value={quote.howDidYouFindUs} />
             {quote.referredByContractor && (
               <Field label="Referred by" value={quote.referredByContractor} />

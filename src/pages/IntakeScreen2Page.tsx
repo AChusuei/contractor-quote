@@ -17,8 +17,9 @@ export function IntakeScreen2Page() {
   const navigate = useNavigate()
   const ctx = useQuoteContext()
   const readOnly = ctx?.readOnly ?? false
-  const scope = ctx?.quote?.scope
-  const isAdminView = !!ctx?.quote
+  const quote = ctx?.quote
+  const scope = quote?.scope
+  const isAdminView = !!quote
 
   const {
     register,
@@ -32,6 +33,9 @@ export function IntakeScreen2Page() {
     resolver: zodResolver(projectScopeSchema),
     mode: "onTouched",
     defaultValues: {
+      jobSiteAddress: quote?.jobSiteAddress ?? "",
+      propertyType: quote?.propertyType,
+      budgetRange: quote?.budgetRange,
       scopeType: scope?.scopeType,
       layoutChanges: scope?.layoutChanges,
       kitchenSize: scope?.kitchenSize,
@@ -57,7 +61,10 @@ export function IntakeScreen2Page() {
   const valuesRef = ctx?.valuesRef
   useEffect(() => {
     if (!readOnly && valuesRef) {
-      valuesRef.current = () => ({ scope: getValues() }) as Record<string, unknown>
+      valuesRef.current = () => {
+        const { jobSiteAddress, propertyType, budgetRange, ...scopeFields } = getValues()
+        return { jobSiteAddress, propertyType, budgetRange, scope: scopeFields } as Record<string, unknown>
+      }
       return () => { valuesRef.current = null }
     }
   }, [readOnly, valuesRef, getValues])
@@ -76,12 +83,17 @@ export function IntakeScreen2Page() {
     const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
     const draft = getActiveDraft(contractorId)
     if (!draft) return
-    apiGet<{ scope: Record<string, unknown> | null }>(
+    apiGet<{ jobSiteAddress?: string; propertyType?: string; budgetRange?: string; scope: Record<string, unknown> | null }>(
       `/quotes/${encodeURIComponent(draft.quoteId)}/draft?publicToken=${encodeURIComponent(draft.publicToken)}`
     )
       .then((res) => {
         if (res.ok && res.data.scope) {
-          reset(res.data.scope as ProjectScopeData)
+          reset({
+            jobSiteAddress: res.data.jobSiteAddress ?? "",
+            propertyType: res.data.propertyType as ProjectScopeData["propertyType"],
+            budgetRange: res.data.budgetRange as ProjectScopeData["budgetRange"],
+            ...(res.data.scope as Omit<ProjectScopeData, "jobSiteAddress" | "propertyType" | "budgetRange">),
+          })
         }
       })
       .catch(() => { /* draft fetch failed — start fresh */ })
@@ -91,6 +103,9 @@ export function IntakeScreen2Page() {
   useDevAction(readOnly ? null : {
     label: "Fill",
     onClick: () => reset({
+      jobSiteAddress: "148-03 Kalmia Avenue, Flushing, New York 11355, United States",
+      propertyType: "house",
+      budgetRange: "25-50k",
       scopeType: "supply_install",
       layoutChanges: "no",
       kitchenSize: "medium",
@@ -115,23 +130,29 @@ export function IntakeScreen2Page() {
   // Save scope when tab switches, phone locks, or page unloads
   useSaveOnLeave(() => {
     if (readOnly) return null
-    return { scope: getValues() }
+    const v = getValues()
+    const { jobSiteAddress, propertyType, budgetRange, ...scopeFields } = v
+    return { jobSiteAddress, propertyType, budgetRange, scope: scopeFields }
   })
 
   const onSubmit = async (data: ProjectScopeData) => {
+    const { jobSiteAddress, propertyType, budgetRange, ...scopeFields } = data
     const quoteId = sessionStorage.getItem("cq_active_quote_id")
     const publicToken = sessionStorage.getItem("cq_public_token")
     if (quoteId && publicToken) {
       const res = await apiPatch(`/quotes/${encodeURIComponent(quoteId)}/draft`, {
         publicToken,
-        scope: data,
+        jobSiteAddress,
+        propertyType,
+        budgetRange,
+        scope: scopeFields,
       })
       if (isNetworkError(res)) {
         console.warn("API unreachable — falling back to localStorage for scope")
-        attachScope(data)
+        attachScope(scopeFields)
       }
     } else {
-      attachScope(data)
+      attachScope(scopeFields)
     }
     navigate("/intake/photos")
   }

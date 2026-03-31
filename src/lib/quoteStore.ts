@@ -57,11 +57,12 @@ export type Quote = {
   email: string
   phone: string
   cell?: string
-  jobSiteAddress: string
-  propertyType: "house" | "apt" | "building" | "townhouse"
-  budgetRange: "<10k" | "10-25k" | "25-50k" | "50k+"
   howDidYouFindUs: string
   referredByContractor?: string
+  // Step 2 — project fields (on quotes table, filled at step 2)
+  jobSiteAddress?: string
+  propertyType?: "house" | "apt" | "building" | "townhouse"
+  budgetRange?: "<10k" | "10-25k" | "25-50k" | "50k+"
   // Step 2 — scope (optional, added after step 2)
   scope?: QuoteScope
   // Step 4 — quote path choice

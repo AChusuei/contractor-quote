@@ -14,11 +14,6 @@ vi.mock("react-router-dom", async (importOriginal) => {
   }
 })
 
-// Render AddressAutocomplete as plain input (no provider)
-vi.mock("@/lib/address/provider", () => ({
-  getAddressProvider: () => null,
-}))
-
 // Mock Turnstile — no site key configured in test env, so widget is null
 vi.mock("@/components/Turnstile", () => ({
   useTurnstile: () => ({
@@ -47,11 +42,6 @@ async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/phone \*/i), "5551234567")
   fireEvent.blur(screen.getByLabelText(/phone \*/i))
 
-  await user.type(screen.getByLabelText(/job site address/i), "123 Main St")
-  fireEvent.blur(screen.getByLabelText(/job site address/i))
-
-  await user.selectOptions(screen.getByLabelText(/property type/i), "house")
-  await user.selectOptions(screen.getByLabelText(/budget range/i), "<10k")
   await user.selectOptions(screen.getByLabelText(/how did you find us/i), "google")
 }
 

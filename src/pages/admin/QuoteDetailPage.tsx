@@ -90,7 +90,7 @@ function formatDateTime(iso: string): string {
 type TabId = "contact" | "scope" | "photos" | "activity"
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "contact", label: "Contact & Project" },
+  { id: "contact", label: "Customer" },
   { id: "scope", label: "Project Scope" },
   { id: "photos", label: "Photos" },
   { id: "activity", label: "Activity" },
@@ -337,7 +337,6 @@ function ContactTab({
 }) {
   const {
     register,
-    control,
     watch,
     getValues,
     formState: { errors },
@@ -349,9 +348,6 @@ function ContactTab({
       email: quote.email ?? "",
       phone: quote.phone ?? "",
       cell: quote.cell ?? "",
-      jobSiteAddress: quote.jobSiteAddress ?? "",
-      propertyType: quote.propertyType,
-      budgetRange: quote.budgetRange,
       howDidYouFindUs: quote.howDidYouFindUs ?? "",
       referredByContractor: quote.referredByContractor ?? "",
     },
@@ -370,7 +366,6 @@ function ContactTab({
   return (
     <CustomerInfoForm
       register={register}
-      control={control}
       errors={errors}
       readOnly={false}
     />
@@ -398,6 +393,9 @@ function ScopeTab({
     resolver: zodResolver(projectScopeSchema),
     mode: "onTouched",
     defaultValues: {
+      jobSiteAddress: quote.jobSiteAddress ?? "",
+      propertyType: quote.propertyType,
+      budgetRange: quote.budgetRange,
       scopeType: scope?.scopeType,
       layoutChanges: scope?.layoutChanges,
       kitchenSize: scope?.kitchenSize,
@@ -421,7 +419,10 @@ function ScopeTab({
   })
 
   useEffect(() => {
-    valuesRef.current = () => ({ scope: getValues() }) as Record<string, unknown>
+    valuesRef.current = () => {
+      const { jobSiteAddress, propertyType, budgetRange, ...scopeFields } = getValues()
+      return { jobSiteAddress, propertyType, budgetRange, scope: scopeFields } as Record<string, unknown>
+    }
     return () => { valuesRef.current = null }
   }, [valuesRef, getValues])
 
@@ -650,25 +651,12 @@ export function QuoteDetailPage() {
         &larr; Back to quotes
       </Link>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{quote.name}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Submitted {formatDateTime(quote.createdAt)}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <SaveIndicator status={saveStatus} />
-          <StatusBadge status={quote.status as QuoteStatus} />
-        </div>
-      </div>
-
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
         {/* Left — tabbed content */}
         <div>
           {/* Tab bar */}
-          <div className="flex border-b mb-6">
+          <div className="flex items-center border-b mb-6">
+            <div className="flex flex-1">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -683,6 +671,14 @@ export function QuoteDetailPage() {
                 {tab.label}
               </button>
             ))}
+            </div>
+            <div className="flex items-center gap-3 ml-auto pb-1">
+              <span className="text-xs text-muted-foreground">
+                Submitted {formatDateTime(quote.createdAt)}
+              </span>
+              <SaveIndicator status={saveStatus} />
+              <StatusBadge status={quote.status as QuoteStatus} />
+            </div>
           </div>
 
           {/* Tab content — form components rendered directly, no chrome */}

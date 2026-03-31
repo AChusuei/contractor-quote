@@ -6,6 +6,9 @@ import { Label, FieldError, inputClass, RadioGroup, ApplianceRow } from "./formH
 const applianceSchema = z.enum(["new", "existing", "none"])
 
 export const projectScopeSchema = z.object({
+  jobSiteAddress: z.string().min(1, "Job site address is required"),
+  propertyType: z.enum(["house", "apt", "building", "townhouse"], { error: "Please select an option" }),
+  budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"], { error: "Please select an option" }),
   scopeType: z.enum(["supply_only", "supply_install"], {
     message: "Select a scope type",
   }),
@@ -115,6 +118,59 @@ export function ProjectScopeForm({ register, control, errors, watch, readOnly }:
 
   return (
     <div className="space-y-6">
+      {/* Job site address */}
+      <div>
+        <Label htmlFor="jobSiteAddress">Job Site Address {!readOnly && "*"}</Label>
+        <input
+          id="jobSiteAddress"
+          type="text"
+          autoComplete="street-address"
+          placeholder={readOnly ? "" : "Enter job site address"}
+          disabled={readOnly}
+          className={inputClass(!!errors.jobSiteAddress)}
+          {...register("jobSiteAddress")}
+        />
+        <FieldError message={errors.jobSiteAddress?.message} />
+      </div>
+
+      {/* Property type */}
+      <div>
+        <Label htmlFor="propertyType">Property Type {!readOnly && "*"}</Label>
+        <select
+          id="propertyType"
+          disabled={readOnly}
+          className={inputClass(!!errors.propertyType)}
+          {...register("propertyType")}
+          defaultValue=""
+        >
+          <option value="" disabled>Select property type</option>
+          <option value="house">House</option>
+          <option value="apt">Apartment</option>
+          <option value="building">Building</option>
+          <option value="townhouse">Townhouse</option>
+        </select>
+        <FieldError message={errors.propertyType?.message} />
+      </div>
+
+      {/* Budget range */}
+      <div>
+        <Label htmlFor="budgetRange">Budget Range {!readOnly && "*"}</Label>
+        <select
+          id="budgetRange"
+          disabled={readOnly}
+          className={inputClass(!!errors.budgetRange)}
+          {...register("budgetRange")}
+          defaultValue=""
+        >
+          <option value="" disabled>Select budget range</option>
+          <option value="<10k">Under $10,000</option>
+          <option value="10-25k">$10,000 – $25,000</option>
+          <option value="25-50k">$25,000 – $50,000</option>
+          <option value="50k+">$50,000+</option>
+        </select>
+        <FieldError message={errors.budgetRange?.message} />
+      </div>
+
       {/* Scope type */}
       <div>
         <Label htmlFor="scopeType">What are you looking for? {!readOnly && "*"}</Label>
