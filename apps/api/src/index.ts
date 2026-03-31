@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import type { AppointmentSlot, ApiOk } from "@contractor-quote/types"
+import type { ApiOk } from "@contractor-quote/types"
 import { apiError } from "./lib/errors"
 import {
   requireAuth,
@@ -152,7 +152,7 @@ app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(
 // ---------------------------------------------------------------------------
 // Update contractor profile (authenticated)
 // ---------------------------------------------------------------------------
-app.patch("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
+app.patch("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "contractor-update" }), async (c) => {
   const contractorId = c.req.param("contractorId")
 
   let body: Record<string, unknown>
@@ -505,6 +505,10 @@ app.patch(
 
     // Update quotes table
     const quoteUp = collectUpdates(quoteFields, data as Record<string, unknown>)
+    // Set submitted_at when transitioning to 'lead'
+    if (data.status === "lead") {
+      quoteUp.clauses.push("submitted_at = datetime('now')")
+    }
     if (quoteUp.clauses.length > 0) {
       quoteUp.clauses.push("updated_at = datetime('now')")
       quoteUp.binds.push(quoteId)
@@ -706,6 +710,7 @@ app.patch(
   "/quotes/:quoteId",
   requireAuth(),
   requireQuoteOwnership(),
+  rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "quote-update" }),
   async (c) => {
     const quoteId = c.req.param("quoteId")
     const contractorId = c.get("contractorId") as string
@@ -1194,6 +1199,7 @@ app.get(
 // ---------------------------------------------------------------------------
 app.delete(
   "/quotes/:quoteId/photos/:photoId",
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "photo-delete" }),
   async (c) => {
     const quoteId = c.req.param("quoteId")
     const photoId = c.req.param("photoId")
@@ -1267,6 +1273,7 @@ app.post(
   "/contractors/:contractorId/logo",
   requireAuth(),
   requireContractorOwnership(),
+  rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "logo-upload" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
 
@@ -1350,6 +1357,7 @@ app.post(
   "/quotes/:quoteId/activity",
   requireAuth(),
   requireQuoteOwnership(),
+  rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "activity-create" }),
   async (c) => {
     const quoteId = c.req.param("quoteId")
     const contractorId = c.get("contractorId") as string
@@ -1525,144 +1533,6 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
-// Delete customer data (right-to-delete / CCPA compliance)
-// ---------------------------------------------------------------------------
-app.delete(
-  "/customers/:email",
-  requireAuth(),
-  async (c) => {
-    const contractorId = c.get("contractorId") as string
-    const email = decodeURIComponent(c.req.param("email")).toLowerCase().trim()
-
-    if (!email || !email.includes("@")) {
-      return apiError(c, "VALIDATION_ERROR", "A valid email address is required")
-    }
-
-    // Parse optional request body for metadata
-    let requestType = "contractor" // default
-    const rawBody = await c.req.text()
-    if (rawBody) {
-      let body: unknown
-      try {
-        body = JSON.parse(rawBody)
-      } catch {
-        return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
-      }
-      const result = customerDeletionSchema.safeParse(body)
-      if (!result.success) {
-        return c.json(
-          { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
-          422
-        )
-      }
-      requestType = result.data.requestType
-    }
-
-    // Find all quotes for this email belonging to this contractor
-    const { results: quotes } = await c.env.DB.prepare(
-      "SELECT q.id FROM quotes q JOIN customers cu ON cu.id = q.customer_id WHERE cu.email = ? AND q.contractor_id = ?"
-    )
-      .bind(email, contractorId)
-      .all<{ id: string }>()
-
-    if (!quotes || quotes.length === 0) {
-      return apiError(c, "NOT_FOUND", "No customer data found for this email address")
-    }
-
-    const quoteIds = quotes.map((q) => q.id)
-
-    // Find photo storage keys for R2 cleanup
-    const photoPlaceholders = quoteIds.map(() => "?").join(", ")
-    const { results: photos } = await c.env.DB.prepare(
-      `SELECT storage_key FROM photos WHERE quote_id IN (${photoPlaceholders}) AND contractor_id = ?`
-    )
-      .bind(...quoteIds, contractorId)
-      .all<{ storage_key: string }>()
-
-    // Delete photos from R2 storage
-    let photosDeleted = 0
-    for (const photo of photos) {
-      await c.env.STORAGE.delete(photo.storage_key)
-      photosDeleted++
-    }
-
-    // Delete photo records from DB
-    const placeholders = quoteIds.map(() => "?").join(", ")
-    await c.env.DB.prepare(
-      `DELETE FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
-    )
-      .bind(...quoteIds, contractorId)
-      .run()
-
-    // Delete appointments
-    const appointmentResult = await c.env.DB.prepare(
-      `DELETE FROM appointments WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
-    )
-      .bind(...quoteIds, contractorId)
-      .run()
-    const appointmentsDeleted = appointmentResult.meta?.changes ?? 0
-
-    // Delete quote activity records
-    const activityResult = await c.env.DB.prepare(
-      `DELETE FROM quote_activity WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
-    )
-      .bind(...quoteIds, contractorId)
-      .run()
-    const activityDeleted = activityResult.meta?.changes ?? 0
-
-    // Delete quotes
-    const quotesResult = await c.env.DB.prepare(
-      `DELETE FROM quotes WHERE id IN (${placeholders}) AND contractor_id = ?`
-    )
-      .bind(...quoteIds, contractorId)
-      .run()
-    const quotesDeleted = quotesResult.meta?.changes ?? 0
-
-    // Hash the email for the audit log (SHA-256, no PII stored)
-    const emailBytes = new TextEncoder().encode(email)
-    const hashBuffer = await crypto.subtle.digest("SHA-256", emailBytes)
-    const emailHash = Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-
-    // Write audit log entry
-    await c.env.DB.prepare(
-      `INSERT INTO data_deletion_log (
-        contractor_id, request_type, requested_by, email_hash,
-        quotes_deleted, photos_deleted, appointments_deleted, activity_records_deleted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        contractorId,
-        requestType,
-        contractorId, // the authenticated contractor is the requester
-        emailHash,
-        quotesDeleted,
-        photosDeleted,
-        appointmentsDeleted,
-        activityDeleted
-      )
-      .run()
-
-    const res: ApiOk<{
-      quotesDeleted: number
-      photosDeleted: number
-      appointmentsDeleted: number
-      activityRecordsDeleted: number
-    }> = {
-      ok: true,
-      data: {
-        quotesDeleted,
-        photosDeleted,
-        appointmentsDeleted,
-        activityRecordsDeleted: activityDeleted,
-      },
-    }
-    return c.json(res)
-  }
-)
-
-// ---------------------------------------------------------------------------
 // List customers for a contractor (with quote count)
 // ---------------------------------------------------------------------------
 app.get(
@@ -1801,6 +1671,7 @@ app.get(
 app.patch(
   "/customers/:customerId",
   requireAuth(),
+  rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "customer-update" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
     const customerId = c.req.param("customerId")
@@ -1896,6 +1767,7 @@ app.patch(
 app.delete(
   "/customers/:customerId",
   requireAuth(),
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "customer-delete" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
     const customerId = c.req.param("customerId")
@@ -2057,15 +1929,19 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "Rejected",
 }
 
+function escapeMergeField(value: string): string {
+  return value.replace(/\{\{/g, "{ {").replace(/\}\}/g, "} }")
+}
+
 function resolveMergeFields(
   template: string,
   quote: { name: string; job_site_address: string; budget_range: string; status: string }
 ): string {
   return template
-    .replace(/\{\{name\}\}/g, quote.name)
-    .replace(/\{\{address\}\}/g, quote.job_site_address)
-    .replace(/\{\{budget\}\}/g, BUDGET_LABELS[quote.budget_range] ?? quote.budget_range)
-    .replace(/\{\{status\}\}/g, STATUS_LABELS[quote.status] ?? quote.status)
+    .replace(/\{\{name\}\}/g, escapeMergeField(quote.name))
+    .replace(/\{\{address\}\}/g, escapeMergeField(quote.job_site_address))
+    .replace(/\{\{budget\}\}/g, escapeMergeField(BUDGET_LABELS[quote.budget_range] ?? quote.budget_range))
+    .replace(/\{\{status\}\}/g, escapeMergeField(STATUS_LABELS[quote.status] ?? quote.status))
 }
 
 function textToHtml(text: string): string {
@@ -2079,6 +1955,7 @@ function textToHtml(text: string): string {
 app.post(
   "/email/send",
   requireAuth(),
+  rateLimit({ limit: 10, windowSeconds: 3600, keyPrefix: "email-send" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
 
@@ -2233,6 +2110,7 @@ app.get(
 app.post(
   "/staff",
   requireAuth(),
+  rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "staff-create" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
 
@@ -2308,6 +2186,7 @@ app.post(
 app.patch(
   "/staff/:staffId",
   requireAuth(),
+  rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "staff-update" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
     const staffId = c.req.param("staffId")
@@ -2339,6 +2218,39 @@ app.patch(
     }
 
     const data = result.data
+
+    // Restrict role changes to owners only
+    if (data.role !== undefined) {
+      let clerkUserId: string | null = null
+      const authHeader = c.req.header("authorization")
+      if (authHeader?.startsWith("Bearer ")) {
+        try {
+          const payload = JSON.parse(atob(authHeader.slice(7).split(".")[1]))
+          clerkUserId = payload.sub ?? null
+        } catch {
+          // Fall through — dev mode uses x-contractor-id
+        }
+      }
+
+      // In dev mode without JWT, check x-contractor-id header for owner lookup
+      const requestingStaff = clerkUserId
+        ? await c.env.DB.prepare(
+            "SELECT role FROM staff WHERE clerk_user_id = ? AND contractor_id = ?"
+          )
+            .bind(clerkUserId, contractorId)
+            .first<{ role: string }>()
+        : c.env.ENVIRONMENT === "development"
+          ? await c.env.DB.prepare(
+              "SELECT role FROM staff WHERE contractor_id = ? AND role = 'owner' LIMIT 1"
+            )
+              .bind(contractorId)
+              .first<{ role: string }>()
+          : null
+
+      if (!requestingStaff || requestingStaff.role !== "owner") {
+        return apiError(c, "FORBIDDEN", "Only owners can change staff roles")
+      }
+    }
 
     // Check for duplicate email if email is being changed
     if (data.email) {
@@ -2412,57 +2324,4 @@ app.patch(
   }
 )
 
-// ---------------------------------------------------------------------------
-// Appointment windows (stub — returns mock slots; replace with real logic)
-// ---------------------------------------------------------------------------
-app.get("/appointment-windows", (c) => {
-  const slots: AppointmentSlot[] = generateMockSlots()
-  const res: ApiOk<AppointmentSlot[]> = { ok: true, data: slots }
-  return c.json(res)
-})
-
 export default app
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function generateMockSlots(): AppointmentSlot[] {
-  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-  const MONTHS = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ]
-
-  const slots: AppointmentSlot[] = []
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  tomorrow.setHours(0, 0, 0, 0)
-
-  for (let i = 0; i < 14 && slots.length < 10; i++) {
-    const date = new Date(tomorrow)
-    date.setDate(tomorrow.getDate() + i)
-    const dow = date.getDay()
-    if (dow === 0) continue // skip Sundays
-
-    const dayLabel = `${DAYS[dow]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`
-    const dateStr = date.toISOString().slice(0, 10)
-
-    slots.push({
-      id: `${dateStr}-morning`,
-      label: `${dayLabel} · Morning (9am – 12pm)`,
-      startAt: `${dateStr}T09:00:00`,
-      endAt: `${dateStr}T12:00:00`,
-    })
-
-    if (slots.length < 10 && dow >= 1 && dow <= 5) {
-      slots.push({
-        id: `${dateStr}-afternoon`,
-        label: `${dayLabel} · Afternoon (1pm – 5pm)`,
-        startAt: `${dateStr}T13:00:00`,
-        endAt: `${dateStr}T17:00:00`,
-      })
-    }
-  }
-
-  return slots
-}
