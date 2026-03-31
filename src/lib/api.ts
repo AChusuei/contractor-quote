@@ -25,14 +25,23 @@ export function setAuthProvider(fn: () => Promise<string | null>) {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
-  if (!getTokenFn) return {}
-  try {
-    const token = await getTokenFn()
-    if (token) return { Authorization: `Bearer ${token}` }
-  } catch {
-    // Clerk not ready or not signed in
+  const headers: Record<string, string> = {}
+
+  if (getTokenFn) {
+    try {
+      const token = await getTokenFn()
+      if (token) headers["Authorization"] = `Bearer ${token}`
+    } catch {
+      // Clerk not ready or not signed in
+    }
   }
-  return {}
+
+  const superContractorId = sessionStorage.getItem("cq_super_contractor_id")
+  if (superContractorId) {
+    headers["x-super-contractor-id"] = superContractorId
+  }
+
+  return headers
 }
 
 /**

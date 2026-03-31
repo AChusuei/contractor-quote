@@ -2,15 +2,51 @@ import type { Context, Next } from "hono"
 import { apiError } from "../lib/errors"
 
 /**
+ * Check if the current caller is a platform admin by inspecting their JWT email
+ * against the PLATFORM_ADMIN_EMAILS env var.
+ */
+function isPlatformAdmin(c: Context): boolean {
+  const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS as string | undefined
+  if (!adminEmailsRaw) return false
+
+  const adminEmails = adminEmailsRaw
+    .split(",")
+    .map((e: string) => e.trim().toLowerCase())
+    .filter(Boolean)
+
+  const authHeader = c.req.header("authorization")
+  if (!authHeader?.startsWith("Bearer ")) return false
+
+  try {
+    const token = authHeader.slice(7)
+    const payload = JSON.parse(atob(token.split(".")[1]))
+    const email: string | undefined =
+      payload.email ?? payload.primary_email ?? payload.email_address
+    return Boolean(email && adminEmails.includes(email.toLowerCase()))
+  } catch {
+    return false
+  }
+}
+
+/**
  * Extract the contractor ID from a Clerk JWT.
  * Clerk stores custom claims in `sessionClaims.metadata` or
  * the `org_id` field. For now we read from a custom claim
  * `contractorId` set during Clerk onboarding.
  *
+ * Platform admins may supply `x-super-contractor-id` to impersonate
+ * a contractor context (used by the super-user portal switcher).
+ *
  * Falls back to the `x-contractor-id` header for local dev
  * when Clerk is not configured.
  */
 function extractContractorId(c: Context): string | null {
+  // Platform admins can override the contractor context
+  const superContractorId = c.req.header("x-super-contractor-id")
+  if (superContractorId && isPlatformAdmin(c)) {
+    return superContractorId
+  }
+
   // In production: extract from Clerk JWT
   const authHeader = c.req.header("authorization")
   if (authHeader?.startsWith("Bearer ")) {
