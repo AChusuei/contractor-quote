@@ -38,6 +38,11 @@ export default function App({ clerkConfigured }: AppProps) {
         <Route path="/intake/confirmed" element={<AppointmentConfirmPage />} />
       </Route>
 
+      {/* Super admin portal select — no shell header, Clerk-protected */}
+      {clerkConfigured && (
+        <Route path="/admin/select" element={<PortalSelectPage />} />
+      )}
+
       {/* Admin portal — Clerk-protected */}
       <Route element={<AdminShell />}>
         {clerkConfigured ? (
@@ -49,7 +54,6 @@ export default function App({ clerkConfigured }: AppProps) {
             <Route path="/admin/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/admin/email/compose" element={<EmailComposePage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
-            <Route path="/admin/select" element={<PortalSelectPage />} />
             <Route path="/admin/super" element={<SuperDashboardPage />} />
             <Route path="/admin/super/contractors" element={<SuperContractorsPage />} />
             <Route path="/admin/super/contractors/:id" element={<SuperContractorDetailPage />} />
