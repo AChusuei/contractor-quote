@@ -239,8 +239,16 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
 
   const data = result.data
 
-  // --- Verify Turnstile token (when secret key is configured) ---
-  if (c.env.TURNSTILE_SECRET_KEY) {
+  // --- Verify Turnstile token (mandatory in production, skipped in development) ---
+  const isDev = c.env.ENVIRONMENT === "development"
+  if (!isDev) {
+    if (!c.env.TURNSTILE_SECRET_KEY) {
+      console.error("TURNSTILE_SECRET_KEY is not configured — rejecting quote submission")
+      return c.json(
+        { ok: false, error: "Server configuration error", code: "VALIDATION_ERROR" as const, fields: { turnstileToken: "Security verification is unavailable" } },
+        500
+      )
+    }
     if (!data.turnstileToken) {
       return c.json(
         { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: { turnstileToken: "Security verification is required" } },
