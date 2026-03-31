@@ -6,6 +6,7 @@ import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { apiGet, apiPost, apiPatch, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
+import { useContractorSession } from "@/contexts/ContractorSession"
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -314,6 +315,7 @@ function StaffForm({
 
 export function SettingsPage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { contractorId } = useContractorSession()
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile")
 
   // Wire up Clerk auth for API calls
@@ -484,8 +486,9 @@ export function SettingsPage() {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(data))
 
     // Also try to save to API
-    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
-    await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
+    if (contractorId) {
+      await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
+    }
 
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -508,9 +511,9 @@ export function SettingsPage() {
     reader.readAsDataURL(file)
 
     // Upload via API
-    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
     const formData = new FormData()
     formData.append("file", file)
+    if (!contractorId) return
     const res = await apiUpload<{ logoUrl: string }>(
       `/contractors/${encodeURIComponent(contractorId)}/logo`,
       formData,

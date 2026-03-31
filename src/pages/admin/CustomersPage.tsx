@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { DataTable, type DataTableColumnDef } from "components"
 import { apiGet, isNetworkError, setAuthProvider } from "@/lib/api"
+import { useContractorSession } from "@/contexts/ContractorSession"
 
 type Customer = {
   id: string
@@ -49,6 +50,7 @@ type ApiCustomer = Record<string, unknown>
 
 export function CustomersPage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { contractorId } = useContractorSession()
   const navigate = useNavigate()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -67,10 +69,10 @@ export function CustomersPage() {
   }, [isLoaded, isSignedIn, navigate])
 
   const loadCustomers = useCallback(async () => {
+    if (!contractorId) return
     setIsLoading(true)
     setError(null)
     try {
-      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
       const res = await apiGet<{ customers: ApiCustomer[]; total: number; page: number }>(
         `/contractors/${encodeURIComponent(contractorId)}/customers?limit=100`
       )
@@ -94,13 +96,13 @@ export function CustomersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [contractorId])
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (isLoaded && isSignedIn && contractorId) {
       void loadCustomers()
     }
-  }, [isLoaded, isSignedIn, loadCustomers])
+  }, [isLoaded, isSignedIn, contractorId, loadCustomers])
 
   if (!isLoaded || (!isSignedIn && !error)) {
     return (

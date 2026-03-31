@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from "react-router-dom"
 import { useAuth, UserButton } from "@clerk/clerk-react"
 import logoUrl from "@/assets/logo.png"
 import { apiGet, setAuthProvider } from "@/lib/api"
+import { useContractorSession } from "@/contexts/ContractorSession"
 
 const LOGO_URL = logoUrl || (import.meta.env.VITE_CQ_LOGO_URL as string | undefined)
 const CLERK_CONFIGURED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
@@ -69,41 +70,67 @@ function ClerkAdminHeader() {
   )
 }
 
-function SuperContractorBanner() {
+// Contractor switcher dropdown — shown in the header when a super admin is
+// impersonating a contractor. Lists all contractors for quick switching.
+function ContractorDropdown() {
+  const { contractorId, contractorName, isSuperAdmin, contractors } = useContractorSession()
   const navigate = useNavigate()
-  const [contractorName, setContractorName] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    const name = sessionStorage.getItem("cq_super_contractor_name")
-    setContractorName(name)
-  }, [])
+  if (!isSuperAdmin) return null
 
-  // Re-check on navigation (storage may change)
-  useEffect(() => {
-    function onStorage() {
-      setContractorName(sessionStorage.getItem("cq_super_contractor_name"))
-    }
-    window.addEventListener("storage", onStorage)
-    return () => window.removeEventListener("storage", onStorage)
-  }, [])
+  function handleSelect(contractor: { id: string; name: string }) {
+    sessionStorage.setItem("cq_super_contractor_id", contractor.id)
+    sessionStorage.setItem("cq_super_contractor_name", contractor.name)
+    setOpen(false)
+    window.location.reload()
+  }
 
-  if (!contractorName) return null
-
-  function handleSwitch() {
+  function handleSwitchPortal() {
     sessionStorage.removeItem("cq_super_contractor_id")
     sessionStorage.removeItem("cq_super_contractor_name")
     navigate("/admin/select")
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1.5 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
-      <span>Viewing as: <strong>{contractorName}</strong></span>
+    <div className="relative">
       <button
-        onClick={handleSwitch}
-        className="ml-1 underline underline-offset-2 hover:no-underline font-medium"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1.5 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50"
       >
-        Switch
+        <span>Viewing: <strong>{contractorName}</strong></span>
+        <span aria-hidden>▾</span>
       </button>
+      {open && (
+        <>
+          {/* Backdrop to close on outside click */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute left-0 top-full mt-1 z-50 min-w-[220px] rounded-md border border-border bg-background shadow-md">
+            {contractors.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => handleSelect(c)}
+                className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${
+                  c.id === contractorId ? "font-medium text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                {c.name}
+              </button>
+            ))}
+            <div className="border-t border-border mt-1">
+              <button
+                onClick={handleSwitchPortal}
+                className="w-full text-left px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
+              >
+                Switch portal…
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -134,7 +161,7 @@ function ClerkAdminShellContent() {
           <span className="font-semibold text-sm">Admin</span>
         )}
         <ClerkAdminHeader />
-        <SuperContractorBanner />
+        <ContractorDropdown />
       </header>
       <main className="p-6">
         <Outlet />
@@ -156,7 +183,6 @@ export function AdminShell() {
         ) : (
           <span className="font-semibold text-sm">Admin</span>
         )}
-        <SuperContractorBanner />
       </header>
       <main className="p-6">
         <Outlet />

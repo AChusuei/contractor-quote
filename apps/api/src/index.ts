@@ -2080,6 +2080,80 @@ app.post(
 )
 
 // ---------------------------------------------------------------------------
+// Me endpoints — authenticated user's own context
+// ---------------------------------------------------------------------------
+
+// GET /me/contractor — returns the contractor associated with the caller's email
+// Used by the frontend ContractorSession context for regular staff members.
+app.get(
+  "/me/contractor",
+  async (c) => {
+    const authHeader = c.req.header("authorization")
+    let email: string | null = null
+
+    if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const token = authHeader.slice(7)
+        const payload = JSON.parse(atob(token.split(".")[1]))
+        email =
+          (payload.email as string | undefined) ??
+          (payload.primary_email as string | undefined) ??
+          (payload.email_address as string | undefined) ??
+          null
+      } catch {
+        return apiError(c, "UNAUTHORIZED", "Invalid token")
+      }
+    } else if (c.env.ENVIRONMENT === "development") {
+      // Dev fallback: no JWT, return default contractor
+      const devContractorId = c.req.header("x-contractor-id") ?? "contractor-001"
+      const row = await c.env.DB.prepare(
+        "SELECT id, name FROM contractors WHERE id = ?"
+      )
+        .bind(devContractorId)
+        .first<{ id: string; name: string }>()
+      if (!row) {
+        return apiError(c, "NOT_FOUND", "Contractor not found")
+      }
+      const res: ApiOk<{ contractorId: string; contractorName: string; role: string }> = {
+        ok: true,
+        data: { contractorId: row.id, contractorName: row.name, role: "owner" },
+      }
+      return c.json(res)
+    } else {
+      return apiError(c, "UNAUTHORIZED", "Authentication required")
+    }
+
+    if (!email) {
+      return apiError(c, "UNAUTHORIZED", "No email in token")
+    }
+
+    const staff = await c.env.DB.prepare(
+      `SELECT s.contractor_id, s.role, c.name AS contractor_name
+       FROM staff s
+       JOIN contractors c ON c.id = s.contractor_id
+       WHERE LOWER(s.email) = ? AND s.active = 1
+       LIMIT 1`
+    )
+      .bind(email.toLowerCase())
+      .first<{ contractor_id: string; role: string; contractor_name: string }>()
+
+    if (!staff) {
+      return apiError(c, "NOT_FOUND", "No contractor association found for this user")
+    }
+
+    const res: ApiOk<{ contractorId: string; contractorName: string; role: string }> = {
+      ok: true,
+      data: {
+        contractorId: staff.contractor_id,
+        contractorName: staff.contractor_name,
+        role: staff.role,
+      },
+    }
+    return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Staff management
 // ---------------------------------------------------------------------------
 

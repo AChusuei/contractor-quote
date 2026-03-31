@@ -5,6 +5,7 @@ import { Button } from "components"
 import { getQuote } from "@/lib/quoteStore"
 import { apiPatch, apiGet, isNetworkError } from "@/lib/api"
 import { getQuotePhotos, type PhotoMeta } from "@/lib/supabase"
+import { useContractor } from "@/hooks/useContractor"
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   house: "House",
@@ -91,6 +92,8 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 
 export function IntakeReviewPage() {
   const navigate = useNavigate()
+  const { contractor } = useContractor()
+  const contractorId = contractor?.id ?? ""
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [quote, setQuote] = useState<ApiQuote | null>(null)
@@ -191,8 +194,7 @@ export function IntakeReviewPage() {
       sessionStorage.removeItem("cq_public_token")
       // Dynamic import to avoid circular deps
       const { clearDraft } = await import("@/lib/draftSession")
-      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
-      clearDraft(contractorId)
+      if (contractorId) clearDraft(contractorId)
       sessionStorage.removeItem("cq_quote_session_id")
 
       navigate("/intake/confirmation")

@@ -11,18 +11,23 @@ import { getActiveDraft, touchDraft } from "@/lib/draftSession"
  *
  * @param getPayload — function that returns the current form data to save.
  *                     Should return null if nothing to save.
- * @param target — "quote" or "customer" — determines which fields get sent.
+ * @param contractorId — the contractor ID to look up the active draft.
  */
 export function useSaveOnLeave(
   getPayload: () => Record<string, unknown> | null,
+  contractorId: string,
 ) {
   const payloadRef = useRef(getPayload)
   payloadRef.current = getPayload
 
+  const contractorIdRef = useRef(contractorId)
+  contractorIdRef.current = contractorId
+
   useEffect(() => {
     function save() {
-      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
-      const draft = getActiveDraft(contractorId)
+      const cid = contractorIdRef.current
+      if (!cid) return
+      const draft = getActiveDraft(cid)
       if (!draft) return
 
       const payload = payloadRef.current()
@@ -41,7 +46,7 @@ export function useSaveOnLeave(
         body,
         keepalive: true,
       }).then(() => {
-        touchDraft(contractorId)
+        touchDraft(cid)
       }).catch(() => {
         // Best effort — if it fails, the user can re-enter on next visit
       })

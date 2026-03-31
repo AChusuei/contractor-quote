@@ -9,6 +9,7 @@ import { useQuoteContext } from "@/lib/QuoteContext"
 import { apiGet } from "@/lib/api"
 import { getActiveDraft } from "@/lib/draftSession"
 import { useSaveOnLeave } from "@/hooks/useSaveOnLeave"
+import { useContractor } from "@/hooks/useContractor"
 import { useDevAction } from "@/components/DevToolbar"
 import { apiPatch, isNetworkError } from "@/lib/api"
 import { ProjectScopeForm, projectScopeSchema, type ProjectScopeData } from "@/components/forms/ProjectScopeForm"
@@ -20,6 +21,8 @@ export function IntakeScreen2Page() {
   const quote = ctx?.quote
   const scope = quote?.scope
   const isAdminView = !!quote
+  const { contractor } = useContractor()
+  const contractorId = contractor?.id ?? ""
 
   const {
     register,
@@ -80,7 +83,7 @@ export function IntakeScreen2Page() {
   // Restore scope from active draft when navigating back
   useEffect(() => {
     if (readOnly || scope) return
-    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
+    if (!contractorId) return
     const draft = getActiveDraft(contractorId)
     if (!draft) return
     apiGet<{ jobSiteAddress?: string; propertyType?: string; budgetRange?: string; scope: Record<string, unknown> | null }>(
@@ -97,7 +100,7 @@ export function IntakeScreen2Page() {
         }
       })
       .catch(() => { /* draft fetch failed — start fresh */ })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contractorId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   usePageTitle("Project Scope")
   useDevAction(readOnly ? null : {
@@ -133,7 +136,7 @@ export function IntakeScreen2Page() {
     const v = getValues()
     const { jobSiteAddress, propertyType, budgetRange, ...scopeFields } = v
     return { jobSiteAddress, propertyType, budgetRange, scope: scopeFields }
-  })
+  }, contractorId)
 
   const onSubmit = async (data: ProjectScopeData) => {
     const { jobSiteAddress, propertyType, budgetRange, ...scopeFields } = data

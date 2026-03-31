@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/clerk-react"
 import { DataTable, type DataTableColumnDef } from "components"
 import { fetchQuotes, type Quote, type QuoteStatus } from "@/lib/quotes"
 import { apiGet, isNetworkError, setAuthProvider } from "@/lib/api"
+import { useContractorSession } from "@/contexts/ContractorSession"
 
 // ─── API quote shape (from backend) ──────────────────────────────────────────
 
@@ -169,7 +170,8 @@ const columns: DataTableColumnDef<Quote>[] = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function QuotesPage() {
-  const { isLoaded, isSignedIn, getToken, userId } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { contractorId } = useContractorSession()
   const navigate = useNavigate()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -190,13 +192,10 @@ export function QuotesPage() {
   }, [isLoaded, isSignedIn, navigate])
 
   const loadQuotes = useCallback(async () => {
+    if (!contractorId) return
     setIsLoading(true)
     setError(null)
     try {
-      // Try API first
-      // TODO: map Clerk userId → contractorId via API or custom claim
-      // For now, use the dev default
-      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
       const res = await apiGet<{ quotes: ApiQuote[]; total: number; page: number }>(
         `/contractors/${encodeURIComponent(contractorId)}/quotes?limit=100`
       )
@@ -228,13 +227,13 @@ export function QuotesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [userId])
+  }, [contractorId])
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (isLoaded && isSignedIn && contractorId) {
       void loadQuotes()
     }
-  }, [isLoaded, isSignedIn, loadQuotes])
+  }, [isLoaded, isSignedIn, contractorId, loadQuotes])
 
   if (!isLoaded || (!isSignedIn && !error)) {
     return (

@@ -11,6 +11,7 @@ import { apiPost, apiPatch, apiGet, isNetworkError } from "@/lib/api"
 import { getActiveDraft, saveDraft, touchDraft } from "@/lib/draftSession"
 import { useDevAction } from "@/components/DevToolbar"
 import { useSaveOnLeave } from "@/hooks/useSaveOnLeave"
+import { useContractor } from "@/hooks/useContractor"
 import { CustomerInfoForm, customerInfoSchema, type CustomerInfoData } from "@/components/forms/CustomerInfoForm"
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
@@ -55,6 +56,8 @@ export function IntakePage() {
   const readOnly = ctx?.readOnly ?? false
   const quote = ctx?.quote
   const isAdminView = !!quote
+  const { contractor } = useContractor()
+  const contractorId = contractor?.id ?? ""
 
   const {
     register,
@@ -78,7 +81,7 @@ export function IntakePage() {
   // Restore form from active draft when navigating back
   useEffect(() => {
     if (readOnly || quote) return // admin view or already have data
-    const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
+    if (!contractorId) return
     const draft = getActiveDraft(contractorId)
     if (!draft) return
     const publicToken = draft.publicToken
@@ -100,7 +103,7 @@ export function IntakePage() {
         }
       })
       .catch(() => { /* draft fetch failed — start fresh */ })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contractorId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { getToken: getTurnstileToken, resetToken: resetTurnstile, TurnstileWidget } =
     useTurnstile(readOnly ? undefined : TURNSTILE_SITE_KEY)
@@ -126,11 +129,11 @@ export function IntakePage() {
       name: v.name,
       email: v.email,
       phone: v.phone,
-      
+
       howDidYouFindUs: v.howDidYouFindUs,
       referredByContractor: v.referredByContractor || undefined,
     }
-  })
+  }, contractorId)
 
   const valuesRef = ctx?.valuesRef
   useEffect(() => {
@@ -163,8 +166,7 @@ export function IntakePage() {
     try {
       const turnstileToken = TURNSTILE_SITE_KEY ? getTurnstileToken() : undefined
 
-      const contractorId = import.meta.env.VITE_CQ_CONTRACTOR_ID ?? "contractor-001"
-      const existingDraft = getActiveDraft(contractorId)
+      const existingDraft = contractorId ? getActiveDraft(contractorId) : null
 
       const payload = {
         schemaVersion: 1,

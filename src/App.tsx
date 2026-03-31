@@ -22,6 +22,7 @@ import { SuperDashboardPage } from "@/pages/admin/super/SuperDashboardPage"
 import { SuperContractorsPage } from "@/pages/admin/super/SuperContractorsPage"
 import { SuperContractorDetailPage } from "@/pages/admin/super/SuperContractorDetailPage"
 import { SuperUsersPage } from "@/pages/admin/super/SuperUsersPage"
+import { ContractorSessionProvider } from "@/contexts/ContractorSession"
 
 interface AppProps {
   clerkConfigured: boolean
@@ -50,25 +51,25 @@ export default function App({ clerkConfigured }: AppProps) {
       )}
 
       {/* Admin portal — Clerk-protected */}
-      <Route element={<AdminShell />}>
-        {clerkConfigured ? (
-          <>
-            <Route path="/admin/quotes" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
-            <Route path="/admin/quotes/:id" element={<ProtectedRoute><QuoteDetailPage /></ProtectedRoute>} />
-            <Route path="/admin/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
-            <Route path="/admin/customers/:id" element={<ProtectedRoute><CustomerDetailPage /></ProtectedRoute>} />
-            <Route path="/admin/email/compose" element={<ProtectedRoute><EmailComposePage /></ProtectedRoute>} />
-            <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-            <Route path="/admin/super" element={<ProtectedRoute><SuperDashboardPage /></ProtectedRoute>} />
-            <Route path="/admin/super/contractors" element={<ProtectedRoute><SuperContractorsPage /></ProtectedRoute>} />
-            <Route path="/admin/super/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
-            <Route path="/admin/super/users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
-            <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
-          </>
-        ) : (
+      {clerkConfigured ? (
+        <Route element={<ContractorSessionProvider><AdminShell /></ContractorSessionProvider>}>
+          <Route path="/admin/quotes" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
+          <Route path="/admin/quotes/:id" element={<ProtectedRoute><QuoteDetailPage /></ProtectedRoute>} />
+          <Route path="/admin/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+          <Route path="/admin/customers/:id" element={<ProtectedRoute><CustomerDetailPage /></ProtectedRoute>} />
+          <Route path="/admin/email/compose" element={<ProtectedRoute><EmailComposePage /></ProtectedRoute>} />
+          <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/admin/super" element={<ProtectedRoute><SuperDashboardPage /></ProtectedRoute>} />
+          <Route path="/admin/super/contractors" element={<ProtectedRoute><SuperContractorsPage /></ProtectedRoute>} />
+          <Route path="/admin/super/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
+          <Route path="/admin/super/users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
+          <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
+        </Route>
+      ) : (
+        <Route element={<AdminShell />}>
           <Route path="/admin/*" element={<ClerkNotConfigured />} />
-        )}
-      </Route>
+        </Route>
+      )}
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
