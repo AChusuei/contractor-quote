@@ -22,7 +22,7 @@ import "./index.css"
   }
 })()
 import App from "./App.tsx"
-import { DevToolbar, DevActionProvider } from "@/components/DevToolbar"
+import { DevActionProvider } from "@/components/DevToolbar"
 import { ContractorProvider } from "@/components/ContractorProvider"
 import { seedMockQuotes } from "@/lib/quoteStore"
 
