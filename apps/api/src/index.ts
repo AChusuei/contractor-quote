@@ -13,6 +13,7 @@ import {
   draftUpdateSchema,
   activityCreateSchema,
   customerDeletionSchema,
+  customerUpdateSchema,
   emailSendSchema,
   staffCreateSchema,
   staffUpdateSchema,
@@ -646,7 +647,7 @@ app.get(
     const quoteId = c.req.param("quoteId")
 
     const row = await c.env.DB.prepare(
-      `SELECT q.id, q.contractor_id, q.schema_version,
+      `SELECT q.id, q.contractor_id, q.customer_id, q.schema_version,
               c.name, c.email, c.phone, c.cell,
               q.job_site_address, q.property_type, q.budget_range,
               c.how_did_you_find_us, c.referred_by_contractor,
@@ -676,6 +677,7 @@ app.get(
     const quote = {
       id: row.id,
       contractorId: row.contractor_id,
+      customerId: row.customer_id,
       schemaVersion: row.schema_version,
       name: row.name,
       email: row.email,
@@ -1634,6 +1636,382 @@ app.delete(
         contractorId,
         requestType,
         contractorId, // the authenticated contractor is the requester
+        emailHash,
+        quotesDeleted,
+        photosDeleted,
+        appointmentsDeleted,
+        activityDeleted
+      )
+      .run()
+
+    const res: ApiOk<{
+      quotesDeleted: number
+      photosDeleted: number
+      appointmentsDeleted: number
+      activityRecordsDeleted: number
+    }> = {
+      ok: true,
+      data: {
+        quotesDeleted,
+        photosDeleted,
+        appointmentsDeleted,
+        activityRecordsDeleted: activityDeleted,
+      },
+    }
+    return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// List customers for a contractor (with quote count)
+// ---------------------------------------------------------------------------
+app.get(
+  "/contractors/:contractorId/customers",
+  requireAuth(),
+  requireContractorOwnership(),
+  async (c) => {
+    const contractorId = c.get("contractorId")
+
+    const pageParam = parseInt(c.req.query("page") ?? "1", 10)
+    const limitParam = parseInt(c.req.query("limit") ?? "50", 10)
+    const page = Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1
+    const limit = Number.isFinite(limitParam) && limitParam >= 1
+      ? Math.min(limitParam, 100)
+      : 50
+    const offset = (page - 1) * limit
+
+    const conditions: string[] = ["c.contractor_id = ?"]
+    const bindings: (string | number)[] = [contractorId]
+
+    const search = c.req.query("search")
+    if (search) {
+      conditions.push("(c.name LIKE ? OR c.email LIKE ?)")
+      const pattern = `%${search}%`
+      bindings.push(pattern, pattern)
+    }
+
+    const where = conditions.join(" AND ")
+
+    const countResult = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total FROM customers c WHERE ${where}`
+    )
+      .bind(...bindings)
+      .first<{ total: number }>()
+
+    const total = countResult?.total ?? 0
+
+    const { results } = await c.env.DB.prepare(
+      `SELECT c.id, c.name, c.email, c.phone,
+              c.how_did_you_find_us, c.referred_by_contractor,
+              c.created_at, c.updated_at,
+              COUNT(q.id) as quote_count,
+              MAX(q.created_at) as most_recent_quote_date
+       FROM customers c
+       LEFT JOIN quotes q ON q.customer_id = c.id AND q.deleted_at IS NULL
+       WHERE ${where}
+       GROUP BY c.id
+       ORDER BY c.created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+      .bind(...bindings, limit, offset)
+      .all()
+
+    const customers = (results ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      howDidYouFindUs: row.how_did_you_find_us ?? null,
+      referredByContractor: row.referred_by_contractor ?? null,
+      quoteCount: row.quote_count ?? 0,
+      mostRecentQuoteDate: row.most_recent_quote_date ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+
+    const res: ApiOk<{ customers: typeof customers; total: number; page: number }> = {
+      ok: true,
+      data: { customers, total, page },
+    }
+    return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Get single customer with their quotes
+// ---------------------------------------------------------------------------
+app.get(
+  "/customers/:customerId",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const customerId = c.req.param("customerId")
+
+    const row = await c.env.DB.prepare(
+      `SELECT id, contractor_id, name, email, phone,
+              how_did_you_find_us, referred_by_contractor,
+              created_at, updated_at
+       FROM customers
+       WHERE id = ? AND contractor_id = ?`
+    )
+      .bind(customerId, contractorId)
+      .first()
+
+    if (!row) {
+      return apiError(c, "NOT_FOUND", "Customer not found")
+    }
+
+    const { results: quotes } = await c.env.DB.prepare(
+      `SELECT id, job_site_address, property_type, budget_range, status, created_at
+       FROM quotes
+       WHERE customer_id = ? AND contractor_id = ? AND deleted_at IS NULL
+       ORDER BY created_at DESC`
+    )
+      .bind(customerId, contractorId)
+      .all()
+
+    const customer = {
+      id: row.id,
+      contractorId: row.contractor_id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      howDidYouFindUs: row.how_did_you_find_us ?? null,
+      referredByContractor: row.referred_by_contractor ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      quotes: (quotes ?? []).map((q: Record<string, unknown>) => ({
+        id: q.id,
+        jobSiteAddress: q.job_site_address,
+        propertyType: q.property_type,
+        budgetRange: q.budget_range,
+        status: q.status,
+        createdAt: q.created_at,
+      })),
+    }
+
+    const res: ApiOk<typeof customer> = { ok: true, data: customer }
+    return c.json(res)
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Update customer fields
+// ---------------------------------------------------------------------------
+app.patch(
+  "/customers/:customerId",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const customerId = c.req.param("customerId")
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM customers WHERE id = ? AND contractor_id = ?"
+    )
+      .bind(customerId, contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Customer not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = customerUpdateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    const fieldMap: Record<string, { column: string; value: unknown }> = {
+      name: { column: "name", value: data.name },
+      email: { column: "email", value: data.email },
+      phone: { column: "phone", value: data.phone },
+      howDidYouFindUs: { column: "how_did_you_find_us", value: data.howDidYouFindUs },
+      referredByContractor: { column: "referred_by_contractor", value: data.referredByContractor },
+    }
+
+    const setClauses: string[] = []
+    const bindValues: unknown[] = []
+
+    for (const [key, mapping] of Object.entries(fieldMap)) {
+      if (key in data && mapping.value !== undefined) {
+        setClauses.push(`${mapping.column} = ?`)
+        bindValues.push(mapping.value ?? null)
+      }
+    }
+
+    if (setClauses.length > 0) {
+      setClauses.push("updated_at = datetime('now')")
+      bindValues.push(customerId, contractorId)
+      await c.env.DB.prepare(
+        `UPDATE customers SET ${setClauses.join(", ")} WHERE id = ? AND contractor_id = ?`
+      )
+        .bind(...bindValues)
+        .run()
+    }
+
+    const updated = await c.env.DB.prepare(
+      `SELECT id, contractor_id, name, email, phone,
+              how_did_you_find_us, referred_by_contractor,
+              created_at, updated_at
+       FROM customers WHERE id = ?`
+    )
+      .bind(customerId)
+      .first()
+
+    if (!updated) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to fetch updated customer")
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        id: updated.id,
+        contractorId: updated.contractor_id,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+        howDidYouFindUs: updated.how_did_you_find_us ?? null,
+        referredByContractor: updated.referred_by_contractor ?? null,
+        createdAt: updated.created_at,
+        updatedAt: updated.updated_at,
+      },
+    })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Delete customer data (by customer ID — moves logic from email-based delete)
+// ---------------------------------------------------------------------------
+app.delete(
+  "/customers/:customerId",
+  requireAuth(),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const customerId = c.req.param("customerId")
+
+    // Verify customer belongs to this contractor
+    const customer = await c.env.DB.prepare(
+      "SELECT id, email FROM customers WHERE id = ? AND contractor_id = ?"
+    )
+      .bind(customerId, contractorId)
+      .first<{ id: string; email: string }>()
+
+    if (!customer) {
+      return apiError(c, "NOT_FOUND", "Customer not found")
+    }
+
+    let requestType = "contractor"
+    const rawBody = await c.req.text()
+    if (rawBody) {
+      let body: unknown
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+      }
+      const result = customerDeletionSchema.safeParse(body)
+      if (!result.success) {
+        return c.json(
+          { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+          422
+        )
+      }
+      requestType = result.data.requestType
+    }
+
+    // Find all quotes for this customer
+    const { results: quotes } = await c.env.DB.prepare(
+      "SELECT id FROM quotes WHERE customer_id = ? AND contractor_id = ?"
+    )
+      .bind(customerId, contractorId)
+      .all<{ id: string }>()
+
+    const quoteIds = (quotes ?? []).map((q) => q.id)
+
+    let photosDeleted = 0
+    let appointmentsDeleted = 0
+    let activityDeleted = 0
+    let quotesDeleted = 0
+
+    if (quoteIds.length > 0) {
+      const placeholders = quoteIds.map(() => "?").join(", ")
+
+      // Delete photos from R2
+      const { results: photos } = await c.env.DB.prepare(
+        `SELECT storage_key FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .all<{ storage_key: string }>()
+
+      for (const photo of photos) {
+        await c.env.STORAGE.delete(photo.storage_key)
+        photosDeleted++
+      }
+
+      // Delete DB records
+      await c.env.DB.prepare(
+        `DELETE FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+
+      const appointmentResult = await c.env.DB.prepare(
+        `DELETE FROM appointments WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+      appointmentsDeleted = appointmentResult.meta?.changes ?? 0
+
+      const activityResult = await c.env.DB.prepare(
+        `DELETE FROM quote_activity WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+      activityDeleted = activityResult.meta?.changes ?? 0
+
+      const quotesResult = await c.env.DB.prepare(
+        `DELETE FROM quotes WHERE id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+      quotesDeleted = quotesResult.meta?.changes ?? 0
+    }
+
+    // Delete the customer record
+    await c.env.DB.prepare(
+      "DELETE FROM customers WHERE id = ? AND contractor_id = ?"
+    )
+      .bind(customerId, contractorId)
+      .run()
+
+    // Hash email for audit log
+    const emailBytes = new TextEncoder().encode(customer.email.toLowerCase().trim())
+    const hashBuffer = await crypto.subtle.digest("SHA-256", emailBytes)
+    const emailHash = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+
+    await c.env.DB.prepare(
+      `INSERT INTO data_deletion_log (
+        contractor_id, request_type, requested_by, email_hash,
+        quotes_deleted, photos_deleted, appointments_deleted, activity_records_deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        contractorId,
+        requestType,
+        contractorId,
         emailHash,
         quotesDeleted,
         photosDeleted,

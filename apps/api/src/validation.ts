@@ -278,6 +278,43 @@ export const activityCreateSchema = z
 export type ActivityCreate = z.infer<typeof activityCreateSchema>
 
 // ---------------------------------------------------------------------------
+// Customer update schema (partial — editable customer fields)
+// ---------------------------------------------------------------------------
+
+export const customerUpdateSchema = z
+  .object({
+    name: sanitizedMinMax(
+      1, "Name is required",
+      200, "Name must be 200 characters or fewer"
+    ),
+
+    email: z
+      .string({ error: "Enter a valid email address" })
+      .transform(stripHtml)
+      .pipe(z.string().email("Enter a valid email address")),
+
+    phone: z
+      .string({ error: "Enter a valid phone number" })
+      .transform(stripHtml)
+      .pipe(
+        z.string().refine(
+          (v) => v.replace(/\D/g, "").length >= 10,
+          "Enter a valid phone number (at least 10 digits)"
+        )
+      ),
+
+    howDidYouFindUs: sanitizedMax(500, "Response is too long"),
+    referredByContractor: sanitizedMax(200, "Referral name is too long"),
+  })
+  .partial()
+  .refine(
+    (val) => Object.keys(val).length > 0,
+    "At least one field must be provided for update"
+  )
+
+export type CustomerUpdate = z.infer<typeof customerUpdateSchema>
+
+// ---------------------------------------------------------------------------
 // Customer data deletion schema
 // ---------------------------------------------------------------------------
 

@@ -13,7 +13,6 @@ import {
 } from "@/lib/quoteStore"
 import { fetchQuotes } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
-import { CustomerInfoForm, customerInfoSchema, type CustomerInfoData } from "@/components/forms/CustomerInfoForm"
 import { ProjectScopeForm, projectScopeSchema, type ProjectScopeData } from "@/components/forms/ProjectScopeForm"
 import { PhotosForm } from "@/components/forms/PhotosForm"
 import { apiGet, apiPatch, apiPost, isNetworkError, setAuthProvider } from "@/lib/api"
@@ -32,8 +31,11 @@ import { ActivityFeed, type ActivityItem } from "@/components/ActivityFeed"
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Extended quote with customerId from API */
+type QuoteWithCustomer = Quote & { customerId?: string }
+
 /** Map API quote response to the frontend Quote type */
-function mapApiQuote(raw: Record<string, unknown>): Quote {
+function mapApiQuote(raw: Record<string, unknown>): QuoteWithCustomer {
   const scope = raw.scope as Quote["scope"] | null
   return {
     id: raw.id as string,
@@ -53,6 +55,7 @@ function mapApiQuote(raw: Record<string, unknown>): Quote {
     status: raw.status as QuoteStatus,
     statusHistory: (raw.statusHistory as Quote["statusHistory"]) ?? [],
     contractorNotes: (raw.contractorNotes as string) ?? "",
+    customerId: (raw.customerId as string) ?? undefined,
   }
 }
 
@@ -87,10 +90,9 @@ function formatDateTime(iso: string): string {
 // Tabs — now includes Activity
 // ---------------------------------------------------------------------------
 
-type TabId = "contact" | "scope" | "photos" | "activity"
+type TabId = "scope" | "photos" | "activity"
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "contact", label: "Customer" },
   { id: "scope", label: "Project Scope" },
   { id: "photos", label: "Photos" },
   { id: "activity", label: "Activity" },
@@ -189,87 +191,6 @@ function StatusPanel({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Delete customer data
-// ---------------------------------------------------------------------------
-
-function DeleteCustomerDataPanel({ quote, onDeleted }: { quote: Quote; onDeleted: () => void }) {
-  const [confirming, setConfirming] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const { getToken } = useAuth()
-
-  const handleDelete = async () => {
-    setDeleting(true)
-    setError(null)
-    try {
-      const token = await getToken()
-      const res = await fetch(
-        `/api/v1/customers/${encodeURIComponent(quote.email)}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ requestType: "contractor" }),
-        }
-      )
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.error ?? `Delete failed (${res.status})`)
-      }
-      onDeleted()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred")
-    } finally {
-      setDeleting(false)
-      setConfirming(false)
-    }
-  }
-
-  return (
-    <div>
-      <SectionHeading>Customer data</SectionHeading>
-      {!confirming ? (
-        <Button
-          size="sm"
-          variant="outline"
-          className="text-red-600 border-red-300 hover:bg-red-50"
-          onClick={() => setConfirming(true)}
-        >
-          Delete customer data
-        </Button>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-sm text-red-600">
-            This will permanently delete all quotes, photos, appointments, and activity
-            for <strong>{quote.email}</strong>. This cannot be undone.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => { setConfirming(false); setError(null) }}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? "Deleting\u2026" : "Confirm delete"}
-            </Button>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Fallback view for quotes that don't have localStorage data
@@ -304,73 +225,8 @@ function BasicQuoteView({ id }: { id: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Save status indicator
-// ---------------------------------------------------------------------------
-
-function SaveIndicator({ status }: { status: string }) {
-  if (status === "idle") return null
-  const text =
-    status === "saving"
-      ? "Saving\u2026"
-      : status === "saved"
-        ? "Saved"
-        : "Save error"
-  const color =
-    status === "error"
-      ? "text-red-600"
-      : "text-muted-foreground"
-  return <span className={cn("text-xs", color)}>{text}</span>
-}
-
-// ---------------------------------------------------------------------------
 // Admin form tab wrappers — set up useForm and wire auto-save
 // ---------------------------------------------------------------------------
-
-function ContactTab({
-  quote,
-  valuesRef,
-  onFieldChange,
-}: {
-  quote: Quote
-  valuesRef: React.MutableRefObject<(() => Record<string, unknown>) | null>
-  onFieldChange: () => void
-}) {
-  const {
-    register,
-    watch,
-    getValues,
-    formState: { errors },
-  } = useForm<CustomerInfoData>({
-    resolver: zodResolver(customerInfoSchema),
-    mode: "onTouched",
-    defaultValues: {
-      name: quote.name ?? "",
-      email: quote.email ?? "",
-      phone: quote.phone ?? "",
-      cell: quote.cell ?? "",
-      howDidYouFindUs: quote.howDidYouFindUs ?? "",
-      referredByContractor: quote.referredByContractor ?? "",
-    },
-  })
-
-  useEffect(() => {
-    valuesRef.current = () => getValues() as Record<string, unknown>
-    return () => { valuesRef.current = null }
-  }, [valuesRef, getValues])
-
-  useEffect(() => {
-    const sub = watch(() => onFieldChange())
-    return () => sub.unsubscribe()
-  }, [onFieldChange, watch])
-
-  return (
-    <CustomerInfoForm
-      register={register}
-      errors={errors}
-      readOnly={false}
-    />
-  )
-}
 
 function ScopeTab({
   quote,
@@ -449,9 +305,9 @@ function ScopeTab({
 export function QuoteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { isLoaded, isSignedIn, getToken } = useAuth()
-  const [quote, setQuote] = useState<Quote | null>(null)
+  const [quote, setQuote] = useState<QuoteWithCustomer | null>(null)
   const [notFound, setNotFound] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabId>("contact")
+  const [activeTab, setActiveTab] = useState<TabId>("scope")
   const valuesRef = useRef<(() => Record<string, unknown>) | null>(null)
   const pendingEditsRef = useRef<Record<string, unknown>>({})
   const [useLocalFallback, setUseLocalFallback] = useState(false)
@@ -546,7 +402,7 @@ export function QuoteDetailPage() {
     pendingEditsRef.current = {}
   }, [id, quote, useLocalFallback, flushCurrentTab])
 
-  const { trigger: triggerAutoSave, flush: flushAutoSave, status: saveStatus } = useAutoSave(performSave)
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = useAutoSave(performSave)
 
   /** Called by child forms on every field change via tab wrappers. */
   const onFieldChange = useCallback(() => {
@@ -651,6 +507,23 @@ export function QuoteDetailPage() {
         &larr; Back to quotes
       </Link>
 
+      {/* Customer name link */}
+      {quote.name && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Customer:</span>
+          {quote.customerId ? (
+            <Link
+              to={`/admin/customers/${quote.customerId}`}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {quote.name}
+            </Link>
+          ) : (
+            <span className="text-sm font-medium">{quote.name}</span>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
         {/* Left — tabbed content */}
         <div>
@@ -686,13 +559,6 @@ export function QuoteDetailPage() {
               onAddComment={handleAddComment}
             />
           )}
-          {activeTab === "contact" && (
-            <ContactTab
-              quote={quote}
-              valuesRef={valuesRef}
-              onFieldChange={onFieldChange}
-            />
-          )}
           {activeTab === "scope" && (
             <ScopeTab
               quote={quote}
@@ -708,15 +574,9 @@ export function QuoteDetailPage() {
           )}
         </div>
 
-        {/* Right — sidebar: StatusPanel + DeleteCustomerDataPanel only */}
+        {/* Right — sidebar: StatusPanel only */}
         <div className="space-y-8">
           <StatusPanel quote={quote} onStatusChange={handleStatusChange} />
-          <DeleteCustomerDataPanel
-            quote={quote}
-            onDeleted={() => {
-              window.location.href = "/admin/quotes"
-            }}
-          />
         </div>
       </div>
     </div>
