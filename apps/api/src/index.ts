@@ -19,6 +19,8 @@ import {
   staffCreateSchema,
   staffUpdateSchema,
   assignOwnerSchema,
+  contractorUpdateSchema,
+  superUserCreateSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
   QUOTE_STATUSES,
@@ -2485,6 +2487,349 @@ app.get(
   requirePlatformAdmin(),
   (c) => {
     return c.json({ ok: true, data: { isPlatformAdmin: true } })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Platform: Contractor detail + update
+// ---------------------------------------------------------------------------
+
+// Get contractor detail with staff list, quote count, customer count
+app.get(
+  "/platform/contractors/:contractorId",
+  requirePlatformAdmin(),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    const contractor = await c.env.DB.prepare(
+      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url
+       FROM contractors WHERE id = ?`
+    )
+      .bind(contractorId)
+      .first<{
+        id: string
+        slug: string
+        name: string
+        email: string | null
+        phone: string | null
+        address: string | null
+        website_url: string | null
+        license_number: string | null
+        logo_url: string | null
+      }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    const { results: staffRows } = await c.env.DB.prepare(
+      `SELECT id, name, email, role, phone, active, created_at, clerk_user_id
+       FROM staff WHERE contractor_id = ? ORDER BY role ASC, name ASC`
+    )
+      .bind(contractorId)
+      .all<{
+        id: string
+        name: string
+        email: string
+        role: string
+        phone: string | null
+        active: number
+        created_at: string
+        clerk_user_id: string | null
+      }>()
+
+    const counts = await c.env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM quotes WHERE contractor_id = ? AND deleted_at IS NULL) AS quoteCount,
+         (SELECT COUNT(*) FROM customers WHERE contractor_id = ?) AS customerCount`
+    )
+      .bind(contractorId, contractorId)
+      .first<{ quoteCount: number; customerCount: number }>()
+
+    const data = {
+      id: contractor.id,
+      slug: contractor.slug,
+      name: contractor.name,
+      email: contractor.email ?? null,
+      phone: contractor.phone ?? null,
+      address: contractor.address ?? null,
+      websiteUrl: contractor.website_url ?? null,
+      licenseNumber: contractor.license_number ?? null,
+      logoUrl: contractor.logo_url ?? null,
+      quoteCount: counts?.quoteCount ?? 0,
+      customerCount: counts?.customerCount ?? 0,
+      staff: (staffRows ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        role: s.role,
+        phone: s.phone ?? null,
+        active: s.active === 1,
+        createdAt: s.created_at,
+        clerkUserId: s.clerk_user_id ?? null,
+      })),
+    }
+
+    return c.json({ ok: true, data })
+  }
+)
+
+// Update contractor fields (platform admin only)
+app.patch(
+  "/platform/contractors/:contractorId",
+  requirePlatformAdmin(),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = contractorUpdateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: formatZodErrors(result.error),
+        },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // Check slug uniqueness (excluding this contractor)
+    if (data.slug) {
+      const slugConflict = await c.env.DB.prepare(
+        "SELECT id FROM contractors WHERE slug = ? AND id != ?"
+      )
+        .bind(data.slug, contractorId)
+        .first<{ id: string }>()
+      if (slugConflict) {
+        return c.json(
+          {
+            ok: false,
+            error: "Validation failed",
+            code: "VALIDATION_ERROR" as const,
+            fields: { slug: "This slug is already in use by another contractor" },
+          },
+          422
+        )
+      }
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE contractors
+       SET name = ?, email = ?, phone = ?, address = ?, website_url = ?, license_number = ?,
+           slug = ?, updated_at = datetime('now')
+       WHERE id = ?`
+    )
+      .bind(
+        data.name,
+        data.email || null,
+        data.phone || null,
+        data.address || null,
+        data.websiteUrl || null,
+        data.licenseNumber || null,
+        data.slug,
+        contractorId
+      )
+      .run()
+
+    return c.json({ ok: true, data: { updated: true } })
+  }
+)
+
+// Extended contractor list with staff count and quote count
+app.get(
+  "/platform/contractors-extended",
+  requirePlatformAdmin(),
+  async (c) => {
+    const { results } = await c.env.DB.prepare(
+      `SELECT
+         c.id, c.slug, c.name, c.email,
+         (SELECT COUNT(*) FROM staff s WHERE s.contractor_id = c.id AND s.active = 1) AS staffCount,
+         (SELECT COUNT(*) FROM quotes q WHERE q.contractor_id = c.id AND q.deleted_at IS NULL) AS quoteCount
+       FROM contractors c
+       ORDER BY c.name ASC`
+    ).all<{
+      id: string
+      slug: string
+      name: string
+      email: string | null
+      staffCount: number
+      quoteCount: number
+    }>()
+
+    const contractors = (results ?? []).map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      email: row.email ?? null,
+      staffCount: row.staffCount,
+      quoteCount: row.quoteCount,
+    }))
+
+    return c.json({ ok: true, data: contractors })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Platform: Super user management
+// ---------------------------------------------------------------------------
+
+// List all super users (env var admins + DB admins)
+app.get(
+  "/platform/superusers",
+  requirePlatformAdmin(),
+  async (c) => {
+    const { results } = await c.env.DB.prepare(
+      "SELECT id, email, name, created_at FROM platform_admins ORDER BY name ASC"
+    ).all<{ id: string; email: string; name: string; created_at: string }>()
+
+    // Also include env var admins that aren't in the DB yet (bootstrap users)
+    const dbEmails = new Set((results ?? []).map((r) => r.email.toLowerCase()))
+    const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS ?? ""
+    const envAdmins = adminEmailsRaw
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+      .filter((e) => !dbEmails.has(e))
+      .map((e) => ({ id: `env:${e}`, email: e, name: "(env var admin)", createdAt: null }))
+
+    const dbAdmins = (results ?? []).map((r) => ({
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      createdAt: r.created_at,
+    }))
+
+    return c.json({ ok: true, data: [...dbAdmins, ...envAdmins] })
+  }
+)
+
+// Add a super user
+app.post(
+  "/platform/superusers",
+  requirePlatformAdmin(),
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "platform-superuser-create" }),
+  async (c) => {
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = superUserCreateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: formatZodErrors(result.error),
+        },
+        422
+      )
+    }
+
+    const { email, name } = result.data
+    const normalizedEmail = email.toLowerCase()
+
+    // Check if already a DB admin
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM platform_admins WHERE email = ?"
+    )
+      .bind(normalizedEmail)
+      .first<{ id: string }>()
+
+    if (existing) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: { email: "This email is already a super user" },
+        },
+        422
+      )
+    }
+
+    // Check if they're in the env var list
+    const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS ?? ""
+    const envEmails = adminEmailsRaw
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+    if (envEmails.includes(normalizedEmail)) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: { email: "This email is already a super user (configured via environment)" },
+        },
+        422
+      )
+    }
+
+    const id = crypto.randomUUID()
+    await c.env.DB.prepare(
+      "INSERT INTO platform_admins (id, email, name) VALUES (?, ?, ?)"
+    )
+      .bind(id, normalizedEmail, name)
+      .run()
+
+    return c.json({ ok: true, data: { id, email: normalizedEmail, name, createdAt: new Date().toISOString() } }, 201)
+  }
+)
+
+// Delete a super user (cannot delete self, cannot delete env var admins)
+app.delete(
+  "/platform/superusers/:id",
+  requirePlatformAdmin(),
+  async (c) => {
+    const id = c.req.param("id")
+    const callerEmail = c.get("platformAdminEmail") as string
+
+    // Prevent deleting self
+    const target = await c.env.DB.prepare(
+      "SELECT id, email FROM platform_admins WHERE id = ?"
+    )
+      .bind(id)
+      .first<{ id: string; email: string }>()
+
+    if (!target) {
+      return apiError(c, "NOT_FOUND", "Super user not found")
+    }
+
+    if (target.email.toLowerCase() === callerEmail.toLowerCase()) {
+      return apiError(c, "FORBIDDEN", "You cannot remove yourself as a super user")
+    }
+
+    await c.env.DB.prepare(
+      "DELETE FROM platform_admins WHERE id = ?"
+    )
+      .bind(id)
+      .run()
+
+    return c.json({ ok: true, data: { deleted: true } })
   }
 )
 

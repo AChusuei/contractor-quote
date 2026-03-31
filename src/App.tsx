@@ -15,8 +15,11 @@ import { SettingsPage } from "@/pages/admin/SettingsPage"
 import { CustomersPage } from "@/pages/admin/CustomersPage"
 import { CustomerDetailPage } from "@/pages/admin/CustomerDetailPage"
 import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
-import { PlatformPage } from "@/pages/admin/PlatformPage"
 import { PortalSelectPage } from "@/pages/admin/super/PortalSelectPage"
+import { SuperDashboardPage } from "@/pages/admin/super/SuperDashboardPage"
+import { SuperContractorsPage } from "@/pages/admin/super/SuperContractorsPage"
+import { SuperContractorDetailPage } from "@/pages/admin/super/SuperContractorDetailPage"
+import { SuperUsersPage } from "@/pages/admin/super/SuperUsersPage"
 
 interface AppProps {
   clerkConfigured: boolean
@@ -46,8 +49,11 @@ export default function App({ clerkConfigured }: AppProps) {
             <Route path="/admin/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/admin/email/compose" element={<EmailComposePage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
-            <Route path="/admin/platform" element={<PlatformPage />} />
             <Route path="/admin/select" element={<PortalSelectPage />} />
+            <Route path="/admin/super" element={<SuperDashboardPage />} />
+            <Route path="/admin/super/contractors" element={<SuperContractorsPage />} />
+            <Route path="/admin/super/contractors/:id" element={<SuperContractorDetailPage />} />
+            <Route path="/admin/super/users" element={<SuperUsersPage />} />
             <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
           </>
         ) : (

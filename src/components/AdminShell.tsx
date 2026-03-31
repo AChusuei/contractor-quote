@@ -22,7 +22,7 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
     { label: "Quotes", href: "/admin/quotes" },
     { label: "Customers", href: "/admin/customers" },
     { label: "Settings", href: "/admin/settings" },
-    ...(isPlatformAdmin ? [{ label: "Platform", href: "/admin/platform" }] : []),
+    ...(isPlatformAdmin ? [{ label: "Platform", href: "/admin/super" }] : []),
   ]
 
   return (

@@ -26,21 +26,13 @@ function extractEmailFromJwt(c: Context): string | null {
 
 /**
  * Middleware: require the caller to be a platform admin.
- * Checks the Clerk JWT email against the PLATFORM_ADMIN_EMAILS env var.
+ * Checks the Clerk JWT email against:
+ *   1. PLATFORM_ADMIN_EMAILS env var (bootstrap / static list)
+ *   2. platform_admins DB table (dynamically managed via UI)
  * In development mode, falls back to x-platform-admin-email header.
  */
 export function requirePlatformAdmin() {
   return async (c: Context, next: Next) => {
-    const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS as string | undefined
-    if (!adminEmailsRaw) {
-      return apiError(c, "FORBIDDEN", "Platform admin access is not configured")
-    }
-
-    const adminEmails = adminEmailsRaw
-      .split(",")
-      .map((e: string) => e.trim().toLowerCase())
-      .filter(Boolean)
-
     let callerEmail = extractEmailFromJwt(c)
 
     // Dev fallback: allow x-platform-admin-email header
@@ -48,11 +40,44 @@ export function requirePlatformAdmin() {
       callerEmail = c.req.header("x-platform-admin-email") ?? null
     }
 
-    if (!callerEmail || !adminEmails.includes(callerEmail.toLowerCase())) {
+    if (!callerEmail) {
       return apiError(c, "FORBIDDEN", "Platform admin access required")
     }
 
-    c.set("platformAdminEmail", callerEmail)
-    await next()
+    const normalizedEmail = callerEmail.toLowerCase()
+
+    // Check env var list (bootstrap)
+    const adminEmailsRaw = (c.env as Record<string, unknown>).PLATFORM_ADMIN_EMAILS as string | undefined
+    if (adminEmailsRaw) {
+      const adminEmails = adminEmailsRaw
+        .split(",")
+        .map((e: string) => e.trim().toLowerCase())
+        .filter(Boolean)
+      if (adminEmails.includes(normalizedEmail)) {
+        c.set("platformAdminEmail", callerEmail)
+        await next()
+        return
+      }
+    }
+
+    // Check DB table (dynamically managed)
+    try {
+      const db = (c.env as Record<string, unknown>).DB as D1Database
+      if (db) {
+        const row = await db
+          .prepare("SELECT id FROM platform_admins WHERE email = ?")
+          .bind(normalizedEmail)
+          .first<{ id: string }>()
+        if (row) {
+          c.set("platformAdminEmail", callerEmail)
+          await next()
+          return
+        }
+      }
+    } catch {
+      // DB check failure is non-fatal — already checked env var above
+    }
+
+    return apiError(c, "FORBIDDEN", "Platform admin access required")
   }
 }

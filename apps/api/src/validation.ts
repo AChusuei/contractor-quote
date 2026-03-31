@@ -459,6 +459,65 @@ export const assignOwnerSchema = z.object({
 export type AssignOwner = z.infer<typeof assignOwnerSchema>
 
 // ---------------------------------------------------------------------------
+// Contractor update (platform admin)
+// ---------------------------------------------------------------------------
+
+export const contractorUpdateSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200, "Name is too long"),
+  email: z
+    .string()
+    .email("Enter a valid email address")
+    .max(200, "Email is too long")
+    .optional()
+    .or(z.literal("")),
+  phone: z
+    .string()
+    .max(30, "Phone is too long")
+    .optional()
+    .or(z.literal("")),
+  address: z
+    .string()
+    .max(500, "Address is too long")
+    .optional()
+    .or(z.literal("")),
+  websiteUrl: z
+    .string()
+    .max(500, "Website URL is too long")
+    .optional()
+    .or(z.literal("")),
+  licenseNumber: z
+    .string()
+    .max(100, "License number is too long")
+    .optional()
+    .or(z.literal("")),
+  slug: z
+    .string()
+    .min(1, "Slug is required")
+    .max(100, "Slug is too long")
+    .regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens"),
+})
+
+export type ContractorUpdate = z.infer<typeof contractorUpdateSchema>
+
+// ---------------------------------------------------------------------------
+// Super user create
+// ---------------------------------------------------------------------------
+
+export const superUserCreateSchema = z.object({
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Enter a valid email address")
+    .max(200, "Email is too long"),
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(200, "Name is too long"),
+})
+
+export type SuperUserCreate = z.infer<typeof superUserCreateSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 
