@@ -246,6 +246,7 @@ export function IntakeScreen2Page() {
   const ctx = useQuoteContext()
   const readOnly = ctx?.readOnly ?? false
   const scope = ctx?.quote?.scope
+  const isAdminView = !!ctx?.quote
 
   const {
     register,
@@ -367,12 +368,11 @@ export function IntakeScreen2Page() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
-      {!readOnly && (
+    <div className={isAdminView ? "" : "max-w-xl mx-auto"}>
+      {!isAdminView && (
         <button
           type="button"
           onClick={async () => {
-            // Save current form state before navigating back
             const quoteId = sessionStorage.getItem("cq_active_quote_id")
             const publicToken = sessionStorage.getItem("cq_public_token")
             if (quoteId && publicToken) {
@@ -388,17 +388,15 @@ export function IntakeScreen2Page() {
           ← Back
         </button>
       )}
-      <div className="mb-6">
-        {!readOnly && (
+      {!isAdminView && (
+        <div className="mb-6">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 2 of 4</p>
-        )}
-        <h1 className="text-2xl font-semibold">Project Scope</h1>
-        {!readOnly && (
+          <h1 className="text-2xl font-semibold">Project Scope</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Tell us more about the scope and details of your kitchen project.
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
 
       <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-6">
@@ -753,7 +751,7 @@ export function IntakeScreen2Page() {
           <FieldError message={errors.additionalNotes?.message} />
         </div>
 
-        {!readOnly && (
+        {!isAdminView && (
           <div className="pt-2">
             <Button type="submit" disabled={isSubmitting} className="w-full">
               {isSubmitting ? "Saving…" : "Continue"}

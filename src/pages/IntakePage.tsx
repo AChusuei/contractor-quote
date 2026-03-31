@@ -95,6 +95,7 @@ export function IntakePage() {
   const ctx = useQuoteContext()
   const readOnly = ctx?.readOnly ?? false
   const quote = ctx?.quote
+  const isAdminView = !!quote
 
   const {
     register,
@@ -297,18 +298,16 @@ export function IntakePage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
-      <div className="mb-6">
-        {!readOnly && (
+    <div className={isAdminView ? "" : "max-w-xl mx-auto"}>
+      {!isAdminView && (
+        <div className="mb-6">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 1 of 4</p>
-        )}
-        <h1 className="text-2xl font-semibold">Request a Quote</h1>
-        {!readOnly && (
+          <h1 className="text-2xl font-semibold">Request a Quote</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Tell us about your project and we'll get back to you with a free estimate.
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
 
       <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -472,13 +471,13 @@ export function IntakePage() {
           <FieldError message={errors.referredByContractor?.message} />
         </div>
 
-        {!readOnly && TurnstileWidget}
+        {!isAdminView && TurnstileWidget}
 
-        {!readOnly && submitError && (
+        {!isAdminView && submitError && (
           <p className="text-sm text-destructive">{submitError}</p>
         )}
 
-        {!readOnly && (
+        {!isAdminView && (
           <div className="pt-2">
             <Button type="submit" disabled={isSubmitting} className="w-full">
               {isSubmitting ? "Submitting…" : "Continue"}

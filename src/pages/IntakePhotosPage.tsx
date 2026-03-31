@@ -133,22 +133,26 @@ export function IntakePhotosPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
-      <button
-        type="button"
-        onClick={() => navigate("/intake/scope")}
-        className="mb-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        ← Back
-      </button>
-      <div className="mb-6">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 3 of 4</p>
-        <h1 className="text-2xl font-semibold">Photos</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Upload photos of your existing kitchen to help us give you a more accurate quote.
-          Photos are optional — you can skip this step.
-        </p>
-      </div>
+    <div className={isAdminView ? "" : "max-w-xl mx-auto"}>
+      {!isAdminView && (
+        <button
+          type="button"
+          onClick={() => navigate("/intake/scope")}
+          className="mb-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Back
+        </button>
+      )}
+      {!isAdminView && (
+        <div className="mb-6">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Step 3 of 4</p>
+          <h1 className="text-2xl font-semibold">Photos</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Upload photos of your existing kitchen to help us give you a more accurate quote.
+            Photos are optional — you can skip this step.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-4">
         {/* Previously uploaded photos */}
@@ -195,24 +199,26 @@ export function IntakePhotosPage() {
           </p>
         )}
 
-        <div className="flex flex-col gap-2 pt-2">
-          <Button
-            onClick={handleContinue}
-            disabled={isUploading}
-            className="w-full"
-          >
-            {isUploading ? "Uploading…" : "Continue"}
-          </Button>
-          {files.length === 0 && photos.length === 0 && (
+        {!isAdminView && (
+          <div className="flex flex-col gap-2 pt-2">
             <Button
-              variant="ghost"
-              onClick={handleSkip}
+              onClick={handleContinue}
+              disabled={isUploading}
               className="w-full"
             >
-              Skip — no photos
+              {isUploading ? "Uploading…" : "Continue"}
             </Button>
-          )}
-        </div>
+            {files.length === 0 && photos.length === 0 && (
+              <Button
+                variant="ghost"
+                onClick={handleSkip}
+                className="w-full"
+              >
+                Skip — no photos
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
