@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useParams, Link } from "react-router-dom"
+import { useParams, Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -15,7 +15,7 @@ import { fetchQuotes } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
 import { ProjectScopeForm, projectScopeSchema, type ProjectScopeData } from "@/components/forms/ProjectScopeForm"
 import { PhotosForm } from "@/components/forms/PhotosForm"
-import { apiGet, apiPatch, apiPost, isNetworkError, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPatch, apiPost, apiDelete, isNetworkError, setAuthProvider } from "@/lib/api"
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -300,11 +300,94 @@ function ScopeTab({
 }
 
 // ---------------------------------------------------------------------------
+// Delete quote panel
+// ---------------------------------------------------------------------------
+
+function DeleteQuotePanel({
+  quoteId,
+  onDeleted,
+}: {
+  quoteId: string
+  onDeleted: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setError(null)
+    try {
+      const res = await apiDelete(`/quotes/${encodeURIComponent(quoteId)}`, {
+        requestType: "contractor",
+      })
+      if (res.ok) {
+        onDeleted()
+      } else {
+        throw new Error("error" in res ? res.error : "Delete failed")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+    } finally {
+      setDeleting(false)
+      setConfirming(false)
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-foreground border-b pb-2 mb-4">
+        Delete quote
+      </h3>
+      {!confirming ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-red-600 border-red-300 hover:bg-red-50"
+          onClick={() => setConfirming(true)}
+        >
+          Delete quote
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-red-600">
+            Are you sure? This will permanently delete this quote, its photos, and activity history.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setConfirming(false)
+                setError(null)
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Confirm delete"}
+            </Button>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
 export function QuoteDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const [quote, setQuote] = useState<QuoteWithCustomer | null>(null)
   const [notFound, setNotFound] = useState(false)
@@ -584,9 +667,13 @@ export function QuoteDetailPage() {
           )}
         </div>
 
-        {/* Right — sidebar: StatusPanel only */}
+        {/* Right — sidebar */}
         <div className="space-y-8">
           <StatusPanel quote={quote} onStatusChange={handleStatusChange} />
+          <DeleteQuotePanel
+            quoteId={quote.id}
+            onDeleted={() => navigate("/admin/quotes")}
+          />
         </div>
       </div>
     </div>
