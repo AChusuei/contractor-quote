@@ -55,18 +55,20 @@ export const quoteSubmissionSchema = z.object({
       )
     ),
 
+  // These fields are now collected on page 2 (project scope), not page 1
+  // They're optional on initial quote creation and filled in via PATCH
   jobSiteAddress: sanitizedMinMax(
     1, "Job site address is required",
     500, "Job site address must be 500 characters or fewer"
-  ),
+  ).optional(),
 
   propertyType: z.enum(["house", "apt", "building", "townhouse"], {
     error: "Property type must be house, apt, building, or townhouse",
-  }),
+  }).optional(),
 
   budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"], {
     error: "Budget range must be <10k, 10-25k, 25-50k, or 50k+",
-  }),
+  }).optional(),
 
   schemaVersion: z
     .number({ error: "Schema version is required" })

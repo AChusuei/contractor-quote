@@ -337,9 +337,9 @@ app.post("/quotes", rateLimit({ limit: 5, windowSeconds: 3600, keyPrefix: "quote
       actualCustomerId,
       data.contractorId,
       data.schemaVersion,
-      data.jobSiteAddress,
-      data.propertyType,
-      data.budgetRange,
+      data.jobSiteAddress ?? "",
+      data.propertyType ?? "",
+      data.budgetRange ?? "",
       data.scope ? JSON.stringify(data.scope) : null,
       publicToken,
       quoteStatus
