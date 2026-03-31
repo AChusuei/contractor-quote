@@ -7,7 +7,7 @@ import {
   requireContractorOwnership,
   requireQuoteOwnership,
 } from "./middleware/tenantIsolation"
-import { requirePlatformAdmin } from "./middleware/platformAdmin"
+import { requireSuperAdmin } from "./middleware/superAdmin"
 import {
   quoteSubmissionSchema,
   quoteUpdateSchema,
@@ -51,6 +51,7 @@ type Bindings = {
 type Variables = {
   contractorId: string
   platformAdminEmail: string
+  superAdminEmail: string
 }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath("/api/v1")
@@ -2345,7 +2346,7 @@ app.patch(
 // List all contractors (platform admin only)
 app.get(
   "/platform/contractors",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   async (c) => {
     const { results } = await c.env.DB.prepare(
       `SELECT c.id, c.slug, c.name, c.email, c.phone,
@@ -2380,7 +2381,7 @@ app.get(
 // Enforces ONE owner per contractor: demotes existing owner to 'admin'
 app.post(
   "/platform/contractors/:contractorId/owner",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   rateLimit({ limit: 50, windowSeconds: 3600, keyPrefix: "platform-assign-owner" }),
   async (c) => {
     const contractorId = c.req.param("contractorId")
@@ -2484,7 +2485,7 @@ app.post(
 // Check if current user is a platform admin
 app.get(
   "/platform/check",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   (c) => {
     return c.json({ ok: true, data: { isPlatformAdmin: true } })
   }
@@ -2497,7 +2498,7 @@ app.get(
 // Get contractor detail with staff list, quote count, customer count
 app.get(
   "/platform/contractors/:contractorId",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   async (c) => {
     const contractorId = c.req.param("contractorId")
 
@@ -2577,7 +2578,7 @@ app.get(
 // Update contractor fields (platform admin only)
 app.patch(
   "/platform/contractors/:contractorId",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   async (c) => {
     const contractorId = c.req.param("contractorId")
 
@@ -2658,7 +2659,7 @@ app.patch(
 // Extended contractor list with staff count and quote count
 app.get(
   "/platform/contractors-extended",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   async (c) => {
     const { results } = await c.env.DB.prepare(
       `SELECT
@@ -2690,43 +2691,33 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
-// Platform: Super user management
+// Platform: Super user management (legacy /platform/superusers — kept for UI compat)
 // ---------------------------------------------------------------------------
 
-// List all super users (env var admins + DB admins)
+// List all super users
 app.get(
   "/platform/superusers",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   async (c) => {
     const { results } = await c.env.DB.prepare(
-      "SELECT id, email, name, created_at FROM platform_admins ORDER BY name ASC"
+      "SELECT id, email, name, created_at FROM super_users ORDER BY name ASC"
     ).all<{ id: string; email: string; name: string; created_at: string }>()
 
-    // Also include env var admins that aren't in the DB yet (bootstrap users)
-    const dbEmails = new Set((results ?? []).map((r) => r.email.toLowerCase()))
-    const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS ?? ""
-    const envAdmins = adminEmailsRaw
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-      .filter((e) => !dbEmails.has(e))
-      .map((e) => ({ id: `env:${e}`, email: e, name: "(env var admin)", createdAt: null }))
-
-    const dbAdmins = (results ?? []).map((r) => ({
+    const superUsers = (results ?? []).map((r) => ({
       id: r.id,
       email: r.email,
       name: r.name,
       createdAt: r.created_at,
     }))
 
-    return c.json({ ok: true, data: [...dbAdmins, ...envAdmins] })
+    return c.json({ ok: true, data: superUsers })
   }
 )
 
 // Add a super user
 app.post(
   "/platform/superusers",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "platform-superuser-create" }),
   async (c) => {
     let body: unknown
@@ -2752,9 +2743,8 @@ app.post(
     const { email, name } = result.data
     const normalizedEmail = email.toLowerCase()
 
-    // Check if already a DB admin
     const existing = await c.env.DB.prepare(
-      "SELECT id FROM platform_admins WHERE email = ?"
+      "SELECT id FROM super_users WHERE email = ?"
     )
       .bind(normalizedEmail)
       .first<{ id: string }>()
@@ -2771,27 +2761,9 @@ app.post(
       )
     }
 
-    // Check if they're in the env var list
-    const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS ?? ""
-    const envEmails = adminEmailsRaw
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-    if (envEmails.includes(normalizedEmail)) {
-      return c.json(
-        {
-          ok: false,
-          error: "Validation failed",
-          code: "VALIDATION_ERROR" as const,
-          fields: { email: "This email is already a super user (configured via environment)" },
-        },
-        422
-      )
-    }
-
     const id = crypto.randomUUID()
     await c.env.DB.prepare(
-      "INSERT INTO platform_admins (id, email, name) VALUES (?, ?, ?)"
+      "INSERT INTO super_users (id, email, name) VALUES (?, ?, ?)"
     )
       .bind(id, normalizedEmail, name)
       .run()
@@ -2800,17 +2772,16 @@ app.post(
   }
 )
 
-// Delete a super user (cannot delete self, cannot delete env var admins)
+// Delete a super user (cannot delete self)
 app.delete(
   "/platform/superusers/:id",
-  requirePlatformAdmin(),
+  requireSuperAdmin(),
   async (c) => {
     const id = c.req.param("id")
-    const callerEmail = c.get("platformAdminEmail") as string
+    const callerEmail = c.get("superAdminEmail") as string
 
-    // Prevent deleting self
     const target = await c.env.DB.prepare(
-      "SELECT id, email FROM platform_admins WHERE id = ?"
+      "SELECT id, email FROM super_users WHERE id = ?"
     )
       .bind(id)
       .first<{ id: string; email: string }>()
@@ -2824,7 +2795,130 @@ app.delete(
     }
 
     await c.env.DB.prepare(
-      "DELETE FROM platform_admins WHERE id = ?"
+      "DELETE FROM super_users WHERE id = ?"
+    )
+      .bind(id)
+      .run()
+
+    return c.json({ ok: true, data: { deleted: true } })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Super admin routes (/super/*)
+// ---------------------------------------------------------------------------
+
+// Check if current user is a super admin
+app.get(
+  "/super/check",
+  requireSuperAdmin(),
+  (c) => {
+    return c.json({ ok: true })
+  }
+)
+
+// List all super users
+app.get(
+  "/super/users",
+  requireSuperAdmin(),
+  async (c) => {
+    const { results } = await c.env.DB.prepare(
+      "SELECT id, email, name, created_at FROM super_users ORDER BY name ASC"
+    ).all<{ id: string; email: string; name: string; created_at: string }>()
+
+    const superUsers = (results ?? []).map((r) => ({
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      createdAt: r.created_at,
+    }))
+
+    return c.json({ ok: true, data: superUsers })
+  }
+)
+
+// Add a super user
+app.post(
+  "/super/users",
+  requireSuperAdmin(),
+  rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "super-users-create" }),
+  async (c) => {
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = superUserCreateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: formatZodErrors(result.error),
+        },
+        422
+      )
+    }
+
+    const { email, name } = result.data
+    const normalizedEmail = email.toLowerCase()
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM super_users WHERE email = ?"
+    )
+      .bind(normalizedEmail)
+      .first<{ id: string }>()
+
+    if (existing) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: { email: "This email is already a super user" },
+        },
+        422
+      )
+    }
+
+    const id = crypto.randomUUID()
+    await c.env.DB.prepare(
+      "INSERT INTO super_users (id, email, name) VALUES (?, ?, ?)"
+    )
+      .bind(id, normalizedEmail, name)
+      .run()
+
+    return c.json({ ok: true, data: { id, email: normalizedEmail, name, createdAt: new Date().toISOString() } }, 201)
+  }
+)
+
+// Delete a super user (cannot delete self)
+app.delete(
+  "/super/users/:id",
+  requireSuperAdmin(),
+  async (c) => {
+    const id = c.req.param("id")
+    const callerEmail = c.get("superAdminEmail") as string
+
+    const target = await c.env.DB.prepare(
+      "SELECT id, email FROM super_users WHERE id = ?"
+    )
+      .bind(id)
+      .first<{ id: string; email: string }>()
+
+    if (!target) {
+      return apiError(c, "NOT_FOUND", "Super user not found")
+    }
+
+    if (target.email.toLowerCase() === callerEmail.toLowerCase()) {
+      return apiError(c, "FORBIDDEN", "You cannot remove yourself as a super user")
+    }
+
+    await c.env.DB.prepare(
+      "DELETE FROM super_users WHERE id = ?"
     )
       .bind(id)
       .run()

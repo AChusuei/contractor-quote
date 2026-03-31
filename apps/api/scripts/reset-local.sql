@@ -8,4 +8,6 @@ DROP TABLE IF EXISTS quotes;
 DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS staff;
 DROP TABLE IF EXISTS contractors;
+DROP TABLE IF EXISTS super_users;
+DROP TABLE IF EXISTS platform_admins;
 DROP TABLE IF EXISTS d1_migrations;
