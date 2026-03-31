@@ -86,7 +86,7 @@ export const quoteSubmissionSchema = z.object({
       "Scope data must be 10KB or smaller"
     ),
 
-  // Cloudflare Turnstile token (required when TURNSTILE_SECRET_KEY is set)
+  // Cloudflare Turnstile token (mandatory in production, skipped in development)
   turnstileToken: z.string().max(2048, "Turnstile token is too long").optional(),
 
   // Optional fields — sanitize but don't require
