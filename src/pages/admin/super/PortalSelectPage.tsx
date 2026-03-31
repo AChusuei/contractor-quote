@@ -76,7 +76,7 @@ export function PortalSelectPage() {
               Manage all contractors and platform settings.
             </p>
           </div>
-          <Button onClick={() => navigate("/admin/platform")}>Enter</Button>
+          <Button type="button" onClick={() => navigate("/admin/super")}>Enter</Button>
         </div>
       </div>
 
@@ -108,6 +108,7 @@ export function PortalSelectPage() {
                   )}
                 </div>
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => enterAsContractor(contractor)}
