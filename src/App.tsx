@@ -15,6 +15,7 @@ import { SettingsPage } from "@/pages/admin/SettingsPage"
 import { CustomersPage } from "@/pages/admin/CustomersPage"
 import { CustomerDetailPage } from "@/pages/admin/CustomerDetailPage"
 import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
+import { PostLoginRedirect } from "@/pages/admin/PostLoginRedirect"
 import { PortalSelectPage } from "@/pages/admin/super/PortalSelectPage"
 import { SuperDashboardPage } from "@/pages/admin/super/SuperDashboardPage"
 import { SuperContractorsPage } from "@/pages/admin/super/SuperContractorsPage"
@@ -38,7 +39,11 @@ export default function App({ clerkConfigured }: AppProps) {
         <Route path="/intake/confirmed" element={<AppointmentConfirmPage />} />
       </Route>
 
-      {/* Super admin portal select — no shell header, Clerk-protected */}
+      {/* Post-login redirect — checks super user status, no shell header */}
+      {clerkConfigured && (
+        <Route path="/admin/redirect" element={<PostLoginRedirect />} />
+      )}
+      {/* Super admin portal select — no shell header, super users only */}
       {clerkConfigured && (
         <Route path="/admin/select" element={<PortalSelectPage />} />
       )}
