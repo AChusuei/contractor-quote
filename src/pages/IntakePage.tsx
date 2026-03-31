@@ -102,6 +102,7 @@ export function IntakePage() {
     control,
     reset,
     getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<IntakeFormData>({
     resolver: zodResolver(schema),
@@ -194,6 +195,14 @@ export function IntakePage() {
       return () => { valuesRef.current = null }
     }
   }, [readOnly, valuesRef, getValues])
+
+  // Trigger auto-save on field changes in admin edit mode
+  const onFieldChange = ctx?.onFieldChange
+  useEffect(() => {
+    if (readOnly || !onFieldChange) return
+    const sub = watch(() => onFieldChange())
+    return () => sub.unsubscribe()
+  }, [readOnly, onFieldChange, watch])
 
   const onSubmit = async (data: IntakeFormData) => {
     setSubmitError(null)

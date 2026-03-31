@@ -289,6 +289,14 @@ export function IntakeScreen2Page() {
     }
   }, [readOnly, valuesRef, getValues])
 
+  // Trigger auto-save on field changes in admin edit mode
+  const onFieldChange = ctx?.onFieldChange
+  useEffect(() => {
+    if (readOnly || !onFieldChange) return
+    const sub = watch(() => onFieldChange())
+    return () => sub.unsubscribe()
+  }, [readOnly, onFieldChange, watch])
+
   // Restore scope from active draft when navigating back
   useEffect(() => {
     if (readOnly || scope) return

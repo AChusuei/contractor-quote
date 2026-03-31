@@ -10,10 +10,15 @@
 export type QuoteStatus =
   | "draft"
   | "lead"
-  | "measure_scheduled"
-  | "quoted"
+  | "reviewing"
+  | "site_visit_requested"
+  | "site_visit_scheduled"
+  | "site_visit_completed"
+  | "estimate_requested"
+  | "estimate_sent"
   | "accepted"
   | "rejected"
+  | "closed"
 
 export type ApplianceChoice = "new" | "existing" | "none"
 
@@ -238,10 +243,10 @@ export function seedMockQuotes(): void {
         additionalNotes: "Want to open up the wall between kitchen and dining room.",
       },
       quotePath: "site_visit",
-      status: "measure_scheduled",
+      status: "site_visit_scheduled",
       statusHistory: [
         { status: "lead", timestamp: "2026-03-22T14:30:00Z" },
-        { status: "measure_scheduled", timestamp: "2026-03-22T16:00:00Z" },
+        { status: "site_visit_scheduled", timestamp: "2026-03-22T16:00:00Z" },
       ],
       contractorNotes: "Large kitchen, load-bearing wall — need structural engineer consult.",
     },
@@ -275,10 +280,10 @@ export function seedMockQuotes(): void {
         designHelp: "no",
       },
       quotePath: "estimate_requested",
-      status: "quoted",
+      status: "estimate_sent",
       statusHistory: [
         { status: "lead", timestamp: "2026-03-21T10:15:00Z" },
-        { status: "quoted", timestamp: "2026-03-21T18:00:00Z" },
+        { status: "estimate_sent", timestamp: "2026-03-21T18:00:00Z" },
       ],
       contractorNotes: "",
     },

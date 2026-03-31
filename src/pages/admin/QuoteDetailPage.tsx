@@ -8,7 +8,6 @@ import {
   updateStatus,
   updateNotes,
   type Quote,
-  type QuoteStatus,
 } from "@/lib/quoteStore"
 import { fetchQuotes } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
@@ -17,30 +16,20 @@ import { IntakePage } from "@/pages/IntakePage"
 import { IntakeScreen2Page } from "@/pages/IntakeScreen2Page"
 import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
 import { apiGet, apiPatch, apiPost, isNetworkError, setAuthProvider } from "@/lib/api"
+import {
+  STATUS_LABELS,
+  STATUS_COLORS,
+  CONFIRMATION_STATUSES,
+  getHappyPathTransitions,
+  getSecondaryTransitions,
+  type QuoteStatus,
+} from "@/lib/statusTransitions"
+import { useAutoSave } from "@/hooks/useAutoSave"
+import { ActivityFeed, type ActivityItem } from "@/components/ActivityFeed"
 
 // ---------------------------------------------------------------------------
-// Status config
+// Helpers
 // ---------------------------------------------------------------------------
-
-const STATUS_LABELS: Record<QuoteStatus, string> = {
-  draft: "Draft",
-  lead: "Lead",
-  measure_scheduled: "Measure scheduled",
-  quoted: "Quoted",
-  accepted: "Accepted",
-  rejected: "Rejected",
-}
-
-const STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700",
-  lead: "rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800",
-  measure_scheduled: "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800",
-  quoted: "rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800",
-  accepted: "rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800",
-  rejected: "rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800",
-}
-
-const ALL_STATUSES: QuoteStatus[] = ["draft", "lead", "measure_scheduled", "quoted", "accepted", "rejected"]
 
 /** Map API quote response to the frontend Quote type */
 function mapApiQuote(raw: Record<string, unknown>): Quote {
@@ -77,7 +66,9 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 function StatusBadge({ status }: { status: QuoteStatus }) {
-  return <span className={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</span>
+  const colorClass = STATUS_COLORS[status] ?? STATUS_COLORS.draft
+  const label = STATUS_LABELS[status] ?? status
+  return <span className={colorClass}>{label}</span>
 }
 
 function formatDateTime(iso: string): string {
@@ -92,19 +83,20 @@ function formatDateTime(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Tabs
+// Tabs — now includes Activity
 // ---------------------------------------------------------------------------
 
-type TabId = "contact" | "scope" | "photos"
+type TabId = "contact" | "scope" | "photos" | "activity"
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "contact", label: "Contact & Project" },
   { id: "scope", label: "Project Scope" },
   { id: "photos", label: "Photos" },
+  { id: "activity", label: "Activity" },
 ]
 
 // ---------------------------------------------------------------------------
-// Status panel
+// Status panel — shows only valid next transitions
 // ---------------------------------------------------------------------------
 
 function StatusPanel({
@@ -114,55 +106,87 @@ function StatusPanel({
   quote: Quote
   onStatusChange: (status: QuoteStatus) => void
 }) {
-  const others = ALL_STATUSES.filter((s) => s !== quote.status)
+  const [confirmingStatus, setConfirmingStatus] = useState<QuoteStatus | null>(null)
+
+  const happyPath = getHappyPathTransitions(quote.status as QuoteStatus)
+  const secondary = getSecondaryTransitions(quote.status as QuoteStatus)
+
+  const handleClick = (status: QuoteStatus) => {
+    if (CONFIRMATION_STATUSES.has(status)) {
+      setConfirmingStatus(status)
+    } else {
+      onStatusChange(status)
+    }
+  }
+
+  const handleConfirm = () => {
+    if (confirmingStatus) {
+      onStatusChange(confirmingStatus)
+      setConfirmingStatus(null)
+    }
+  }
+
   return (
     <div>
-      <SectionHeading>Update status</SectionHeading>
+      <SectionHeading>Status</SectionHeading>
       <div className="mb-3 flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Current:</span>
-        <StatusBadge status={quote.status} />
+        <StatusBadge status={quote.status as QuoteStatus} />
       </div>
-      <div className="flex flex-wrap gap-2">
-        {others.map((s) => (
-          <button
-            key={s}
-            onClick={() => onStatusChange(s)}
-            className="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
-          >
-            &rarr; {STATUS_LABELS[s]}
-          </button>
-        ))}
-      </div>
+
+      {(happyPath.length > 0 || secondary.length > 0) && (
+        <>
+          <p className="text-xs text-muted-foreground mb-2">Next steps</p>
+          <div className="flex flex-wrap gap-2">
+            {happyPath.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleClick(s)}
+                className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors"
+              >
+                &rarr; {STATUS_LABELS[s]}
+              </button>
+            ))}
+            {secondary.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleClick(s)}
+                className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent transition-colors"
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Confirmation dialog */}
+      {confirmingStatus && (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2">
+          <p className="text-sm text-amber-900">
+            Move this quote to <strong>{STATUS_LABELS[confirmingStatus]}</strong>?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setConfirmingStatus(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleConfirm}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Status timeline
-// ---------------------------------------------------------------------------
-
-function StatusTimeline({ quote }: { quote: Quote }) {
-  return (
-    <div>
-      <SectionHeading>Status timeline</SectionHeading>
-      <ol className="space-y-3">
-        {quote.statusHistory.map((event, i) => (
-          <li key={i} className="flex items-start gap-3">
-            <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-            <div>
-              <p className="text-sm font-medium">{STATUS_LABELS[event.status]}</p>
-              <p className="text-xs text-muted-foreground">{formatDateTime(event.timestamp)}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Contractor notes
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Delete customer data
@@ -236,44 +260,12 @@ function DeleteCustomerDataPanel({ quote, onDeleted }: { quote: Quote; onDeleted
               onClick={handleDelete}
               disabled={deleting}
             >
-              {deleting ? "Deleting…" : "Confirm delete"}
+              {deleting ? "Deleting\u2026" : "Confirm delete"}
             </Button>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Contractor notes
-// ---------------------------------------------------------------------------
-
-function NotesPanel({ quote, onSave }: { quote: Quote; onSave: (notes: string) => void }) {
-  const [notes, setNotes] = useState(quote.contractorNotes)
-  const [saved, setSaved] = useState(false)
-
-  const handleSave = () => {
-    onSave(notes)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  return (
-    <div>
-      <SectionHeading>Contractor notes</SectionHeading>
-      <textarea
-        rows={5}
-        value={notes}
-        onChange={(e) => { setNotes(e.target.value); setSaved(false) }}
-        placeholder="Add notes about this quote, measurements, follow-up actions…"
-        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-      />
-      <div className="mt-2 flex items-center gap-3">
-        <Button size="sm" onClick={handleSave}>Save notes</Button>
-        {saved && <span className="text-xs text-muted-foreground">Saved</span>}
-      </div>
     </div>
   )
 }
@@ -311,6 +303,25 @@ function BasicQuoteView({ id }: { id: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Save status indicator
+// ---------------------------------------------------------------------------
+
+function SaveIndicator({ status }: { status: string }) {
+  if (status === "idle") return null
+  const text =
+    status === "saving"
+      ? "Saving\u2026"
+      : status === "saved"
+        ? "Saved"
+        : "Save error"
+  const color =
+    status === "error"
+      ? "text-red-600"
+      : "text-muted-foreground"
+  return <span className={cn("text-xs", color)}>{text}</span>
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -320,10 +331,10 @@ export function QuoteDetailPage() {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>("contact")
-  const [editing, setEditing] = useState(false)
   const valuesRef = useRef<(() => Record<string, unknown>) | null>(null)
   const pendingEditsRef = useRef<Record<string, unknown>>({})
   const [useLocalFallback, setUseLocalFallback] = useState(false)
+  const [activities, setActivities] = useState<ActivityItem[]>([])
 
   // Wire up Clerk auth
   useEffect(() => {
@@ -332,59 +343,57 @@ export function QuoteDetailPage() {
     }
   }, [isLoaded, isSignedIn, getToken])
 
-  // Load quote from API, fall back to localStorage
-  useEffect(() => {
-    if (!id) { setNotFound(true); return }
-    if (!isLoaded || !isSignedIn) return
+  // ---------------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------------
 
-    let cancelled = false
-    async function load() {
-      const res = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id!)}`)
-      if (cancelled) return
+  const loadQuote = useCallback(async () => {
+    if (!id || !isLoaded || !isSignedIn) return
 
-      if (res.ok) {
-        // Also fetch activity for statusHistory
-        const actRes = await apiGet<{ activities: Array<Record<string, unknown>> }>(
-          `/quotes/${encodeURIComponent(id!)}/activity?limit=100`
-        )
-        const apiQuote = res.data
-        if (actRes.ok) {
-          // Build statusHistory from activity feed
-          const statusEvents = actRes.data.activities
-            .filter((a) => a.type === "status_change")
-            .map((a) => ({
-              status: (a.newValue as string) as QuoteStatus,
-              timestamp: a.createdAt as string,
-            }))
-          apiQuote.statusHistory = statusEvents
+    const res = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
 
-          // Extract contractor notes from most recent "note" activity
-          const notes = actRes.data.activities
-            .filter((a) => a.type === "note")
-            .map((a) => a.content as string)
-          apiQuote.contractorNotes = notes.join("\n")
-        }
-        if (!cancelled) setQuote(mapApiQuote(apiQuote))
-      } else if (isNetworkError(res)) {
-        // Fallback to localStorage
-        console.warn("API unreachable — falling back to localStorage for quote detail")
-        setUseLocalFallback(true)
-        const q = getQuote(id!)
-        if (!q) { setNotFound(true); return }
-        if (!cancelled) setQuote(q)
-      } else {
-        // Try localStorage as last resort
-        const q = getQuote(id!)
-        if (!q) { setNotFound(true); return }
-        if (!cancelled) {
-          setUseLocalFallback(true)
-          setQuote(q)
-        }
+    if (res.ok) {
+      const actRes = await apiGet<{ activities: Array<Record<string, unknown>> }>(
+        `/quotes/${encodeURIComponent(id)}/activity?limit=100`
+      )
+      const apiQuote = res.data
+      if (actRes.ok) {
+        const activityItems = actRes.data.activities as ActivityItem[]
+        setActivities(activityItems)
+
+        apiQuote.statusHistory = actRes.data.activities
+          .filter((a) => a.type === "status_change")
+          .map((a) => ({
+            status: (a.newValue as string) as QuoteStatus,
+            timestamp: a.createdAt as string,
+          }))
+        apiQuote.contractorNotes = actRes.data.activities
+          .filter((a) => a.type === "note")
+          .map((a) => a.content as string)
+          .join("\n")
       }
+      setQuote(mapApiQuote(apiQuote))
+    } else if (isNetworkError(res)) {
+      console.warn("API unreachable — falling back to localStorage for quote detail")
+      setUseLocalFallback(true)
+      const q = getQuote(id)
+      if (!q) { setNotFound(true); return }
+      setQuote(q)
+    } else {
+      const q = getQuote(id)
+      if (!q) { setNotFound(true); return }
+      setUseLocalFallback(true)
+      setQuote(q)
     }
-    load()
-    return () => { cancelled = true }
   }, [id, isLoaded, isSignedIn])
+
+  useEffect(() => {
+    loadQuote()
+  }, [loadQuote])
+
+  // ---------------------------------------------------------------------------
+  // Auto-save
+  // ---------------------------------------------------------------------------
 
   /** Flush current tab's form values into the pending edits accumulator. */
   const flushCurrentTab = useCallback(() => {
@@ -394,24 +403,11 @@ export function QuoteDetailPage() {
     }
   }, [])
 
-  /** Switch tabs, auto-saving current tab's edits when in edit mode. */
-  const handleTabChange = useCallback(
-    (tab: TabId) => {
-      if (editing) flushCurrentTab()
-      setActiveTab(tab)
-    },
-    [editing, flushCurrentTab]
-  )
-
-  const handleEdit = () => {
-    pendingEditsRef.current = {}
-    setEditing(true)
-  }
-
-  const handleSave = async () => {
+  const performSave = useCallback(async () => {
     if (!id || !quote) return
     flushCurrentTab()
-    const edits = pendingEditsRef.current
+    const edits = { ...pendingEditsRef.current }
+    if (Object.keys(edits).length === 0) return
 
     if (useLocalFallback) {
       updateQuote(id, edits)
@@ -419,37 +415,96 @@ export function QuoteDetailPage() {
     } else {
       const res = await apiPatch(`/quotes/${encodeURIComponent(id)}`, edits)
       if (res.ok) {
-        // Re-fetch to get updated data
         const refreshed = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
         if (refreshed.ok) setQuote(mapApiQuote(refreshed.data))
       } else {
-        // Fallback to localStorage
         updateQuote(id, edits)
         setQuote(getQuote(id))
       }
     }
     pendingEditsRef.current = {}
-    setEditing(false)
-  }
+  }, [id, quote, useLocalFallback, flushCurrentTab])
 
-  const handleCancel = async () => {
-    pendingEditsRef.current = {}
-    setEditing(false)
-    // Re-read quote to discard visual changes
+  const { trigger: triggerAutoSave, flush: flushAutoSave, status: saveStatus } = useAutoSave(performSave)
+
+  /** Called by child forms on every field change via QuoteContext. */
+  const onFieldChange = useCallback(() => {
+    triggerAutoSave()
+  }, [triggerAutoSave])
+
+  /** Switch tabs — flush immediately before switching. */
+  const handleTabChange = useCallback(
+    async (tab: TabId) => {
+      flushCurrentTab()
+      if (Object.keys(pendingEditsRef.current).length > 0) {
+        await flushAutoSave()
+      }
+      setActiveTab(tab)
+    },
+    [flushCurrentTab, flushAutoSave]
+  )
+
+  // ---------------------------------------------------------------------------
+  // Status changes
+  // ---------------------------------------------------------------------------
+
+  const handleStatusChange = async (status: QuoteStatus) => {
     if (!id) return
+
     if (useLocalFallback) {
+      updateStatus(id, status)
       setQuote(getQuote(id))
     } else {
-      const res = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
-      if (res.ok) setQuote(mapApiQuote(res.data))
-      else setQuote(getQuote(id))
+      const res = await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
+        type: "status_change",
+        newStatus: status,
+      })
+      if (res.ok) {
+        await loadQuote()
+      } else {
+        updateStatus(id, status)
+        setQuote(getQuote(id))
+      }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Activity: add comment
+  // ---------------------------------------------------------------------------
+
+  const handleAddComment = async (content: string) => {
+    if (!id) return
+
+    if (useLocalFallback) {
+      updateNotes(id, content)
+    } else {
+      const res = await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
+        type: "note",
+        content,
+      })
+      if (res.ok) {
+        // Optimistic append
+        const newItem: ActivityItem = {
+          id: `temp-${Date.now()}`,
+          type: "note",
+          content,
+          createdAt: new Date().toISOString(),
+        }
+        setActivities((prev) => [...prev, newItem])
+        // Also reload in background to get real ID
+        loadQuote()
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render guards
+  // ---------------------------------------------------------------------------
 
   if (!isLoaded || !isSignedIn) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading\u2026</p>
       </div>
     )
   }
@@ -469,97 +524,28 @@ export function QuoteDetailPage() {
     )
   }
 
-  const handleStatusChange = async (status: QuoteStatus) => {
-    if (!id) return
-
-    if (useLocalFallback) {
-      updateStatus(id, status)
-      setQuote(getQuote(id))
-    } else {
-      const res = await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
-        type: "status_change",
-        newStatus: status,
-      })
-      if (res.ok) {
-        // Re-fetch the quote to get updated status + activity
-        const refreshed = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
-        if (refreshed.ok) {
-          const actRes = await apiGet<{ activities: Array<Record<string, unknown>> }>(
-            `/quotes/${encodeURIComponent(id)}/activity?limit=100`
-          )
-          const apiQuote = refreshed.data
-          if (actRes.ok) {
-            apiQuote.statusHistory = actRes.data.activities
-              .filter((a) => a.type === "status_change")
-              .map((a) => ({ status: a.newValue as QuoteStatus, timestamp: a.createdAt as string }))
-            apiQuote.contractorNotes = actRes.data.activities
-              .filter((a) => a.type === "note")
-              .map((a) => a.content as string)
-              .join("\n")
-          }
-          setQuote(mapApiQuote(apiQuote))
-        }
-      } else {
-        updateStatus(id, status)
-        setQuote(getQuote(id))
-      }
-    }
-  }
-
-  const handleNotesSave = async (notes: string) => {
-    if (!id) return
-
-    if (useLocalFallback) {
-      updateNotes(id, notes)
-    } else {
-      await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
-        type: "note",
-        content: notes,
-      })
-    }
-  }
-
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <Link to="/admin/quotes" className="text-sm text-muted-foreground hover:text-foreground">
         &larr; Back to quotes
       </Link>
 
-      {/* Header */}
+      {/* Header — no duplicate address, no Edit button */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{quote.name}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{quote.jobSiteAddress}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Submitted {formatDateTime(quote.createdAt)}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={quote.status} />
-          {!editing && (
-            <Button size="sm" variant="outline" onClick={handleEdit}>
-              Edit
-            </Button>
-          )}
+          <SaveIndicator status={saveStatus} />
+          <StatusBadge status={quote.status as QuoteStatus} />
         </div>
       </div>
 
-      {/* Edit mode toolbar */}
-      {editing && (
-        <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-2">
-          <span className="text-sm font-medium text-primary">Editing</span>
-          <div className="flex-1" />
-          <Button size="sm" variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleSave}>
-            Save changes
-          </Button>
-        </div>
-      )}
-
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
-        {/* Left — tabbed intake pages */}
+        {/* Left — tabbed content */}
         <div>
           {/* Tab bar */}
           <div className="flex border-b mb-6">
@@ -580,22 +566,31 @@ export function QuoteDetailPage() {
           </div>
 
           {/* Tab content */}
-          <QuoteProvider quote={quote} readOnly={!editing} valuesRef={valuesRef}>
-            {activeTab === "contact" && <IntakePage />}
-            {activeTab === "scope" && <IntakeScreen2Page />}
-            {activeTab === "photos" && <IntakePhotosPage />}
-          </QuoteProvider>
+          {activeTab === "activity" ? (
+            <ActivityFeed
+              activities={activities}
+              onAddComment={handleAddComment}
+            />
+          ) : (
+            <QuoteProvider
+              quote={quote}
+              readOnly={false}
+              valuesRef={valuesRef}
+              onFieldChange={onFieldChange}
+            >
+              {activeTab === "contact" && <IntakePage />}
+              {activeTab === "scope" && <IntakeScreen2Page />}
+              {activeTab === "photos" && <IntakePhotosPage />}
+            </QuoteProvider>
+          )}
         </div>
 
-        {/* Right — admin actions */}
+        {/* Right — sidebar: StatusPanel + DeleteCustomerDataPanel only */}
         <div className="space-y-8">
           <StatusPanel quote={quote} onStatusChange={handleStatusChange} />
-          <StatusTimeline quote={quote} />
-          <NotesPanel quote={quote} onSave={handleNotesSave} />
           <DeleteCustomerDataPanel
             quote={quote}
             onDeleted={() => {
-              // Navigate back to quotes list after successful deletion
               window.location.href = "/admin/quotes"
             }}
           />
