@@ -29,7 +29,6 @@ async function submitToHubSpot(data: CustomerInfoData): Promise<void> {
     { name: "lastname", value: data.name.split(" ").slice(1).join(" ") },
     { name: "email", value: data.email },
     { name: "phone", value: data.phone },
-    { name: "mobilephone", value: data.cell ?? "" },
     { name: "how_did_you_find_us", value: data.howDidYouFindUs },
     { name: "referred_by_contractor", value: data.referredByContractor ?? "" },
   ]
@@ -71,7 +70,6 @@ export function IntakePage() {
       name: quote?.name ?? "",
       email: quote?.email ?? "",
       phone: quote?.phone ?? "",
-      cell: quote?.cell ?? "",
       howDidYouFindUs: quote?.howDidYouFindUs ?? "",
       referredByContractor: quote?.referredByContractor ?? "",
     },
@@ -85,7 +83,7 @@ export function IntakePage() {
     if (!draft) return
     const publicToken = draft.publicToken
     apiGet<{
-      name: string; email: string; phone: string; cell?: string
+      name: string; email: string; phone: string
       howDidYouFindUs?: string; referredByContractor?: string
     }>(`/quotes/${encodeURIComponent(draft.quoteId)}/draft?publicToken=${encodeURIComponent(publicToken)}`)
       .then((res) => {
@@ -94,7 +92,6 @@ export function IntakePage() {
             name: res.data.name ?? "",
             email: res.data.email ?? "",
             phone: res.data.phone ?? "",
-            cell: res.data.cell ?? "",
             howDidYouFindUs: res.data.howDidYouFindUs ?? "",
             referredByContractor: res.data.referredByContractor ?? "",
           })
@@ -114,7 +111,7 @@ export function IntakePage() {
       name: "John Smith",
       email: "john.smith@example.com",
       phone: "(718) 555-1234",
-      cell: "(718) 555-5678",
+      
       howDidYouFindUs: "referral",
       referredByContractor: "Mike's Contracting",
     }),
@@ -129,7 +126,7 @@ export function IntakePage() {
       name: v.name,
       email: v.email,
       phone: v.phone,
-      cell: v.cell || undefined,
+      
       howDidYouFindUs: v.howDidYouFindUs,
       referredByContractor: v.referredByContractor || undefined,
     }
@@ -175,7 +172,7 @@ export function IntakePage() {
         name: data.name,
         email: data.email,
         phone: data.phone,
-        cell: data.cell || undefined,
+        
         howDidYouFindUs: data.howDidYouFindUs,
         referredByContractor: data.referredByContractor || undefined,
         turnstileToken,
@@ -219,7 +216,7 @@ export function IntakePage() {
             name: data.name,
             email: data.email,
             phone: data.phone,
-            cell: data.cell,
+            
             howDidYouFindUs: data.howDidYouFindUs,
             referredByContractor: data.referredByContractor,
           })

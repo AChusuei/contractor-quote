@@ -6,7 +6,6 @@ export const customerInfoSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Enter a valid email"),
   phone: z.string().refine((v) => v.replace(/\D/g, "").length >= 10, "Enter a valid phone number"),
-  cell: z.string().refine((v) => v === "" || v.replace(/\D/g, "").length >= 10, "Enter a valid phone number").optional(),
   howDidYouFindUs: z.string().min(1, "Please tell us how you found us"),
   referredByContractor: z.string().optional(),
 })
@@ -50,32 +49,18 @@ export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFor
         <FieldError message={errors.email?.message} />
       </div>
 
-      {/* Phone + Cell */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="phone">Phone {!readOnly && "*"}</Label>
-          <input
-            id="phone"
-            type="tel"
-            autoComplete="tel"
-            disabled={readOnly}
-            className={inputClass(!!errors.phone)}
-            {...register("phone")}
-          />
-          <FieldError message={errors.phone?.message} />
-        </div>
-        <div>
-          <Label htmlFor="cell">Cell</Label>
-          <input
-            id="cell"
-            type="tel"
-            autoComplete="tel"
-            disabled={readOnly}
-            className={inputClass(!!errors.cell)}
-            {...register("cell")}
-          />
-          <FieldError message={errors.cell?.message} />
-        </div>
+      {/* Phone */}
+      <div>
+        <Label htmlFor="phone">Phone {!readOnly && "*"}</Label>
+        <input
+          id="phone"
+          type="tel"
+          autoComplete="tel"
+          disabled={readOnly}
+          className={inputClass(!!errors.phone)}
+          {...register("phone")}
+        />
+        <FieldError message={errors.phone?.message} />
       </div>
 
       {/* How did you find us */}
