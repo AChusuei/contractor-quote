@@ -2,31 +2,15 @@ import { useCallback, useEffect, useState } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { useAuth } from "@clerk/clerk-react"
 import { Button } from "components"
-import { Label, FieldError, inputClass } from "@/components/forms/formHelpers"
 import { apiGet, apiPatch, setAuthProvider } from "@/lib/api"
 import { useAutoSave } from "@/hooks/useAutoSave"
-
-// ---------------------------------------------------------------------------
-// Schema
-// ---------------------------------------------------------------------------
-
-const contractorFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Enter a valid email address").or(z.literal("")).optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  websiteUrl: z.string().optional(),
-  licenseNumber: z.string().optional(),
-  slug: z
-    .string()
-    .min(1, "Slug is required")
-    .regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens"),
-})
-
-type ContractorFormData = z.infer<typeof contractorFormSchema>
+import {
+  contractorProfileSchema,
+  type ContractorProfileData,
+  ContractorProfileForm,
+} from "@/components/forms/ContractorProfileForm"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,15 +111,15 @@ export function SuperContractorDetailPage() {
     watch,
     getValues,
     formState: { errors },
-  } = useForm<ContractorFormData>({
-    resolver: zodResolver(contractorFormSchema),
+  } = useForm<ContractorProfileData>({
+    resolver: zodResolver(contractorProfileSchema),
     mode: "onTouched",
     defaultValues: {
       name: "",
       email: "",
       phone: "",
       address: "",
-      websiteUrl: "",
+      website: "",
       licenseNumber: "",
       slug: "",
     },
@@ -145,7 +129,7 @@ export function SuperContractorDetailPage() {
           email: contractor.email ?? "",
           phone: contractor.phone ?? "",
           address: contractor.address ?? "",
-          websiteUrl: contractor.websiteUrl ?? "",
+          website: contractor.websiteUrl ?? "",
           licenseNumber: contractor.licenseNumber ?? "",
           slug: contractor.slug ?? "",
         }
@@ -154,8 +138,8 @@ export function SuperContractorDetailPage() {
 
   const performSave = useCallback(async () => {
     if (!id || !contractor) return
-    const values = getValues()
-    await apiPatch(`/platform/contractors/${encodeURIComponent(id)}`, values)
+    const { website, ...rest } = getValues()
+    await apiPatch(`/platform/contractors/${encodeURIComponent(id)}`, { ...rest, websiteUrl: website })
   }, [id, contractor, getValues])
 
   const { trigger: triggerAutoSave, status: saveStatus } = useAutoSave(performSave)
@@ -226,12 +210,16 @@ export function SuperContractorDetailPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate("/admin/quotes")}
+          onClick={() => {
+            sessionStorage.setItem("cq_super_contractor_id", contractor.id)
+            sessionStorage.setItem("cq_super_contractor_name", contractor.name)
+            navigate("/admin/quotes", { replace: true })
+          }}
         >
-          Enter contractor portal
+          View Portal
         </Button>
         <p className="mt-1 text-xs text-muted-foreground">
-          Navigates to the quotes portal for this contractor.
+          Enter the contractor portal as this contractor.
         </p>
       </div>
 
@@ -240,85 +228,7 @@ export function SuperContractorDetailPage() {
         <h2 className="text-sm font-semibold text-foreground border-b pb-2 mb-4">
           Contractor Info
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="name">Name *</Label>
-            <input
-              id="name"
-              type="text"
-              className={inputClass(!!errors.name)}
-              {...register("name")}
-            />
-            <FieldError message={errors.name?.message} />
-          </div>
-
-          <div>
-            <Label htmlFor="slug">Slug *</Label>
-            <input
-              id="slug"
-              type="text"
-              className={inputClass(!!errors.slug)}
-              {...register("slug")}
-            />
-            <FieldError message={errors.slug?.message} />
-          </div>
-
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <input
-              id="email"
-              type="email"
-              className={inputClass(!!errors.email)}
-              {...register("email")}
-            />
-            <FieldError message={errors.email?.message} />
-          </div>
-
-          <div>
-            <Label htmlFor="phone">Phone</Label>
-            <input
-              id="phone"
-              type="tel"
-              className={inputClass(!!errors.phone)}
-              {...register("phone")}
-            />
-            <FieldError message={errors.phone?.message} />
-          </div>
-
-          <div className="sm:col-span-2">
-            <Label htmlFor="address">Address</Label>
-            <input
-              id="address"
-              type="text"
-              className={inputClass(!!errors.address)}
-              {...register("address")}
-            />
-            <FieldError message={errors.address?.message} />
-          </div>
-
-          <div>
-            <Label htmlFor="websiteUrl">Website URL</Label>
-            <input
-              id="websiteUrl"
-              type="url"
-              className={inputClass(!!errors.websiteUrl)}
-              placeholder="https://"
-              {...register("websiteUrl")}
-            />
-            <FieldError message={errors.websiteUrl?.message} />
-          </div>
-
-          <div>
-            <Label htmlFor="licenseNumber">License Number</Label>
-            <input
-              id="licenseNumber"
-              type="text"
-              className={inputClass(!!errors.licenseNumber)}
-              {...register("licenseNumber")}
-            />
-            <FieldError message={errors.licenseNumber?.message} />
-          </div>
-        </div>
+        <ContractorProfileForm register={register} errors={errors} showSlug />
       </div>
 
       {/* Staff list */}

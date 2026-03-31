@@ -7,6 +7,7 @@ import { Button } from "components"
 import { cn } from "@/lib/utils"
 import { apiGet, apiPost, apiPatch, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
+import { contractorProfileSchema, type ContractorProfileData, ContractorProfileForm } from "@/components/forms/ContractorProfileForm"
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -44,39 +45,18 @@ const themeOptions: { value: Theme; label: string; description: string }[] = [
 
 const PROFILE_KEY = "cq_contractor_profile"
 
-const profileSchema = z.object({
-  companyName: z.string().min(1, "Company name is required"),
-  contactName: z.string().min(1, "Contact name is required"),
-  email: z.string().min(1, "Email is required").email("Enter a valid email address"),
-  phone: z.string().refine(
-    (v) => v === "" || v.replace(/\D/g, "").length >= 10,
-    "Enter a valid phone number",
-  ),
-  website: z.string().refine(
-    (v) => v === "" || /^https?:\/\/.+/.test(v),
-    "Enter a valid URL starting with http:// or https://",
-  ).optional().or(z.literal("")),
-  logoUrl: z.string().optional().or(z.literal("")),
-  address: z.string().optional().or(z.literal("")),
-  licenseNumber: z.string().optional().or(z.literal("")),
-})
-
-type ContractorProfile = z.infer<typeof profileSchema>
-
-function loadProfile(): ContractorProfile {
+function loadProfile(): ContractorProfileData {
   try {
     const raw = localStorage.getItem(PROFILE_KEY)
-    if (raw) return JSON.parse(raw) as ContractorProfile
+    if (raw) return JSON.parse(raw) as ContractorProfileData
   } catch {
     // ignore corrupt data
   }
   return {
-    companyName: "",
-    contactName: "",
+    name: "",
     email: "",
     phone: "",
     website: "",
-    logoUrl: "",
     address: "",
     licenseNumber: "",
   }
@@ -473,21 +453,20 @@ export function SettingsPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
-  } = useForm<ContractorProfile>({
-    resolver: zodResolver(profileSchema),
+  } = useForm<ContractorProfileData>({
+    resolver: zodResolver(contractorProfileSchema),
     mode: "onTouched",
     defaultValues: loadProfile(),
   })
 
-  async function onSave(data: ContractorProfile) {
+  async function onSave(data: ContractorProfileData) {
     // Save to localStorage as immediate cache
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(data))
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...data, logoUrl: logoPreview }))
 
     // Also try to save to API
     if (contractorId) {
-      await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
+      await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, { ...data, logoUrl: logoPreview })
     }
 
     setSaved(true)
@@ -495,7 +474,13 @@ export function SettingsPage() {
   }
 
   // ---- Logo preview ----
-  const [logoPreview, setLogoPreview] = useState<string>(() => loadProfile().logoUrl ?? "")
+  const [logoPreview, setLogoPreview] = useState<string>(() => {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY)
+      if (raw) return (JSON.parse(raw) as Record<string, unknown>).logoUrl as string ?? ""
+    } catch { /* ignore */ }
+    return ""
+  })
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -506,7 +491,6 @@ export function SettingsPage() {
     reader.onload = () => {
       const dataUrl = reader.result as string
       setLogoPreview(dataUrl)
-      setValue("logoUrl", dataUrl, { shouldDirty: true })
     }
     reader.readAsDataURL(file)
 
@@ -519,7 +503,7 @@ export function SettingsPage() {
       formData,
     )
     if (res.ok) {
-      setValue("logoUrl", res.data.logoUrl, { shouldDirty: true })
+      setLogoPreview(res.data.logoUrl)
     }
   }
 
@@ -558,93 +542,7 @@ export function SettingsPage() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* Company Name */}
-            <div>
-              <Label htmlFor="companyName">Company Name</Label>
-              <input
-                id="companyName"
-                type="text"
-                className={inputClass(!!errors.companyName)}
-                {...register("companyName")}
-              />
-              <FieldError message={errors.companyName?.message} />
-            </div>
-
-            {/* Contact Name */}
-            <div>
-              <Label htmlFor="contactName">Owner / Contact Name</Label>
-              <input
-                id="contactName"
-                type="text"
-                className={inputClass(!!errors.contactName)}
-                {...register("contactName")}
-              />
-              <FieldError message={errors.contactName?.message} />
-            </div>
-
-            {/* Email */}
-            <div>
-              <Label htmlFor="profileEmail">Email</Label>
-              <input
-                id="profileEmail"
-                type="email"
-                placeholder="Used as from address for emails"
-                className={inputClass(!!errors.email)}
-                {...register("email")}
-              />
-              <FieldError message={errors.email?.message} />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <Label htmlFor="profilePhone">Phone</Label>
-              <input
-                id="profilePhone"
-                type="tel"
-                className={inputClass(!!errors.phone)}
-                {...register("phone")}
-              />
-              <FieldError message={errors.phone?.message} />
-            </div>
-
-            {/* Website */}
-            <div>
-              <Label htmlFor="website">Website</Label>
-              <input
-                id="website"
-                type="url"
-                placeholder="https://example.com"
-                className={inputClass(!!errors.website)}
-                {...register("website")}
-              />
-              <FieldError message={errors.website?.message} />
-            </div>
-
-            {/* License Number */}
-            <div>
-              <Label htmlFor="licenseNumber">License Number</Label>
-              <input
-                id="licenseNumber"
-                type="text"
-                className={inputClass(!!errors.licenseNumber)}
-                {...register("licenseNumber")}
-              />
-              <FieldError message={errors.licenseNumber?.message} />
-            </div>
-          </div>
-
-          {/* Address — full width */}
-          <div>
-            <Label htmlFor="address">Business Address</Label>
-            <input
-              id="address"
-              type="text"
-              className={inputClass(!!errors.address)}
-              {...register("address")}
-            />
-            <FieldError message={errors.address?.message} />
-          </div>
+          <ContractorProfileForm register={register} errors={errors} />
 
           {/* Logo Upload */}
           <div>
