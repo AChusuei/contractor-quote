@@ -7,6 +7,7 @@ import {
   requireContractorOwnership,
   requireQuoteOwnership,
 } from "./middleware/tenantIsolation"
+import { requirePlatformAdmin } from "./middleware/platformAdmin"
 import {
   quoteSubmissionSchema,
   quoteUpdateSchema,
@@ -17,6 +18,7 @@ import {
   emailSendSchema,
   staffCreateSchema,
   staffUpdateSchema,
+  assignOwnerSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
   QUOTE_STATUSES,
@@ -36,6 +38,7 @@ type Bindings = {
   KV: KVNamespace
   ENVIRONMENT: string
   CORS_ORIGINS: string
+  PLATFORM_ADMIN_EMAILS: string
   // Secrets (set via `wrangler secret put`)
   HUBSPOT_ACCESS_TOKEN: string
   TOKEN_SIGNING_SECRET: string
@@ -45,6 +48,7 @@ type Bindings = {
 
 type Variables = {
   contractorId: string
+  platformAdminEmail: string
 }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath("/api/v1")
@@ -2329,6 +2333,158 @@ app.patch(
     }
 
     return c.json({ ok: true, data: staffMember })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Platform admin routes
+// ---------------------------------------------------------------------------
+
+// List all contractors (platform admin only)
+app.get(
+  "/platform/contractors",
+  requirePlatformAdmin(),
+  async (c) => {
+    const { results } = await c.env.DB.prepare(
+      `SELECT c.id, c.slug, c.name, c.email, c.phone,
+              s.id AS owner_staff_id, s.name AS owner_name, s.email AS owner_email, s.clerk_user_id AS owner_clerk_user_id
+       FROM contractors c
+       LEFT JOIN staff s ON s.contractor_id = c.id AND s.role = 'owner' AND s.active = 1
+       ORDER BY c.name ASC`
+    ).all()
+
+    const contractors = (results ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      email: row.email ?? null,
+      phone: row.phone ?? null,
+      owner: row.owner_staff_id
+        ? {
+            staffId: row.owner_staff_id,
+            name: row.owner_name,
+            email: row.owner_email,
+            clerkUserId: row.owner_clerk_user_id ?? null,
+          }
+        : null,
+    }))
+
+    const res: ApiOk<typeof contractors> = { ok: true, data: contractors }
+    return c.json(res)
+  }
+)
+
+// Assign owner to a contractor (platform admin only)
+// Enforces ONE owner per contractor: demotes existing owner to 'admin'
+app.post(
+  "/platform/contractors/:contractorId/owner",
+  requirePlatformAdmin(),
+  rateLimit({ limit: 50, windowSeconds: 3600, keyPrefix: "platform-assign-owner" }),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    // Verify contractor exists
+    const contractor = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ id: string }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = assignOwnerSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+        422
+      )
+    }
+
+    const data = result.data
+
+    // Demote any existing owner(s) to 'admin'
+    await c.env.DB.prepare(
+      "UPDATE staff SET role = 'admin' WHERE contractor_id = ? AND role = 'owner'"
+    )
+      .bind(contractorId)
+      .run()
+
+    // Check if a staff record with this email already exists for this contractor
+    const existingStaff = await c.env.DB.prepare(
+      "SELECT id FROM staff WHERE email = ? AND contractor_id = ?"
+    )
+      .bind(data.email, contractorId)
+      .first<{ id: string }>()
+
+    let staffId: string
+
+    if (existingStaff) {
+      // Promote existing staff to owner
+      staffId = existingStaff.id
+      await c.env.DB.prepare(
+        `UPDATE staff SET role = 'owner', name = ?, active = 1${data.clerkUserId ? ", clerk_user_id = ?" : ""}
+         WHERE id = ?`
+      )
+        .bind(
+          ...(data.clerkUserId
+            ? [data.name, data.clerkUserId, staffId]
+            : [data.name, staffId])
+        )
+        .run()
+    } else {
+      // Create new staff record as owner
+      staffId = crypto.randomUUID()
+      await c.env.DB.prepare(
+        `INSERT INTO staff (id, contractor_id, name, email, role, clerk_user_id, active)
+         VALUES (?, ?, ?, ?, 'owner', ?, 1)`
+      )
+        .bind(staffId, contractorId, data.name, data.email, data.clerkUserId ?? null)
+        .run()
+    }
+
+    // Fetch the created/updated owner record
+    const owner = await c.env.DB.prepare(
+      `SELECT id, contractor_id, clerk_user_id, name, email, role, phone, active, created_at
+       FROM staff WHERE id = ?`
+    )
+      .bind(staffId)
+      .first()
+
+    if (!owner) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to fetch owner record")
+    }
+
+    const staffMember = {
+      id: owner.id,
+      contractorId: owner.contractor_id,
+      clerkUserId: owner.clerk_user_id ?? null,
+      name: owner.name,
+      email: owner.email,
+      role: owner.role,
+      phone: owner.phone ?? null,
+      active: owner.active === 1,
+      createdAt: owner.created_at,
+    }
+
+    return c.json({ ok: true, data: staffMember }, 200)
+  }
+)
+
+// Check if current user is a platform admin
+app.get(
+  "/platform/check",
+  requirePlatformAdmin(),
+  (c) => {
+    return c.json({ ok: true, data: { isPlatformAdmin: true } })
   }
 )
 

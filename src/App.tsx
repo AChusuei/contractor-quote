@@ -15,6 +15,7 @@ import { SettingsPage } from "@/pages/admin/SettingsPage"
 import { CustomersPage } from "@/pages/admin/CustomersPage"
 import { CustomerDetailPage } from "@/pages/admin/CustomerDetailPage"
 import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
+import { PlatformPage } from "@/pages/admin/PlatformPage"
 
 interface AppProps {
   clerkConfigured: boolean
@@ -44,6 +45,7 @@ export default function App({ clerkConfigured }: AppProps) {
             <Route path="/admin/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/admin/email/compose" element={<EmailComposePage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
+            <Route path="/admin/platform" element={<PlatformPage />} />
             <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
           </>
         ) : (

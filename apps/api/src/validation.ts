@@ -436,6 +436,29 @@ export const staffUpdateSchema = z
 export type StaffUpdate = z.infer<typeof staffUpdateSchema>
 
 // ---------------------------------------------------------------------------
+// Platform admin: assign owner schema
+// ---------------------------------------------------------------------------
+
+export const assignOwnerSchema = z.object({
+  email: z
+    .string({ error: "Email address is required" })
+    .transform(stripHtml)
+    .pipe(z.string().email("Enter a valid email address")),
+
+  name: sanitizedMinMax(
+    1, "Name is required",
+    200, "Name must be 200 characters or fewer"
+  ),
+
+  clerkUserId: z
+    .string()
+    .max(200, "Clerk user ID is too long")
+    .optional(),
+})
+
+export type AssignOwner = z.infer<typeof assignOwnerSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 

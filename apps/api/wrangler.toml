@@ -47,3 +47,4 @@ id = "f550d2c295914276a23af2d4b29dbaeb"
 [vars]
 ENVIRONMENT = "development"
 CORS_ORIGINS = "http://localhost:5173"
+PLATFORM_ADMIN_EMAILS = "alan.chusuei@gmail.com"
