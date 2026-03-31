@@ -676,7 +676,6 @@ export function QuoteDetailPage() {
               <span className="text-xs text-muted-foreground">
                 Submitted {formatDateTime(quote.createdAt)}
               </span>
-              <SaveIndicator status={saveStatus} />
               <StatusBadge status={quote.status as QuoteStatus} />
             </div>
           </div>
