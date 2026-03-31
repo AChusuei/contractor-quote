@@ -26,11 +26,12 @@ export function IntakePhotosPage() {
   const navigate = useNavigate()
   const ctx = useQuoteContext()
   const readOnly = ctx?.readOnly ?? false
+  const isAdminView = !!ctx?.quote
 
-  // For intake flow: use sessionStorage quoteId + publicToken
   // For admin view: use ctx.quote.id (Clerk auth handles the rest)
-  const intakeAuth = !readOnly ? getIntakeAuth() : null
-  const quoteId = readOnly ? ctx?.quote?.id : intakeAuth?.quoteId
+  // For intake flow: use sessionStorage quoteId + publicToken
+  const intakeAuth = !isAdminView ? getIntakeAuth() : null
+  const quoteId = isAdminView ? ctx?.quote?.id : intakeAuth?.quoteId
   const publicToken = intakeAuth?.publicToken ?? undefined
 
   const [files, setFiles] = useState<UploadFile[]>([])
