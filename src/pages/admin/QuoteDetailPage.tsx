@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "components"
 import {
   getQuote,
@@ -11,10 +13,9 @@ import {
 } from "@/lib/quoteStore"
 import { fetchQuotes } from "@/lib/quotes"
 import { cn } from "@/lib/utils"
-import { QuoteProvider } from "@/lib/QuoteContext"
-import { IntakePage } from "@/pages/IntakePage"
-import { IntakeScreen2Page } from "@/pages/IntakeScreen2Page"
-import { IntakePhotosPage } from "@/pages/IntakePhotosPage"
+import { CustomerInfoForm, customerInfoSchema, type CustomerInfoData } from "@/components/forms/CustomerInfoForm"
+import { ProjectScopeForm, projectScopeSchema, type ProjectScopeData } from "@/components/forms/ProjectScopeForm"
+import { PhotosForm } from "@/components/forms/PhotosForm"
 import { apiGet, apiPatch, apiPost, isNetworkError, setAuthProvider } from "@/lib/api"
 import {
   STATUS_LABELS,
@@ -322,6 +323,125 @@ function SaveIndicator({ status }: { status: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Admin form tab wrappers — set up useForm and wire auto-save
+// ---------------------------------------------------------------------------
+
+function ContactTab({
+  quote,
+  valuesRef,
+  onFieldChange,
+}: {
+  quote: Quote
+  valuesRef: React.MutableRefObject<(() => Record<string, unknown>) | null>
+  onFieldChange: () => void
+}) {
+  const {
+    register,
+    control,
+    watch,
+    getValues,
+    formState: { errors },
+  } = useForm<CustomerInfoData>({
+    resolver: zodResolver(customerInfoSchema),
+    mode: "onTouched",
+    defaultValues: {
+      name: quote.name ?? "",
+      email: quote.email ?? "",
+      phone: quote.phone ?? "",
+      cell: quote.cell ?? "",
+      jobSiteAddress: quote.jobSiteAddress ?? "",
+      propertyType: quote.propertyType,
+      budgetRange: quote.budgetRange,
+      howDidYouFindUs: quote.howDidYouFindUs ?? "",
+      referredByContractor: quote.referredByContractor ?? "",
+    },
+  })
+
+  useEffect(() => {
+    valuesRef.current = () => getValues() as Record<string, unknown>
+    return () => { valuesRef.current = null }
+  }, [valuesRef, getValues])
+
+  useEffect(() => {
+    const sub = watch(() => onFieldChange())
+    return () => sub.unsubscribe()
+  }, [onFieldChange, watch])
+
+  return (
+    <CustomerInfoForm
+      register={register}
+      control={control}
+      errors={errors}
+      readOnly={false}
+    />
+  )
+}
+
+function ScopeTab({
+  quote,
+  valuesRef,
+  onFieldChange,
+}: {
+  quote: Quote
+  valuesRef: React.MutableRefObject<(() => Record<string, unknown>) | null>
+  onFieldChange: () => void
+}) {
+  const scope = quote.scope
+
+  const {
+    register,
+    control,
+    watch,
+    getValues,
+    formState: { errors },
+  } = useForm<ProjectScopeData>({
+    resolver: zodResolver(projectScopeSchema),
+    mode: "onTouched",
+    defaultValues: {
+      scopeType: scope?.scopeType,
+      layoutChanges: scope?.layoutChanges,
+      kitchenSize: scope?.kitchenSize,
+      cabinets: scope?.cabinets,
+      cabinetDoorStyle: scope?.cabinetDoorStyle ?? "",
+      countertopMaterial: scope?.countertopMaterial ?? "",
+      countertopEdge: scope?.countertopEdge ?? "",
+      sinkType: scope?.sinkType ?? "",
+      backsplash: scope?.backsplash,
+      flooringAction: scope?.flooringAction,
+      flooringType: scope?.flooringType ?? "",
+      applianceFridge: scope?.applianceFridge ?? "none",
+      applianceRange: scope?.applianceRange ?? "none",
+      applianceDishwasher: scope?.applianceDishwasher ?? "none",
+      applianceHood: scope?.applianceHood ?? "none",
+      applianceMicrowave: scope?.applianceMicrowave ?? "none",
+      islandPeninsula: scope?.islandPeninsula,
+      designHelp: scope?.designHelp,
+      additionalNotes: scope?.additionalNotes ?? "",
+    },
+  })
+
+  useEffect(() => {
+    valuesRef.current = () => ({ scope: getValues() }) as Record<string, unknown>
+    return () => { valuesRef.current = null }
+  }, [valuesRef, getValues])
+
+  useEffect(() => {
+    const sub = watch(() => onFieldChange())
+    return () => sub.unsubscribe()
+  }, [onFieldChange, watch])
+
+  return (
+    <ProjectScopeForm
+      register={register}
+      control={control}
+      errors={errors}
+      watch={watch}
+      readOnly={false}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -427,7 +547,7 @@ export function QuoteDetailPage() {
 
   const { trigger: triggerAutoSave, flush: flushAutoSave, status: saveStatus } = useAutoSave(performSave)
 
-  /** Called by child forms on every field change via QuoteContext. */
+  /** Called by child forms on every field change via tab wrappers. */
   const onFieldChange = useCallback(() => {
     triggerAutoSave()
   }, [triggerAutoSave])
@@ -530,7 +650,7 @@ export function QuoteDetailPage() {
         &larr; Back to quotes
       </Link>
 
-      {/* Header — no duplicate address, no Edit button */}
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{quote.name}</h1>
@@ -565,23 +685,32 @@ export function QuoteDetailPage() {
             ))}
           </div>
 
-          {/* Tab content */}
-          {activeTab === "activity" ? (
+          {/* Tab content — form components rendered directly, no chrome */}
+          {activeTab === "activity" && (
             <ActivityFeed
               activities={activities}
               onAddComment={handleAddComment}
             />
-          ) : (
-            <QuoteProvider
+          )}
+          {activeTab === "contact" && (
+            <ContactTab
               quote={quote}
-              readOnly={false}
               valuesRef={valuesRef}
               onFieldChange={onFieldChange}
-            >
-              {activeTab === "contact" && <IntakePage />}
-              {activeTab === "scope" && <IntakeScreen2Page />}
-              {activeTab === "photos" && <IntakePhotosPage />}
-            </QuoteProvider>
+            />
+          )}
+          {activeTab === "scope" && (
+            <ScopeTab
+              quote={quote}
+              valuesRef={valuesRef}
+              onFieldChange={onFieldChange}
+            />
+          )}
+          {activeTab === "photos" && (
+            <PhotosForm
+              quoteId={quote.id}
+              readOnly={false}
+            />
           )}
         </div>
 

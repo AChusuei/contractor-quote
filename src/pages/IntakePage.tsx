@@ -1,12 +1,9 @@
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useState, useEffect } from "react"
-import { useForm, Controller } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { Button } from "components"
-import { cn } from "@/lib/utils"
-import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 import { createQuote } from "@/lib/quoteStore"
 import { useQuoteContext } from "@/lib/QuoteContext"
 import { useTurnstile } from "@/components/Turnstile"
@@ -14,27 +11,14 @@ import { apiPost, apiPatch, apiGet, isNetworkError } from "@/lib/api"
 import { getActiveDraft, saveDraft, touchDraft } from "@/lib/draftSession"
 import { useDevAction } from "@/components/DevToolbar"
 import { useSaveOnLeave } from "@/hooks/useSaveOnLeave"
+import { CustomerInfoForm, customerInfoSchema, type CustomerInfoData } from "@/components/forms/CustomerInfoForm"
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
-
-const schema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Enter a valid email"),
-  phone: z.string().refine((v) => v.replace(/\D/g, "").length >= 10, "Enter a valid phone number"),
-  cell: z.string().refine((v) => v === "" || v.replace(/\D/g, "").length >= 10, "Enter a valid phone number").optional(),
-  jobSiteAddress: z.string().min(1, "Job site address is required"),
-  propertyType: z.enum(["house", "apt", "building", "townhouse"], { error: "Please select an option" }),
-  budgetRange: z.enum(["<10k", "10-25k", "25-50k", "50k+"], { error: "Please select an option" }),
-  howDidYouFindUs: z.string().min(1, "Please tell us how you found us"),
-  referredByContractor: z.string().optional(),
-})
-
-type IntakeFormData = z.infer<typeof schema>
 
 const HUBSPOT_PORTAL_ID = import.meta.env.VITE_HUBSPOT_PORTAL_ID as string | undefined
 const HUBSPOT_FORM_ID = import.meta.env.VITE_HUBSPOT_FORM_ID as string | undefined
 
-async function submitToHubSpot(data: IntakeFormData): Promise<void> {
+async function submitToHubSpot(data: CustomerInfoData): Promise<void> {
   if (!HUBSPOT_PORTAL_ID || !HUBSPOT_FORM_ID) {
     console.warn("HubSpot credentials not configured — skipping CRM submission")
     return
@@ -67,27 +51,6 @@ async function submitToHubSpot(data: IntakeFormData): Promise<void> {
   }
 }
 
-function Label({ htmlFor, children, className }: { htmlFor: string; children: React.ReactNode; className?: string }) {
-  return (
-    <label htmlFor={htmlFor} className={cn("block text-sm font-medium text-foreground mb-1", className)}>
-      {children}
-    </label>
-  )
-}
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null
-  return <p className="mt-1 text-xs text-destructive">{message}</p>
-}
-
-function inputClass(hasError?: boolean) {
-  return cn(
-    "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm",
-    "focus:outline-none focus:ring-1 focus:ring-ring",
-    hasError ? "border-destructive" : "border-input"
-  )
-}
-
 export function IntakePage() {
   usePageTitle("Customer Information")
   const navigate = useNavigate()
@@ -105,8 +68,8 @@ export function IntakePage() {
     getValues,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<IntakeFormData>({
-    resolver: zodResolver(schema),
+  } = useForm<CustomerInfoData>({
+    resolver: zodResolver(customerInfoSchema),
     mode: "onTouched",
     defaultValues: {
       name: quote?.name ?? "",
@@ -141,8 +104,8 @@ export function IntakePage() {
             phone: res.data.phone ?? "",
             cell: res.data.cell ?? "",
             jobSiteAddress: res.data.jobSiteAddress ?? "",
-            propertyType: res.data.propertyType as IntakeFormData["propertyType"],
-            budgetRange: res.data.budgetRange as IntakeFormData["budgetRange"],
+            propertyType: res.data.propertyType as CustomerInfoData["propertyType"],
+            budgetRange: res.data.budgetRange as CustomerInfoData["budgetRange"],
             howDidYouFindUs: res.data.howDidYouFindUs ?? "",
             referredByContractor: res.data.referredByContractor ?? "",
           })
@@ -205,7 +168,7 @@ export function IntakePage() {
     return () => sub.unsubscribe()
   }, [readOnly, onFieldChange, watch])
 
-  const onSubmit = async (data: IntakeFormData) => {
+  const onSubmit = async (data: CustomerInfoData) => {
     setSubmitError(null)
 
     // Require Turnstile token when configured
@@ -309,178 +272,24 @@ export function IntakePage() {
         </div>
       )}
 
-
-      <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate className="space-y-4">
-        {/* Name */}
-        <div>
-          <Label htmlFor="name">Full Name {!readOnly && "*"}</Label>
-          <input
-            id="name"
-            type="text"
-            autoComplete="name"
-            disabled={readOnly}
-            className={inputClass(!!errors.name)}
-            {...register("name")}
-          />
-          <FieldError message={errors.name?.message} />
-        </div>
-
-        {/* Email */}
-        <div>
-          <Label htmlFor="email">Email {!readOnly && "*"}</Label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            disabled={readOnly}
-            className={inputClass(!!errors.email)}
-            {...register("email")}
-          />
-          <FieldError message={errors.email?.message} />
-        </div>
-
-        {/* Phone + Cell — stacked on mobile, side-by-side on sm+ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="phone">Phone {!readOnly && "*"}</Label>
-            <input
-              id="phone"
-              type="tel"
-              autoComplete="tel"
-              disabled={readOnly}
-              className={inputClass(!!errors.phone)}
-              {...register("phone")}
-            />
-            <FieldError message={errors.phone?.message} />
-          </div>
-          <div>
-            <Label htmlFor="cell">Cell</Label>
-            <input
-              id="cell"
-              type="tel"
-              autoComplete="tel"
-              disabled={readOnly}
-              className={inputClass(!!errors.cell)}
-              {...register("cell")}
-            />
-            <FieldError message={errors.cell?.message} />
-          </div>
-        </div>
-
-        {/* Job site address */}
-        <div>
-          <Label htmlFor="jobSiteAddress">Job Site Address {!readOnly && "*"}</Label>
-          {readOnly ? (
-            <input
-              id="jobSiteAddress"
-              type="text"
-              disabled
-              className={inputClass()}
-              {...register("jobSiteAddress")}
-            />
-          ) : (
-            <Controller
-              name="jobSiteAddress"
-              control={control}
-              render={({ field }) => (
-                <AddressAutocomplete
-                  id="jobSiteAddress"
-                  value={field.value ?? ""}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  hasError={!!errors.jobSiteAddress}
-                  autoComplete="street-address"
-                  placeholder="Start typing an address…"
-                />
-              )}
-            />
-          )}
-          <FieldError message={errors.jobSiteAddress?.message} />
-        </div>
-
-        {/* Property type */}
-        <div>
-          <Label htmlFor="propertyType">Property Type {!readOnly && "*"}</Label>
-          <select
-            id="propertyType"
-            disabled={readOnly}
-            className={inputClass(!!errors.propertyType)}
-            {...register("propertyType")}
-            defaultValue=""
-          >
-            <option value="" disabled>Select property type</option>
-            <option value="house">House</option>
-            <option value="apt">Apartment</option>
-            <option value="building">Building</option>
-            <option value="townhouse">Townhouse</option>
-          </select>
-          <FieldError message={errors.propertyType?.message} />
-        </div>
-
-        {/* Budget range */}
-        <div>
-          <Label htmlFor="budgetRange">Budget Range {!readOnly && "*"}</Label>
-          <select
-            id="budgetRange"
-            disabled={readOnly}
-            className={inputClass(!!errors.budgetRange)}
-            {...register("budgetRange")}
-            defaultValue=""
-          >
-            <option value="" disabled>Select budget range</option>
-            <option value="<10k">Under $10,000</option>
-            <option value="10-25k">$10,000 – $25,000</option>
-            <option value="25-50k">$25,000 – $50,000</option>
-            <option value="50k+">$50,000+</option>
-          </select>
-          <FieldError message={errors.budgetRange?.message} />
-        </div>
-
-        {/* How did you find us */}
-        <div>
-          <Label htmlFor="howDidYouFindUs">How Did You Find Us? {!readOnly && "*"}</Label>
-          <select
-            id="howDidYouFindUs"
-            disabled={readOnly}
-            className={inputClass(!!errors.howDidYouFindUs)}
-            {...register("howDidYouFindUs")}
-            defaultValue=""
-          >
-            <option value="" disabled>Select an option</option>
-            <option value="google">Google Search</option>
-            <option value="referral">Referral</option>
-            <option value="social_media">Social Media</option>
-            <option value="yelp">Yelp</option>
-            <option value="flyer">Flyer / Mailer</option>
-            <option value="other">Other</option>
-          </select>
-          <FieldError message={errors.howDidYouFindUs?.message} />
-        </div>
-
-        {/* Referred by contractor name */}
-        <div>
-          <Label htmlFor="referredByContractor">Referred By (Contractor Name)</Label>
-          <input
-            id="referredByContractor"
-            type="text"
-            placeholder={readOnly ? "" : "Leave blank if not applicable"}
-            disabled={readOnly}
-            className={inputClass(!!errors.referredByContractor)}
-            {...register("referredByContractor")}
-          />
-          <FieldError message={errors.referredByContractor?.message} />
-        </div>
+      <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate>
+        <CustomerInfoForm
+          register={register}
+          control={control}
+          errors={errors}
+          readOnly={readOnly}
+        />
 
         {!isAdminView && TurnstileWidget}
 
         {!isAdminView && submitError && (
-          <p className="text-sm text-destructive">{submitError}</p>
+          <p className="text-sm text-destructive mt-4">{submitError}</p>
         )}
 
         {!isAdminView && (
-          <div className="pt-2">
+          <div className="pt-6">
             <Button type="submit" disabled={isSubmitting} className="w-full">
-              {isSubmitting ? "Submitting…" : "Continue"}
+              {isSubmitting ? "Submitting\u2026" : "Continue"}
             </Button>
           </div>
         )}
