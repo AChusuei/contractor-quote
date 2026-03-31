@@ -2,6 +2,7 @@ import { Controller } from "react-hook-form"
 import type { UseFormRegister, Control, FieldErrors, UseFormWatch } from "react-hook-form"
 import { z } from "zod"
 import { Label, FieldError, inputClass, RadioGroup, ApplianceRow } from "./formHelpers"
+import { AddressAutocomplete } from "@/components/AddressAutocomplete"
 
 const applianceSchema = z.enum(["new", "existing", "none"])
 
@@ -121,14 +122,20 @@ export function ProjectScopeForm({ register, control, errors, watch, readOnly }:
       {/* Job site address */}
       <div>
         <Label htmlFor="jobSiteAddress">Job Site Address {!readOnly && "*"}</Label>
-        <input
-          id="jobSiteAddress"
-          type="text"
-          autoComplete="street-address"
-          placeholder={readOnly ? "" : "Enter job site address"}
-          disabled={readOnly}
-          className={inputClass(!!errors.jobSiteAddress)}
-          {...register("jobSiteAddress")}
+        <Controller
+          name="jobSiteAddress"
+          control={control}
+          render={({ field }) => (
+            <AddressAutocomplete
+              id="jobSiteAddress"
+              value={field.value ?? ""}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              hasError={!!errors.jobSiteAddress}
+              autoComplete="street-address"
+              placeholder={readOnly ? "" : "Start typing an address…"}
+            />
+          )}
         />
         <FieldError message={errors.jobSiteAddress?.message} />
       </div>
