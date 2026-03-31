@@ -108,7 +108,23 @@ function SuperContractorBanner() {
   )
 }
 
-export function AdminShell() {
+// Full shell content — only rendered when Clerk confirms user is signed in
+function ClerkAdminShellContent() {
+  const { isLoaded, isSignedIn } = useAuth()
+
+  // While Clerk loads or user is not authenticated, show no header.
+  // ProtectedRoute (wrapping page content via Outlet) handles the loading
+  // state and redirect to sign-in.
+  if (!isLoaded || !isSignedIn) {
+    return (
+      <div className="min-h-screen bg-background">
+        <main className="p-6">
+          <Outlet />
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="flex h-14 shrink-0 items-center border-b bg-background px-6 gap-6">
@@ -117,11 +133,31 @@ export function AdminShell() {
         ) : (
           <span className="font-semibold text-sm">Admin</span>
         )}
-
-        {CLERK_CONFIGURED && <ClerkAdminHeader />}
+        <ClerkAdminHeader />
         <SuperContractorBanner />
       </header>
+      <main className="p-6">
+        <Outlet />
+      </main>
+    </div>
+  )
+}
 
+export function AdminShell() {
+  if (CLERK_CONFIGURED) {
+    return <ClerkAdminShellContent />
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="flex h-14 shrink-0 items-center border-b bg-background px-6 gap-6">
+        {LOGO_URL ? (
+          <img src={LOGO_URL} alt="Logo" className="h-7 w-auto object-contain" />
+        ) : (
+          <span className="font-semibold text-sm">Admin</span>
+        )}
+        <SuperContractorBanner />
+      </header>
       <main className="p-6">
         <Outlet />
       </main>
