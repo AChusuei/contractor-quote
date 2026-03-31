@@ -17,7 +17,6 @@ export function AdminShell() {
   const navLinks = [
     { label: "Quotes", href: "/admin/quotes" },
     { label: "Customers", href: "/admin/customers" },
-    { label: "Email", href: "/admin/email/compose" },
     { label: "Settings", href: "/admin/settings" },
   ]
 

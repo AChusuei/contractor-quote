@@ -26,6 +26,7 @@ import {
 } from "@/lib/statusTransitions"
 import { useAutoSave } from "@/hooks/useAutoSave"
 import { ActivityFeed, type ActivityItem } from "@/components/ActivityFeed"
+import { MailIcon } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -507,7 +508,7 @@ export function QuoteDetailPage() {
         &larr; Back to quotes
       </Link>
 
-      {/* Customer name link */}
+      {/* Customer name link + email */}
       {quote.name && (
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Customer:</span>
@@ -520,6 +521,15 @@ export function QuoteDetailPage() {
             </Link>
           ) : (
             <span className="text-sm font-medium">{quote.name}</span>
+          )}
+          {quote.email && (
+            <a
+              href={`mailto:${quote.email}?subject=${encodeURIComponent(`Re: Quote for ${quote.jobSiteAddress || "your project"}`)}`}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={`Email ${quote.email}`}
+            >
+              <MailIcon className="h-4 w-4" />
+            </a>
           )}
         </div>
       )}
