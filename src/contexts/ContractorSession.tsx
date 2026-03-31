@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { apiGet, setAuthProvider } from "@/lib/api"
 
@@ -32,6 +33,7 @@ export function useContractorSession(): ContractorSessionValue {
 
 export function ContractorSessionProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, getToken } = useAuth()
+  const navigate = useNavigate()
   const [value, setValue] = useState<ContractorSessionValue>({
     contractorId: "",
     contractorName: "",
@@ -78,20 +80,30 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
           })
         })
     } else {
-      // Regular staff — look up their contractor by email via the API
-      apiGet<{ contractorId: string; contractorName: string; role: string }>("/me/contractor")
+      // No super contractor in sessionStorage — check if this user is a super admin
+      // who hasn't selected a contractor yet, or a regular staff member.
+      apiGet<{ isPlatformAdmin: boolean }>("/platform/check")
         .then((res) => {
           if (res.ok) {
-            setValue({
-              contractorId: res.data.contractorId,
-              contractorName: res.data.contractorName,
-              isSuperAdmin: false,
-              contractors: [],
-              loading: false,
-              error: null,
-            })
+            // Super admin without a contractor selected — force portal selection
+            navigate("/admin/select")
           } else {
-            setValue((prev) => ({ ...prev, loading: false, error: res.error }))
+            // Regular staff — look up their contractor by email via the API
+            return apiGet<{ contractorId: string; contractorName: string; role: string }>("/me/contractor")
+              .then((staffRes) => {
+                if (staffRes.ok) {
+                  setValue({
+                    contractorId: staffRes.data.contractorId,
+                    contractorName: staffRes.data.contractorName,
+                    isSuperAdmin: false,
+                    contractors: [],
+                    loading: false,
+                    error: null,
+                  })
+                } else {
+                  setValue((prev) => ({ ...prev, loading: false, error: staffRes.error }))
+                }
+              })
           }
         })
         .catch((err) => {
@@ -102,7 +114,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
           }))
         })
     }
-  }, [isLoaded, isSignedIn, getToken])
+  }, [isLoaded, isSignedIn, getToken, navigate])
 
   return (
     <ContractorSessionContext.Provider value={value}>
