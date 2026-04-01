@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { apiGet, setAuthProvider } from "@/lib/api"
+import { NoContractorAccess } from "@/components/NoContractorAccess"
 
 interface ContractorInfo {
   id: string
@@ -17,6 +18,7 @@ interface ContractorSessionValue {
   contractors: ContractorInfo[]
   logoUrl: string | null
   loading: boolean
+  noAccess: boolean
   error: string | null
 }
 
@@ -27,6 +29,7 @@ const ContractorSessionContext = createContext<ContractorSessionValue>({
   contractors: [],
   logoUrl: null,
   loading: true,
+  noAccess: false,
   error: null,
 })
 
@@ -44,6 +47,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
     contractors: [],
     logoUrl: null,
     loading: true,
+    noAccess: false,
     error: null,
   })
 
@@ -76,6 +80,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             contractors,
             logoUrl,
             loading: false,
+            noAccess: false,
             error: null,
           })
         })
@@ -87,6 +92,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             contractors: [],
             logoUrl: null,
             loading: false,
+            noAccess: false,
             error: null,
           })
         })
@@ -112,10 +118,11 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
                     contractors: [],
                     logoUrl,
                     loading: false,
+                    noAccess: false,
                     error: null,
                   })
                 } else {
-                  setValue((prev) => ({ ...prev, loading: false, error: staffRes.error }))
+                  setValue((prev) => ({ ...prev, loading: false, noAccess: true, error: null }))
                 }
               })
           }
@@ -124,11 +131,16 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
           setValue((prev) => ({
             ...prev,
             loading: false,
+            noAccess: false,
             error: err instanceof Error ? err.message : "Failed to load contractor",
           }))
         })
     }
   }, [isLoaded, isSignedIn, getToken, navigate])
+
+  if (value.noAccess) {
+    return <NoContractorAccess />
+  }
 
   return (
     <ContractorSessionContext.Provider value={value}>
