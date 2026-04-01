@@ -64,7 +64,7 @@ function extractContractorId(c: Context): string | null {
 
       // Dev fallback: JWT exists but has no contractor claim yet
       if (c.env.ENVIRONMENT === "development") {
-        return c.req.header("x-contractor-id") ?? "contractor-001"
+        return c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
       }
       return null
     } catch {
@@ -74,7 +74,7 @@ function extractContractorId(c: Context): string | null {
 
   // Dev fallback: no JWT at all, allow x-contractor-id header
   if (c.env.ENVIRONMENT === "development") {
-    return c.req.header("x-contractor-id") ?? "contractor-001"
+    return c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
   }
 
   return null

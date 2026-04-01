@@ -23,7 +23,7 @@ export async function seedContractor(
   }> = {}
 ) {
   const c = {
-    id: "contractor-001",
+    id: "00000000-0000-4000-8000-000000000001",
     slug: "central-cabinets",
     name: "Central Cabinets",
     email: "admin@centralcabinets.test" as string | null,

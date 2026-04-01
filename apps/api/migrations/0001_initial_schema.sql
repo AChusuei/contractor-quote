@@ -157,7 +157,7 @@ CREATE INDEX idx_deletion_log_email_hash ON data_deletion_log(email_hash);
 
 -- Seed: default contractor for dev
 INSERT INTO contractors (id, slug, name, logo_url) VALUES (
-  'contractor-001',
+  '00000000-0000-4000-8000-000000000001',
   'central-cabinets',
   'Central Cabinets',
   NULL

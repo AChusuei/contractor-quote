@@ -2105,7 +2105,7 @@ app.get(
       }
     } else if (c.env.ENVIRONMENT === "development") {
       // Dev fallback: no JWT, return default contractor
-      const devContractorId = c.req.header("x-contractor-id") ?? "contractor-001"
+      const devContractorId = c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
       const row = await c.env.DB.prepare(
         "SELECT id, name FROM contractors WHERE id = ?"
       )

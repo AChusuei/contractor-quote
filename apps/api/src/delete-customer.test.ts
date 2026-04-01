@@ -57,7 +57,7 @@ function makeEnv(db: ReturnType<typeof makeD1Mock>, storage?: ReturnType<typeof 
   }
 }
 
-const CONTRACTOR_ID = "contractor-001"
+const CONTRACTOR_ID = "00000000-0000-4000-8000-000000000001"
 
 function makeDeleteRequest(
   email: string,
@@ -123,8 +123,8 @@ describe("DELETE /api/v1/customers/:email", () => {
       { id: "quote-2" },
     ]
     const photos = [
-      { storage_key: "contractor-001/quote-1/photo1.jpg" },
-      { storage_key: "contractor-001/quote-1/photo2.jpg" },
+      { storage_key: "00000000-0000-4000-8000-000000000001/quote-1/photo1.jpg" },
+      { storage_key: "00000000-0000-4000-8000-000000000001/quote-1/photo2.jpg" },
     ]
     const db = makeD1Mock(quotes, {
       appointmentChanges: 1,
@@ -146,8 +146,8 @@ describe("DELETE /api/v1/customers/:email", () => {
 
     // R2 should have been called to delete each photo by storage key
     expect(r2.delete).toHaveBeenCalledTimes(2)
-    expect(r2.delete).toHaveBeenCalledWith("contractor-001/quote-1/photo1.jpg")
-    expect(r2.delete).toHaveBeenCalledWith("contractor-001/quote-1/photo2.jpg")
+    expect(r2.delete).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001/quote-1/photo1.jpg")
+    expect(r2.delete).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001/quote-1/photo2.jpg")
   })
 
   it("validates requestType in body", async () => {

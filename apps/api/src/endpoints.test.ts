@@ -54,7 +54,7 @@ describe("404 fallback", () => {
 
 describe("POST /api/v1/quotes", () => {
   const validPayload = {
-    contractorId: "contractor-001",
+    contractorId: "00000000-0000-4000-8000-000000000001",
     name: "Jane Doe",
     email: "jane@example.com",
     phone: "(555) 123-4567",
@@ -252,7 +252,7 @@ describe("GET /api/v1/quotes/:quoteId", () => {
   it("returns 404 when quote does not exist", async () => {
     await seedContractor()
     const res = await SELF.fetch(apiUrl("/quotes/nonexistent"), {
-      headers: authHeaders("contractor-001"),
+      headers: authHeaders("00000000-0000-4000-8000-000000000001"),
     })
     expect(res.status).toBe(404)
     const body = (await res.json()) as { ok: boolean; code: string }
@@ -340,7 +340,7 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
     await seedContractor()
     const res = await SELF.fetch(apiUrl("/quotes/nonexistent"), {
       method: "PATCH",
-      headers: { "content-type": "application/json", ...authHeaders("contractor-001") },
+      headers: { "content-type": "application/json", ...authHeaders("00000000-0000-4000-8000-000000000001") },
       body: JSON.stringify({ name: "New Name" }),
     })
     expect(res.status).toBe(404)
@@ -472,7 +472,7 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
 
 describe("GET /api/v1/contractors/:contractorId/quotes", () => {
   it("returns 401 without authentication", async () => {
-    const res = await SELF.fetch(apiUrl("/contractors/contractor-001/quotes"))
+    const res = await SELF.fetch(apiUrl("/contractors/00000000-0000-4000-8000-000000000001/quotes"))
     expect(res.status).toBe(401)
   })
 
@@ -823,7 +823,7 @@ describe("DELETE /api/v1/quotes/:quoteId/photos/:photoId", () => {
     await seedContractor()
     const res = await SELF.fetch(apiUrl("/quotes/nonexistent/photos/p1"), {
       method: "DELETE",
-      headers: authHeaders("contractor-001"),
+      headers: authHeaders("00000000-0000-4000-8000-000000000001"),
     })
     expect(res.status).toBe(404)
   })
@@ -924,7 +924,7 @@ describe("POST /api/v1/contractors/:contractorId/logo", () => {
     const formData = new FormData()
     formData.append("file", new Blob([TINY_PNG], { type: "image/png" }), "logo.png")
 
-    const res = await SELF.fetch(apiUrl("/contractors/contractor-001/logo"), {
+    const res = await SELF.fetch(apiUrl("/contractors/00000000-0000-4000-8000-000000000001/logo"), {
       method: "POST",
       body: formData,
     })

@@ -14,7 +14,7 @@ async function createQuoteViaApi(
   const res = await request.post(`${API_BASE}/quotes`, {
     data: {
       schemaVersion: 1,
-      contractorId: "contractor-001",
+      contractorId: "00000000-0000-4000-8000-000000000001",
       status: "lead",
       name: "Admin Test Customer",
       email: "admin-test@example.com",
@@ -43,9 +43,9 @@ test.describe("Admin Portal — API", () => {
     // Create a quote first
     await createQuoteViaApi(request)
 
-    // List quotes as contractor-001 (dev auth)
-    const res = await request.get(`${API_BASE}/contractors/contractor-001/quotes`, {
-      headers: { "x-contractor-id": "contractor-001" },
+    // List quotes as 00000000-0000-4000-8000-000000000001 (dev auth)
+    const res = await request.get(`${API_BASE}/contractors/00000000-0000-4000-8000-000000000001/quotes`, {
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
     })
 
     expect(res.status()).toBe(200)
@@ -67,7 +67,7 @@ test.describe("Admin Portal — API", () => {
     }
 
     const res = await request.get(`${API_BASE}/quotes/${created.id}`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
     })
 
     expect(res.status()).toBe(200)
@@ -92,7 +92,7 @@ test.describe("Admin Portal — API", () => {
 
     // Update the quote name
     const patchRes = await request.patch(`${API_BASE}/quotes/${created.id}`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
       data: { name: "Updated Customer Name" },
     })
 
@@ -102,7 +102,7 @@ test.describe("Admin Portal — API", () => {
 
     // Verify the update persisted
     const getRes = await request.get(`${API_BASE}/quotes/${created.id}`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
     })
 
     const getBody = await getRes.json()
@@ -122,14 +122,14 @@ test.describe("Admin Portal — API", () => {
 
     // Change status from 'lead' to 'reviewing'
     const statusRes = await request.patch(`${API_BASE}/quotes/${created.id}`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
       data: { status: "reviewing" },
     })
     expect(statusRes.status()).toBe(200)
 
     // Check activity feed
     const activityRes = await request.get(`${API_BASE}/quotes/${created.id}/activity`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
     })
 
     expect(activityRes.status()).toBe(200)
@@ -170,7 +170,7 @@ test.describe("Admin Portal — API", () => {
 
     // With auth, it should accept the request (may fail if SendGrid not configured, but should not be 401)
     const authRes = await request.post(`${API_BASE}/email/send`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
       data: {
         to: ["admin-test@example.com"],
         subject: "Quote follow-up",

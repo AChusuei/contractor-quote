@@ -79,7 +79,7 @@ test.describe("Security — API auth enforcement", () => {
   })
 
   test("12c - GET /contractors/:id/quotes returns 401 without auth", async ({ request }) => {
-    const res = await request.get(`${API_BASE}/contractors/contractor-001/quotes`)
+    const res = await request.get(`${API_BASE}/contractors/00000000-0000-4000-8000-000000000001/quotes`)
     expect(res.status()).toBe(401)
     const body = await res.json()
     expect(body.ok).toBe(false)
@@ -107,7 +107,7 @@ test.describe("Security — response data leakage", () => {
     const res = await request.post(`${API_BASE}/quotes`, {
       data: {
         schemaVersion: 1,
-        contractorId: "contractor-001",
+        contractorId: "00000000-0000-4000-8000-000000000001",
         status: "draft",
         name: "Test User",
         email: "test@example.com",
@@ -149,13 +149,13 @@ test.describe("Security — response data leakage", () => {
 
 test.describe("Security — tenant isolation", () => {
   test("14 - contractor A cannot access contractor B quotes via API", async ({ request }) => {
-    // Try to access contractor-002's quotes using contractor-001's auth header
+    // Try to access contractor-002's quotes using 00000000-0000-4000-8000-000000000001's auth header
     // In dev mode, x-contractor-id is accepted
     const res = await request.get(`${API_BASE}/contractors/contractor-002/quotes`, {
-      headers: { "x-contractor-id": "contractor-001" },
+      headers: { "x-contractor-id": "00000000-0000-4000-8000-000000000001" },
     })
 
-    // Should be 403 Forbidden (contractor-001 trying to access contractor-002's data)
+    // Should be 403 Forbidden (00000000-0000-4000-8000-000000000001 trying to access contractor-002's data)
     expect(res.status()).toBe(403)
     const body = await res.json()
     expect(body.ok).toBe(false)

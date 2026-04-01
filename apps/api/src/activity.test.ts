@@ -52,7 +52,7 @@ function makeEnv(db: ReturnType<typeof makeD1Mock>) {
   }
 }
 
-const CONTRACTOR_ID = "contractor-001"
+const CONTRACTOR_ID = "00000000-0000-4000-8000-000000000001"
 const QUOTE_ID = "quote-001"
 
 function makeActivityRequest(

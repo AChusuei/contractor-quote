@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest"
 import { quoteSubmissionSchema, quoteUpdateSchema, formatZodErrors, MAX_PAYLOAD_BYTES } from "./validation"
 
 const validPayload = {
-  contractorId: "contractor-001",
+  contractorId: "00000000-0000-4000-8000-000000000001",
   name: "Jane Doe",
   email: "jane@example.com",
   phone: "(555) 123-4567",
