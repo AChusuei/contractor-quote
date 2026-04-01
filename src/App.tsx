@@ -47,7 +47,16 @@ export default function App({ clerkConfigured }: AppProps) {
         </>
       )}
 
-      {/* Admin portal — Clerk-protected */}
+      {/* Super admin routes — no contractor context needed */}
+      {clerkConfigured && (
+        <Route element={<AdminShell />}>
+          <Route path="/admin/contractors" element={<ProtectedRoute><SuperContractorsPage /></ProtectedRoute>} />
+          <Route path="/admin/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
+          <Route path="/admin/super-users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
+        </Route>
+      )}
+
+      {/* Contractor admin portal — requires contractor context */}
       {clerkConfigured ? (
         <Route element={<ContractorSessionProvider><AdminShell /></ContractorSessionProvider>}>
           <Route path="/admin/quotes" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
@@ -56,9 +65,6 @@ export default function App({ clerkConfigured }: AppProps) {
           <Route path="/admin/customers/:id" element={<ProtectedRoute><CustomerDetailPage /></ProtectedRoute>} />
           <Route path="/admin/email/compose" element={<ProtectedRoute><EmailComposePage /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-          <Route path="/admin/contractors" element={<ProtectedRoute><SuperContractorsPage /></ProtectedRoute>} />
-          <Route path="/admin/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
-          <Route path="/admin/super-users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
           <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
         </Route>
       ) : (
