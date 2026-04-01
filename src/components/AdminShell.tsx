@@ -154,7 +154,7 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-full mt-1 z-50 w-max max-w-[90vw] rounded-md border border-border bg-background shadow-md">
+          <div className="absolute right-0 top-full mt-1 z-50 w-max max-w-[90vw] rounded-md border border-border bg-background shadow-md">
             {contractors
               .slice()
               .sort((a, b) => a.name.localeCompare(b.name))
