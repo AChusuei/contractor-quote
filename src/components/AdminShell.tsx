@@ -126,7 +126,9 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
     sessionStorage.setItem("cq_super_contractor_id", contractor.id)
     sessionStorage.setItem("cq_super_contractor_name", contractor.name)
     setOpen(false)
-    window.location.reload()
+    // Navigate to quotes (inside ContractorSessionProvider) with a full reload
+    // so the provider picks up the new sessionStorage values
+    window.location.href = "/admin/quotes"
   }
 
   return (
