@@ -731,6 +731,8 @@ app.patch(
   async (c) => {
     const quoteId = c.req.param("quoteId")
     const contractorId = c.get("contractorId") as string
+    const actorEmail = c.get("actorEmail") as string | null ?? null
+    const staffId = c.get("staffId") as string | null ?? null
 
     // --- Payload size gate (100KB) ---
     const contentLength = c.req.header("content-length")
@@ -825,10 +827,10 @@ app.patch(
 
     // --- Log activity ---
     await c.env.DB.prepare(
-      `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
-       VALUES (?, ?, 'quote_edited', ?)`
+      `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
+       VALUES (?, ?, ?, ?, 'quote_edited', ?)`
     )
-      .bind(quoteId, contractorId, JSON.stringify(Object.keys(data)))
+      .bind(quoteId, contractorId, staffId, actorEmail, JSON.stringify(Object.keys(data)))
       .run()
 
     // --- Fetch and return updated quote ---
@@ -892,6 +894,9 @@ app.post(
     const publicToken = c.req.query("publicToken")
     let quote: { id: string; contractor_id: string; public_token: string } | null
 
+    let photoActorEmail: string | null = null
+    let photoStaffId: string | null = null
+
     if (publicToken) {
       quote = await c.env.DB.prepare(
         "SELECT id, contractor_id, public_token FROM quotes WHERE id = ? AND public_token = ?"
@@ -909,6 +914,9 @@ app.post(
       if (authResult) return authResult
       const ownerResult = await ownerMw(c, async () => {})
       if (ownerResult) return ownerResult
+
+      photoActorEmail = c.get("actorEmail") as string | null ?? null
+      photoStaffId = c.get("staffId") as string | null ?? null
 
       quote = await c.env.DB.prepare(
         "SELECT id, contractor_id, public_token FROM quotes WHERE id = ?"
@@ -984,10 +992,10 @@ app.post(
 
     // --- Log activity ---
     await c.env.DB.prepare(
-      `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
-       VALUES (?, ?, 'photo_added', ?)`
+      `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
+       VALUES (?, ?, ?, ?, 'photo_added', ?)`
     )
-      .bind(quoteId, quote.contractor_id, photoId)
+      .bind(quoteId, quote.contractor_id, photoStaffId, photoActorEmail, photoId)
       .run()
 
     return c.json({
@@ -1224,6 +1232,8 @@ app.delete(
     // --- Auth: publicToken (intake) or Clerk (admin) ---
     const publicToken = c.req.query("publicToken")
     let contractorId: string
+    let deleteActorEmail: string | null = null
+    let deleteStaffId: string | null = null
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
@@ -1243,6 +1253,8 @@ app.delete(
       const ownerResult = await ownerMw(c, async () => {})
       if (ownerResult) return ownerResult
       contractorId = c.get("contractorId") as string
+      deleteActorEmail = c.get("actorEmail") as string | null ?? null
+      deleteStaffId = c.get("staffId") as string | null ?? null
     }
 
     // Fetch the photo record, enforcing tenant isolation via quote_id
@@ -1266,10 +1278,10 @@ app.delete(
 
     // Log activity
     await c.env.DB.prepare(
-      `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
-       VALUES (?, ?, 'photo_removed', ?)`
+      `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
+       VALUES (?, ?, ?, ?, 'photo_removed', ?)`
     )
-      .bind(quoteId, contractorId, photoId)
+      .bind(quoteId, contractorId, deleteStaffId, deleteActorEmail, photoId)
       .run()
 
     return c.body(null, 204)
@@ -1404,6 +1416,8 @@ app.post(
   async (c) => {
     const quoteId = c.req.param("quoteId")
     const contractorId = c.get("contractorId") as string
+    const actorEmail = c.get("actorEmail") as string | null ?? null
+    const staffId = c.get("staffId") as string | null ?? null
 
     // --- Payload size gate ---
     const contentLength = c.req.header("content-length")
@@ -1480,13 +1494,15 @@ app.post(
 
     // --- Insert activity record ---
     const activityResult = await c.env.DB.prepare(
-      `INSERT INTO quote_activity (quote_id, contractor_id, type, content, old_value, new_value)
-       VALUES (?, ?, ?, ?, ?, ?)
-       RETURNING id, quote_id, contractor_id, staff_id, type, content, old_value, new_value, created_at`
+      `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content, old_value, new_value)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id, quote_id, contractor_id, staff_id, actor_email, type, content, old_value, new_value, created_at`
     )
       .bind(
         quoteId,
         contractorId,
+        staffId,
+        actorEmail,
         data.type,
         data.content ?? null,
         oldStatus,
@@ -1503,6 +1519,7 @@ app.post(
       quoteId: activityResult.quote_id,
       contractorId: activityResult.contractor_id,
       staffId: activityResult.staff_id ?? null,
+      actorEmail: activityResult.actor_email ?? null,
       type: activityResult.type,
       content: activityResult.content ?? null,
       oldValue: activityResult.old_value ?? null,
@@ -1544,12 +1561,15 @@ app.get(
     const total = countResult?.total ?? 0
 
     // Fetch paginated results (chronological order)
+    // LEFT JOIN staff to resolve actor name for display
     const { results } = await c.env.DB.prepare(
-      `SELECT id, quote_id, contractor_id, staff_id, type, content,
-              old_value, new_value, created_at
-       FROM quote_activity
-       WHERE quote_id = ?
-       ORDER BY created_at ASC, id ASC
+      `SELECT qa.id, qa.quote_id, qa.contractor_id, qa.staff_id, qa.actor_email,
+              qa.type, qa.content, qa.old_value, qa.new_value, qa.created_at,
+              s.name AS actor_name
+       FROM quote_activity qa
+       LEFT JOIN staff s ON s.id = qa.staff_id
+       WHERE qa.quote_id = ?
+       ORDER BY qa.created_at ASC, qa.id ASC
        LIMIT ? OFFSET ?`
     )
       .bind(quoteId, limit, offset)
@@ -1560,6 +1580,8 @@ app.get(
       quoteId: row.quote_id,
       contractorId: row.contractor_id,
       staffId: row.staff_id ?? null,
+      actorEmail: row.actor_email ?? null,
+      actorName: row.actor_name ?? null,
       type: row.type,
       content: row.content ?? null,
       oldValue: row.old_value ?? null,
@@ -2001,6 +2023,8 @@ app.post(
   rateLimit({ limit: 10, windowSeconds: 3600, keyPrefix: "email-send" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
+    const emailActorEmail = c.get("actorEmail") as string | null ?? null
+    const emailStaffId = c.get("staffId") as string | null ?? null
 
     // --- Parse and validate ---
     let body: unknown
@@ -2092,10 +2116,10 @@ app.post(
 
       // Log email_sent activity
       await c.env.DB.prepare(
-        `INSERT INTO quote_activity (quote_id, contractor_id, type, content)
-         VALUES (?, ?, 'email_sent', ?)`
+        `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
+         VALUES (?, ?, ?, ?, 'email_sent', ?)`
       )
-        .bind(quote.id, contractorId, resolvedSubject)
+        .bind(quote.id, contractorId, emailStaffId, emailActorEmail, resolvedSubject)
         .run()
     }
 

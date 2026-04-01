@@ -3,6 +3,21 @@ import { apiError } from "../lib/errors"
 import { verifyClerkJwt } from "../lib/jwtVerify"
 
 /**
+ * Extract the caller's email from the JWT payload.
+ */
+function extractEmailFromJwt(c: Context): string | null {
+  const authHeader = c.req.header("authorization")
+  if (!authHeader?.startsWith("Bearer ")) return null
+  try {
+    const token = authHeader.slice(7)
+    const payload = JSON.parse(atob(token.split(".")[1]))
+    return payload.email ?? payload.primary_email ?? payload.email_address ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Check if the current caller is a platform admin by inspecting their JWT email
  * against the PLATFORM_ADMIN_EMAILS env var.
  */
@@ -25,23 +40,31 @@ async function isPlatformAdmin(c: Context): Promise<boolean> {
   return Boolean(email && adminEmails.includes((email as string).toLowerCase()))
 }
 
+interface AuthContext {
+  contractorId: string
+  actorEmail: string | null
+  staffId: string | null
+}
+
 /**
- * Extract the contractor ID from a Clerk JWT.
- * Clerk stores custom claims in `sessionClaims.metadata` or
- * the `org_id` field. For now we read from a custom claim
- * `contractorId` set during Clerk onboarding.
+ * Extract authentication context from the request.
  *
- * Platform admins may supply `x-super-contractor-id` to impersonate
- * a contractor context (used by the super-user portal switcher).
+ * Returns the contractor ID (for tenant isolation), the actor's email
+ * (for audit logging), and the staff record ID if the actor is a known
+ * staff member for that contractor.
  *
- * Falls back to the `x-contractor-id` header for local dev
- * when Clerk is not configured.
+ * Platform admins may supply `x-super-contractor-id` to impersonate a
+ * contractor context. Their JWT email is logged as the actor but they have
+ * no staff record in the contractor's staff table (staffId = null).
+ *
+ * Falls back to the `x-contractor-id` header in local dev when Clerk is
+ * not configured.
  */
-async function extractContractorId(c: Context): Promise<string | null> {
-  // Platform admins can override the contractor context
+async function extractAuthContext(c: Context): Promise<AuthContext | null> {
+  // Platform admins can override the contractor context (impersonation)
   const superContractorId = c.req.header("x-super-contractor-id")
   if (superContractorId && (await isPlatformAdmin(c))) {
-    return superContractorId
+    return { contractorId: superContractorId, actorEmail: extractEmailFromJwt(c), staffId: null }
   }
 
   // In production: extract from Clerk JWT
@@ -52,36 +75,55 @@ async function extractContractorId(c: Context): Promise<string | null> {
     const payload = await verifyClerkJwt(token, c.env)
     if (!payload) return null
 
-    // Check custom claim or org metadata
+    const email = (payload.email ?? payload.primary_email ?? payload.email_address) as string | undefined
+
+    // Check custom claim or org metadata for contractor ID
     const meta = payload.public_metadata as Record<string, unknown> | undefined
-    const fromJwt =
+    const contractorIdFromJwt =
       payload.contractorId ??
       meta?.contractorId ??
       payload.org_id ??
       null
-    if (fromJwt) return fromJwt as string
+
+    if (contractorIdFromJwt) {
+      // Look up staff record so we can log staff_id on activity rows
+      let staffId: string | null = null
+      if (email) {
+        const staff = await c.env.DB.prepare(
+          "SELECT id FROM staff WHERE LOWER(email) = ? AND contractor_id = ? AND active = 1 LIMIT 1"
+        )
+          .bind(email.toLowerCase(), contractorIdFromJwt)
+          .first<{ id: string }>()
+        staffId = staff?.id ?? null
+      }
+      return { contractorId: contractorIdFromJwt as string, actorEmail: email ?? null, staffId }
+    }
 
     // No contractorId claim — look up staff table by email
-    const email = (payload.email ?? payload.primary_email ?? payload.email_address) as string | undefined
     if (email) {
       const staff = await c.env.DB.prepare(
-        "SELECT contractor_id FROM staff WHERE LOWER(email) = ? AND active = 1 LIMIT 1"
+        "SELECT id, contractor_id FROM staff WHERE LOWER(email) = ? AND active = 1 LIMIT 1"
       )
         .bind(email.toLowerCase())
-        .first<{ contractor_id: string }>()
-      if (staff) return staff.contractor_id
+        .first<{ id: string; contractor_id: string }>()
+      if (staff) return { contractorId: staff.contractor_id, actorEmail: email, staffId: staff.id }
     }
 
     // Dev fallback: JWT exists but no contractor association found
     if (c.env.ENVIRONMENT === "development") {
-      return c.req.header("x-contractor-id") ?? null
+      const devContractorId = c.req.header("x-contractor-id") ?? null
+      if (devContractorId) return { contractorId: devContractorId, actorEmail: email ?? null, staffId: null }
     }
     return null
   }
 
   // Dev fallback: no JWT at all, allow x-contractor-id header
   if (c.env.ENVIRONMENT === "development") {
-    return c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
+    return {
+      contractorId: c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001",
+      actorEmail: null,
+      staffId: null,
+    }
   }
 
   return null
@@ -89,15 +131,17 @@ async function extractContractorId(c: Context): Promise<string | null> {
 
 /**
  * Middleware: require authentication and extract contractor ID.
- * Sets `contractorId` on the Hono context variables.
+ * Sets `contractorId`, `actorEmail`, and `staffId` on the Hono context variables.
  */
 export function requireAuth() {
   return async (c: Context, next: Next) => {
-    const contractorId = await extractContractorId(c)
-    if (!contractorId) {
+    const auth = await extractAuthContext(c)
+    if (!auth) {
       return apiError(c, "UNAUTHORIZED", "Authentication required")
     }
-    c.set("contractorId", contractorId)
+    c.set("contractorId", auth.contractorId)
+    c.set("actorEmail", auth.actorEmail)
+    c.set("staffId", auth.staffId)
     await next()
   }
 }

@@ -8,7 +8,8 @@ export type ActivityItem = {
   content?: string
   newValue?: string
   createdAt: string
-  actorName?: string
+  actorName?: string | null
+  actorEmail?: string | null
 }
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -53,14 +54,19 @@ function ActivityEntry({ item }: { item: ActivityItem }) {
     detail = item.content
   }
 
+  const actor = item.actorName ?? item.actorEmail ?? null
+
   return (
     <div className="flex items-start gap-3 py-3 border-b last:border-b-0">
       <span className="mt-0.5 text-base w-6 text-center shrink-0" aria-hidden>
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-sm font-medium">{label}</span>
+          {actor && (
+            <span className="text-xs text-muted-foreground">by {actor}</span>
+          )}
           <span className="text-xs text-muted-foreground">
             {formatDateTime(item.createdAt)}
           </span>
