@@ -155,7 +155,7 @@ export function SuperContractorsPage() {
                 <tr
                   key={c.id}
                   className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
-                  onClick={() => navigate(`/admin/super/contractors/${c.id}`)}
+                  onClick={() => navigate(`/admin/contractors/${c.id}`)}
                 >
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{c.slug}</td>

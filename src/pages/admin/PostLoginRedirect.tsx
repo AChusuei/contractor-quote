@@ -1,12 +1,12 @@
 import { useEffect } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
-import { apiGet, setAuthProvider } from "@/lib/api"
+import { setAuthProvider } from "@/lib/api"
 
 /**
  * Lightweight redirect page after Clerk sign-in.
  * - If returnUrl query param is present, redirect there directly.
- * - Super users → /admin/select (portal switcher)
+ * - Super users → /admin/quotes (use contractor dropdown in header to switch)
  * - Regular staff → /admin/quotes (contractor portal)
  */
 export function PostLoginRedirect() {
@@ -24,17 +24,7 @@ export function PostLoginRedirect() {
       return
     }
 
-    apiGet("/platform/check")
-      .then((res) => {
-        if (res.ok) {
-          navigate("/admin/select", { replace: true })
-        } else {
-          navigate("/admin/quotes", { replace: true })
-        }
-      })
-      .catch(() => {
-        navigate("/admin/quotes", { replace: true })
-      })
+    navigate("/admin/quotes", { replace: true })
   }, [isLoaded, isSignedIn, getToken, navigate, searchParams])
 
   return (

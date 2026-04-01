@@ -17,8 +17,6 @@ import { CustomerDetailPage } from "@/pages/admin/CustomerDetailPage"
 import { ClerkNotConfigured } from "@/components/ClerkNotConfigured"
 import { PostLoginRedirect } from "@/pages/admin/PostLoginRedirect"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
-import { PortalSelectPage } from "@/pages/admin/super/PortalSelectPage"
-import { SuperDashboardPage } from "@/pages/admin/super/SuperDashboardPage"
 import { SuperContractorsPage } from "@/pages/admin/super/SuperContractorsPage"
 import { SuperContractorDetailPage } from "@/pages/admin/super/SuperContractorDetailPage"
 import { SuperUsersPage } from "@/pages/admin/super/SuperUsersPage"
@@ -46,7 +44,6 @@ export default function App({ clerkConfigured }: AppProps) {
         <>
           <Route path="/admin/sign-in/*" element={<SignInPage />} />
           <Route path="/admin/redirect" element={<PostLoginRedirect />} />
-          <Route path="/admin/select" element={<PortalSelectPage />} />
         </>
       )}
 
@@ -59,10 +56,9 @@ export default function App({ clerkConfigured }: AppProps) {
           <Route path="/admin/customers/:id" element={<ProtectedRoute><CustomerDetailPage /></ProtectedRoute>} />
           <Route path="/admin/email/compose" element={<ProtectedRoute><EmailComposePage /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-          <Route path="/admin/super" element={<ProtectedRoute><SuperDashboardPage /></ProtectedRoute>} />
-          <Route path="/admin/super/contractors" element={<ProtectedRoute><SuperContractorsPage /></ProtectedRoute>} />
-          <Route path="/admin/super/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
-          <Route path="/admin/super/users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
+          <Route path="/admin/contractors" element={<ProtectedRoute><SuperContractorsPage /></ProtectedRoute>} />
+          <Route path="/admin/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
+          <Route path="/admin/super-users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
           <Route path="/admin" element={<Navigate to="/admin/quotes" replace />} />
         </Route>
       ) : (

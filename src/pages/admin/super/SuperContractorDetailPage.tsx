@@ -161,7 +161,7 @@ export function SuperContractorDetailPage() {
     if (notFound) {
       return (
         <div className="max-w-3xl mx-auto">
-          <Link to="/admin/super/contractors" className="text-sm text-muted-foreground hover:text-foreground">
+          <Link to="/admin/contractors" className="text-sm text-muted-foreground hover:text-foreground">
             &larr; Back to contractors
           </Link>
           <p className="mt-8 text-center text-muted-foreground">Contractor not found.</p>
@@ -178,7 +178,7 @@ export function SuperContractorDetailPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
-        <Link to="/admin/super/contractors" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link to="/admin/contractors" className="text-sm text-muted-foreground hover:text-foreground">
           &larr; Back to contractors
         </Link>
         <SaveIndicator status={saveStatus} />

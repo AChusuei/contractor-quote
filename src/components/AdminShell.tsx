@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Outlet, Link, useLocation, useNavigate } from "react-router-dom"
+import { Outlet, Link, useLocation } from "react-router-dom"
 import { useAuth, UserButton } from "@clerk/clerk-react"
 import logoUrl from "@/assets/logo.png"
 import { apiGet, setAuthProvider } from "@/lib/api"
@@ -23,7 +23,10 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
     { label: "Quotes", href: "/admin/quotes" },
     { label: "Customers", href: "/admin/customers" },
     { label: "Settings", href: "/admin/settings" },
-    ...(isPlatformAdmin ? [{ label: "Platform", href: "/admin/super" }] : []),
+    ...(isPlatformAdmin ? [
+      { label: "Contractors", href: "/admin/contractors" },
+      { label: "Super Users", href: "/admin/super-users" },
+    ] : []),
   ]
 
   return (
@@ -75,7 +78,6 @@ function ClerkAdminHeader() {
 // impersonating a contractor. Lists all contractors for quick switching.
 function ContractorDropdown() {
   const { contractorId, contractorName, isSuperAdmin, contractors } = useContractorSession()
-  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
   if (!isSuperAdmin) return null
@@ -85,12 +87,6 @@ function ContractorDropdown() {
     sessionStorage.setItem("cq_super_contractor_name", contractor.name)
     setOpen(false)
     window.location.reload()
-  }
-
-  function handleSwitchPortal() {
-    sessionStorage.removeItem("cq_super_contractor_id")
-    sessionStorage.removeItem("cq_super_contractor_name")
-    navigate("/admin/select")
   }
 
   return (
@@ -125,14 +121,6 @@ function ContractorDropdown() {
                 {c.slug && <span className="ml-2 text-xs text-muted-foreground font-mono">{c.slug}</span>}
               </button>
             ))}
-            <div className="border-t border-border mt-1">
-              <button
-                onClick={handleSwitchPortal}
-                className="w-full text-left px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
-              >
-                Switch portal…
-              </button>
-            </div>
           </div>
         </>
       )}
