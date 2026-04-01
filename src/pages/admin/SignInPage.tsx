@@ -1,7 +1,13 @@
 import { SignIn } from "@clerk/clerk-react"
+import { useEffect } from "react"
 import { useSearchParams } from "react-router-dom"
 
 export function SignInPage() {
+  useEffect(() => {
+    sessionStorage.removeItem("cq_super_contractor_id")
+    sessionStorage.removeItem("cq_super_contractor_name")
+  }, [])
+
   const [searchParams] = useSearchParams()
   const returnUrl = searchParams.get("returnUrl")
   const redirectUrl = returnUrl
