@@ -17,6 +17,7 @@ function AdminUserButton() {
 // Navigation bar with platform admin check — only rendered inside ClerkProvider
 function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   const location = useLocation()
+  const contractorSelected = Boolean(sessionStorage.getItem("cq_super_contractor_id"))
 
   const contractorLinks = [
     { label: "Quotes", href: "/admin/quotes" },
@@ -31,9 +32,12 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
       ]
     : []
 
+  // Super admins without a contractor selected only see super admin links
+  const showContractorLinks = !isPlatformAdmin || contractorSelected
+
   return (
     <nav className="flex items-center gap-1">
-      {contractorLinks.map((link) => (
+      {showContractorLinks && contractorLinks.map((link) => (
         <Link
           key={link.href}
           to={link.href}
@@ -48,7 +52,7 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
       ))}
       {superAdminLinks.length > 0 && (
         <>
-          <div className="mx-1 h-5 w-px bg-border" aria-hidden />
+          {showContractorLinks && <div className="mx-1 h-5 w-px bg-border" aria-hidden />}
           {superAdminLinks.map((link) => (
             <Link
               key={link.href}
@@ -113,14 +117,14 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   const contractorName = sessionStorage.getItem("cq_super_contractor_name") ?? ""
 
   useEffect(() => {
-    if (!isPlatformAdmin || !contractorId) return
+    if (!isPlatformAdmin) return
     setAuthProvider(() => getToken())
     apiGet<ContractorInfo[]>("/platform/contractors").then((res) => {
       if (res.ok) setContractors(res.data as ContractorInfo[])
     }).catch(() => {})
-  }, [isPlatformAdmin, contractorId, getToken])
+  }, [isPlatformAdmin, getToken])
 
-  if (!isPlatformAdmin || !contractorId) return null
+  if (!isPlatformAdmin) return null
 
   function handleSelect(contractor: { id: string; name: string }) {
     sessionStorage.setItem("cq_super_contractor_id", contractor.id)
@@ -137,7 +141,10 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1.5 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50"
       >
-        <span>Viewing: <strong>{contractorName}</strong></span>
+        {contractorId
+          ? <span>Viewing: <strong>{contractorName}</strong></span>
+          : <span>Select a contractor</span>
+        }
         <span aria-hidden>▾</span>
       </button>
       {open && (
