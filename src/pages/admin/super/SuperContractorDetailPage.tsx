@@ -95,8 +95,7 @@ export function SuperContractorDetailPage() {
   const loadContractor = useCallback(async () => {
     if (!id || !isLoaded || !isSignedIn) return
     const res = await apiGet<ContractorDetail>(
-      `/contractors/${encodeURIComponent(id)}`,
-      { headers: { "x-super-contractor-id": id } },
+      `/platform/contractors/${encodeURIComponent(id)}`,
     )
     if (res.ok) {
       setContractor(res.data)
@@ -141,10 +140,10 @@ export function SuperContractorDetailPage() {
 
   const performSave = useCallback(async () => {
     if (!id || !contractor) return
+    const { website, ...rest } = getValues()
     await apiPatch(
-      `/contractors/${encodeURIComponent(id)}`,
-      getValues(),
-      { headers: { "x-super-contractor-id": id } },
+      `/platform/contractors/${encodeURIComponent(id)}`,
+      { ...rest, websiteUrl: website },
     )
   }, [id, contractor, getValues])
 
