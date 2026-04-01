@@ -97,7 +97,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
         .then((res) => {
           if (res.ok) {
             // Super admin without a contractor selected — force portal selection
-            navigate("/admin/select")
+            navigate("/admin/contractors")
           } else {
             // Regular staff — look up their contractor by email via the API
             return apiGet<{ contractorId: string; contractorName: string; role: string }>("/me/contractor")
