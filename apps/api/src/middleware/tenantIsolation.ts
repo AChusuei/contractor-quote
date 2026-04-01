@@ -40,7 +40,7 @@ function isPlatformAdmin(c: Context): boolean {
  * Falls back to the `x-contractor-id` header for local dev
  * when Clerk is not configured.
  */
-function extractContractorId(c: Context): string | null {
+async function extractContractorId(c: Context): Promise<string | null> {
   // Platform admins can override the contractor context
   const superContractorId = c.req.header("x-super-contractor-id")
   if (superContractorId && isPlatformAdmin(c)) {
@@ -62,9 +62,21 @@ function extractContractorId(c: Context): string | null {
         null
       if (fromJwt) return fromJwt
 
-      // Dev fallback: JWT exists but has no contractor claim yet
+      // No contractorId claim — look up staff table by email
+      const email: string | undefined =
+        payload.email ?? payload.primary_email ?? payload.email_address
+      if (email) {
+        const staff = await c.env.DB.prepare(
+          "SELECT contractor_id FROM staff WHERE LOWER(email) = ? AND active = 1 LIMIT 1"
+        )
+          .bind(email.toLowerCase())
+          .first<{ contractor_id: string }>()
+        if (staff) return staff.contractor_id
+      }
+
+      // Dev fallback: JWT exists but no contractor association found
       if (c.env.ENVIRONMENT === "development") {
-        return c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
+        return c.req.header("x-contractor-id") ?? null
       }
       return null
     } catch {
@@ -86,7 +98,7 @@ function extractContractorId(c: Context): string | null {
  */
 export function requireAuth() {
   return async (c: Context, next: Next) => {
-    const contractorId = extractContractorId(c)
+    const contractorId = await extractContractorId(c)
     if (!contractorId) {
       return apiError(c, "UNAUTHORIZED", "Authentication required")
     }
