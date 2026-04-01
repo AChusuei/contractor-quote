@@ -87,20 +87,40 @@ function ClerkAdminHeader() {
     <>
       <AdminNav isPlatformAdmin={isPlatformAdmin} />
       <div className="ml-auto flex items-center gap-3">
-        <ContractorDropdown />
+        <ContractorDropdown isPlatformAdmin={isPlatformAdmin} />
         <AdminUserButton />
       </div>
     </>
   )
 }
 
+interface ContractorInfo {
+  id: string
+  name: string
+  slug?: string
+}
+
 // Contractor switcher dropdown — shown in the header when a super admin is
 // impersonating a contractor. Lists all contractors for quick switching.
-function ContractorDropdown() {
-  const { contractorId, contractorName, isSuperAdmin, contractors } = useContractorSession()
+// Works independently of ContractorSessionProvider so it renders on ALL admin
+// pages, including super admin routes outside the provider.
+function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
+  const { getToken } = useAuth()
   const [open, setOpen] = useState(false)
+  const [contractors, setContractors] = useState<ContractorInfo[]>([])
 
-  if (!isSuperAdmin) return null
+  const contractorId = sessionStorage.getItem("cq_super_contractor_id") ?? ""
+  const contractorName = sessionStorage.getItem("cq_super_contractor_name") ?? ""
+
+  useEffect(() => {
+    if (!isPlatformAdmin || !contractorId) return
+    setAuthProvider(() => getToken())
+    apiGet<ContractorInfo[]>("/platform/contractors").then((res) => {
+      if (res.ok) setContractors(res.data as ContractorInfo[])
+    }).catch(() => {})
+  }, [isPlatformAdmin, contractorId, getToken])
+
+  if (!isPlatformAdmin || !contractorId) return null
 
   function handleSelect(contractor: { id: string; name: string }) {
     sessionStorage.setItem("cq_super_contractor_id", contractor.id)
