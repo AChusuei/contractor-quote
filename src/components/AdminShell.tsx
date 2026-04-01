@@ -109,7 +109,7 @@ function ContractorDropdown() {
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-full mt-1 z-50 min-w-[220px] rounded-md border border-border bg-background shadow-md">
+          <div className="absolute left-0 top-full mt-1 z-50 w-max max-w-[90vw] rounded-md border border-border bg-background shadow-md">
             {contractors
               .slice()
               .sort((a, b) => a.name.localeCompare(b.name))
@@ -117,7 +117,7 @@ function ContractorDropdown() {
               <button
                 key={c.id}
                 onClick={() => handleSelect(c)}
-                className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${
+                className={`w-full whitespace-nowrap text-left px-4 py-2 text-sm hover:bg-accent ${
                   c.id === contractorId ? "font-medium text-foreground" : "text-muted-foreground"
                 }`}
               >
