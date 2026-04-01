@@ -453,12 +453,49 @@ export function SettingsPage() {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ContractorProfileData>({
     resolver: zodResolver(contractorProfileSchema),
     mode: "onTouched",
-    defaultValues: loadProfile(),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      website: "",
+      address: "",
+      licenseNumber: "",
+    },
   })
+
+  // Load profile from API — source of truth
+  useEffect(() => {
+    if (!contractorId) return
+    apiGet<{
+      name: string
+      email?: string | null
+      phone?: string | null
+      address?: string | null
+      websiteUrl?: string | null
+      licenseNumber?: string | null
+      logoUrl?: string | null
+    }>(`/contractors/${encodeURIComponent(contractorId)}`).then((res) => {
+      if (res.ok) {
+        reset({
+          name: res.data.name ?? "",
+          email: res.data.email ?? "",
+          phone: res.data.phone ?? "",
+          address: res.data.address ?? "",
+          website: res.data.websiteUrl ?? "",
+          licenseNumber: res.data.licenseNumber ?? "",
+        })
+        if (res.data.logoUrl) setLogoPreview(res.data.logoUrl)
+      } else {
+        // Fall back to localStorage cache if API unavailable
+        reset(loadProfile())
+      }
+    })
+  }, [contractorId, reset])
 
   async function onSave(data: ContractorProfileData) {
     // Save to localStorage as immediate cache

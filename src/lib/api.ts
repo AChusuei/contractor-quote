@@ -53,10 +53,11 @@ export async function api<T>(
   method: string,
   path: string,
   body?: unknown,
+  options?: { headers?: Record<string, string> },
 ): Promise<ApiResponse<T>> {
   try {
     const auth = await authHeaders()
-    const headers: Record<string, string> = { ...auth }
+    const headers: Record<string, string> = { ...auth, ...(options?.headers ?? {}) }
     if (body !== undefined) headers["Content-Type"] = "application/json"
 
     const res = await fetch(`${API_BASE}${path}`, {
@@ -100,16 +101,16 @@ export async function apiUpload<T>(
 
 // ── Convenience helpers ──────────────────────────────────────────────────
 
-export function apiGet<T>(path: string) {
-  return api<T>("GET", path)
+export function apiGet<T>(path: string, options?: { headers?: Record<string, string> }) {
+  return api<T>("GET", path, undefined, options)
 }
 
 export function apiPost<T>(path: string, body?: unknown) {
   return api<T>("POST", path, body)
 }
 
-export function apiPatch<T>(path: string, body?: unknown) {
-  return api<T>("PATCH", path, body)
+export function apiPatch<T>(path: string, body?: unknown, options?: { headers?: Record<string, string> }) {
+  return api<T>("PATCH", path, body, options)
 }
 
 export function apiDelete<T>(path: string, body?: unknown) {

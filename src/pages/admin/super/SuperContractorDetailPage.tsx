@@ -37,9 +37,9 @@ interface ContractorDetail {
   websiteUrl: string | null
   licenseNumber: string | null
   logoUrl: string | null
-  quoteCount: number
-  customerCount: number
-  staff: StaffMember[]
+  quoteCount?: number
+  customerCount?: number
+  staff?: StaffMember[]
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +94,10 @@ export function SuperContractorDetailPage() {
 
   const loadContractor = useCallback(async () => {
     if (!id || !isLoaded || !isSignedIn) return
-    const res = await apiGet<ContractorDetail>(`/platform/contractors/${encodeURIComponent(id)}`)
+    const res = await apiGet<ContractorDetail>(
+      `/contractors/${encodeURIComponent(id)}`,
+      { headers: { "x-super-contractor-id": id } },
+    )
     if (res.ok) {
       setContractor(res.data)
     } else {
@@ -138,8 +141,11 @@ export function SuperContractorDetailPage() {
 
   const performSave = useCallback(async () => {
     if (!id || !contractor) return
-    const { website, ...rest } = getValues()
-    await apiPatch(`/platform/contractors/${encodeURIComponent(id)}`, { ...rest, websiteUrl: website })
+    await apiPatch(
+      `/contractors/${encodeURIComponent(id)}`,
+      getValues(),
+      { headers: { "x-super-contractor-id": id } },
+    )
   }, [id, contractor, getValues])
 
   const { trigger: triggerAutoSave, status: saveStatus } = useAutoSave(performSave)
@@ -192,15 +198,15 @@ export function SuperContractorDetailPage() {
       {/* Stats */}
       <div className="flex gap-6 text-sm">
         <div>
-          <span className="font-medium">{contractor.quoteCount}</span>
+          <span className="font-medium">{contractor.quoteCount ?? 0}</span>
           <span className="text-muted-foreground ml-1">quotes</span>
         </div>
         <div>
-          <span className="font-medium">{contractor.customerCount}</span>
+          <span className="font-medium">{contractor.customerCount ?? 0}</span>
           <span className="text-muted-foreground ml-1">customers</span>
         </div>
         <div>
-          <span className="font-medium">{contractor.staff.length}</span>
+          <span className="font-medium">{contractor.staff?.length ?? 0}</span>
           <span className="text-muted-foreground ml-1">staff</span>
         </div>
       </div>
@@ -234,9 +240,9 @@ export function SuperContractorDetailPage() {
       {/* Staff list */}
       <div>
         <h2 className="text-sm font-semibold text-foreground border-b pb-2 mb-4">
-          Staff ({contractor.staff.length})
+          Staff ({contractor.staff?.length ?? 0})
         </h2>
-        {contractor.staff.length === 0 ? (
+        {!contractor.staff || contractor.staff.length === 0 ? (
           <p className="text-sm text-muted-foreground">No staff members.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
