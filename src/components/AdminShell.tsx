@@ -29,6 +29,7 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
     ? [
         { label: "Contractors", href: "/admin/contractors" },
         { label: "Super Users", href: "/admin/super-users" },
+        { label: "Audit Log", href: "/admin/audit-log" },
       ]
     : []
 
