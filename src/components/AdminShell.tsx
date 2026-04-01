@@ -25,7 +25,10 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   ]
 
   const superAdminLinks = isPlatformAdmin
-    ? [{ label: "Platform", href: "/admin/super" }]
+    ? [
+        { label: "Contractors", href: "/admin/super/contractors" },
+        { label: "Super Users", href: "/admin/super/users" },
+      ]
     : []
 
   return (
