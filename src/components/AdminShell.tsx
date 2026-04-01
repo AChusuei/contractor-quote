@@ -19,19 +19,19 @@ function AdminUserButton() {
 function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   const location = useLocation()
 
-  const navLinks = [
+  const contractorLinks = [
     { label: "Quotes", href: "/admin/quotes" },
     { label: "Customers", href: "/admin/customers" },
     { label: "Settings", href: "/admin/settings" },
-    ...(isPlatformAdmin ? [
-      { label: "Contractors", href: "/admin/contractors" },
-      { label: "Super Users", href: "/admin/super-users" },
-    ] : []),
   ]
+
+  const superAdminLinks = isPlatformAdmin
+    ? [{ label: "Platform", href: "/admin/super" }]
+    : []
 
   return (
     <nav className="flex items-center gap-1">
-      {navLinks.map((link) => (
+      {contractorLinks.map((link) => (
         <Link
           key={link.href}
           to={link.href}
@@ -44,6 +44,24 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
           {link.label}
         </Link>
       ))}
+      {superAdminLinks.length > 0 && (
+        <>
+          <div className="mx-1 h-5 w-px bg-border" aria-hidden />
+          {superAdminLinks.map((link) => (
+            <Link
+              key={link.href}
+              to={link.href}
+              className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                location.pathname.startsWith(link.href)
+                  ? "bg-amber-100 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+                  : "text-amber-700 hover:bg-amber-50 hover:text-amber-900 dark:text-amber-400 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </>
+      )}
     </nav>
   )
 }
