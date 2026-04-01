@@ -6,6 +6,7 @@ import { apiGet, setAuthProvider } from "@/lib/api"
 interface ContractorInfo {
   id: string
   name: string
+  slug?: string
 }
 
 interface ContractorSessionValue {
@@ -55,9 +56,10 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
       apiGet<ContractorInfo[]>("/platform/contractors")
         .then((res) => {
           const contractors = res.ok
-            ? (res.data as Array<{ id: string; name: string }>).map((c) => ({
+            ? (res.data as Array<{ id: string; name: string; slug?: string }>).map((c) => ({
                 id: c.id,
                 name: c.name,
+                slug: c.slug,
               }))
             : []
           setValue({

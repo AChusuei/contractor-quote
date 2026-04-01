@@ -63,7 +63,8 @@ function ClerkAdminHeader() {
   return (
     <>
       <AdminNav isPlatformAdmin={isPlatformAdmin} />
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-3">
+        <ContractorDropdown />
         <AdminUserButton />
       </div>
     </>
@@ -109,7 +110,10 @@ function ContractorDropdown() {
             onClick={() => setOpen(false)}
           />
           <div className="absolute left-0 top-full mt-1 z-50 min-w-[220px] rounded-md border border-border bg-background shadow-md">
-            {contractors.map((c) => (
+            {contractors
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((c) => (
               <button
                 key={c.id}
                 onClick={() => handleSelect(c)}
@@ -118,6 +122,7 @@ function ContractorDropdown() {
                 }`}
               >
                 {c.name}
+                {c.slug && <span className="ml-2 text-xs text-muted-foreground font-mono">{c.slug}</span>}
               </button>
             ))}
             <div className="border-t border-border mt-1">
@@ -161,7 +166,6 @@ function ClerkAdminShellContent() {
           <span className="font-semibold text-sm">Admin</span>
         )}
         <ClerkAdminHeader />
-        <ContractorDropdown />
       </header>
       <main className="p-6">
         <Outlet />
