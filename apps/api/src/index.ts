@@ -30,6 +30,7 @@ import {
 import { rateLimit } from "./middleware/rateLimit"
 import { sendNewQuoteNotification } from "./lib/email"
 import { verifyTurnstileToken } from "./lib/turnstile"
+import { verifyClerkJwt } from "./lib/jwtVerify"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -46,6 +47,7 @@ type Bindings = {
   TOKEN_SIGNING_SECRET: string
   SENDGRID_API_KEY: string
   TURNSTILE_SECRET_KEY: string
+  CLERK_JWKS_URL: string
 }
 
 type Variables = {
@@ -2118,17 +2120,15 @@ app.get(
     let email: string | null = null
 
     if (authHeader?.startsWith("Bearer ")) {
-      try {
-        const token = authHeader.slice(7)
-        const payload = JSON.parse(atob(token.split(".")[1]))
-        email =
-          (payload.email as string | undefined) ??
-          (payload.primary_email as string | undefined) ??
-          (payload.email_address as string | undefined) ??
-          null
-      } catch {
+      const payload = await verifyClerkJwt(authHeader.slice(7), c.env)
+      if (!payload) {
         return apiError(c, "UNAUTHORIZED", "Invalid token")
       }
+      email =
+        (payload.email as string | undefined) ??
+        (payload.primary_email as string | undefined) ??
+        (payload.email_address as string | undefined) ??
+        null
     } else if (c.env.ENVIRONMENT === "development") {
       // Dev fallback: no JWT, return default contractor
       const devContractorId = c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
@@ -2339,12 +2339,8 @@ app.patch(
       let clerkUserId: string | null = null
       const authHeader = c.req.header("authorization")
       if (authHeader?.startsWith("Bearer ")) {
-        try {
-          const payload = JSON.parse(atob(authHeader.slice(7).split(".")[1]))
-          clerkUserId = payload.sub ?? null
-        } catch {
-          // Fall through — dev mode uses x-contractor-id
-        }
+        const payload = await verifyClerkJwt(authHeader.slice(7), c.env)
+        clerkUserId = (payload?.sub as string | undefined) ?? null
       }
 
       // In dev mode without JWT, check x-contractor-id header for owner lookup

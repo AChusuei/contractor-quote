@@ -1,27 +1,24 @@
 import type { Context, Next } from "hono"
 import { apiError } from "../lib/errors"
+import { verifyClerkJwt } from "../lib/jwtVerify"
 
 /**
- * Extract the Clerk user's email from the JWT.
- * Clerk JWTs typically include the user's email in the payload.
+ * Extract the Clerk user's email from the verified JWT.
  */
-function extractEmailFromJwt(c: Context): string | null {
+async function extractEmailFromJwt(c: Context): Promise<string | null> {
   const authHeader = c.req.header("authorization")
   if (!authHeader?.startsWith("Bearer ")) return null
 
-  try {
-    const token = authHeader.slice(7)
-    const payload = JSON.parse(atob(token.split(".")[1]))
-    // Clerk stores email in various places depending on config
-    return (
-      payload.email ??
-      payload.primary_email ??
-      payload.email_address ??
-      null
-    )
-  } catch {
-    return null
-  }
+  const payload = await verifyClerkJwt(authHeader.slice(7), c.env)
+  if (!payload) return null
+
+  // Clerk stores email in various places depending on config
+  return (
+    (payload.email as string | undefined) ??
+    (payload.primary_email as string | undefined) ??
+    (payload.email_address as string | undefined) ??
+    null
+  )
 }
 
 /**
@@ -33,7 +30,7 @@ function extractEmailFromJwt(c: Context): string | null {
  */
 export function requirePlatformAdmin() {
   return async (c: Context, next: Next) => {
-    let callerEmail = extractEmailFromJwt(c)
+    let callerEmail = await extractEmailFromJwt(c)
 
     // Dev fallback: allow x-platform-admin-email header
     if (!callerEmail && (c.env as Record<string, unknown>).ENVIRONMENT === "development") {

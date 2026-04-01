@@ -1,11 +1,12 @@
 import type { Context, Next } from "hono"
 import { apiError } from "../lib/errors"
+import { verifyClerkJwt } from "../lib/jwtVerify"
 
 /**
  * Check if the current caller is a platform admin by inspecting their JWT email
  * against the PLATFORM_ADMIN_EMAILS env var.
  */
-function isPlatformAdmin(c: Context): boolean {
+async function isPlatformAdmin(c: Context): Promise<boolean> {
   const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS as string | undefined
   if (!adminEmailsRaw) return false
 
@@ -17,15 +18,11 @@ function isPlatformAdmin(c: Context): boolean {
   const authHeader = c.req.header("authorization")
   if (!authHeader?.startsWith("Bearer ")) return false
 
-  try {
-    const token = authHeader.slice(7)
-    const payload = JSON.parse(atob(token.split(".")[1]))
-    const email: string | undefined =
-      payload.email ?? payload.primary_email ?? payload.email_address
-    return Boolean(email && adminEmails.includes(email.toLowerCase()))
-  } catch {
-    return false
-  }
+  const payload = await verifyClerkJwt(authHeader.slice(7), c.env)
+  if (!payload) return false
+
+  const email = payload.email ?? payload.primary_email ?? payload.email_address
+  return Boolean(email && adminEmails.includes((email as string).toLowerCase()))
 }
 
 /**
@@ -43,45 +40,43 @@ function isPlatformAdmin(c: Context): boolean {
 async function extractContractorId(c: Context): Promise<string | null> {
   // Platform admins can override the contractor context
   const superContractorId = c.req.header("x-super-contractor-id")
-  if (superContractorId && isPlatformAdmin(c)) {
+  if (superContractorId && (await isPlatformAdmin(c))) {
     return superContractorId
   }
 
   // In production: extract from Clerk JWT
   const authHeader = c.req.header("authorization")
   if (authHeader?.startsWith("Bearer ")) {
-    try {
-      // Decode JWT payload (Clerk JWTs are standard JWTs)
-      const token = authHeader.slice(7)
-      const payload = JSON.parse(atob(token.split(".")[1]))
-      // Check custom claim or org metadata
-      const fromJwt =
-        payload.contractorId ??
-        payload.public_metadata?.contractorId ??
-        payload.org_id ??
-        null
-      if (fromJwt) return fromJwt
+    // Verify JWT signature via Clerk JWKS, then extract claims
+    const token = authHeader.slice(7)
+    const payload = await verifyClerkJwt(token, c.env)
+    if (!payload) return null
 
-      // No contractorId claim — look up staff table by email
-      const email: string | undefined =
-        payload.email ?? payload.primary_email ?? payload.email_address
-      if (email) {
-        const staff = await c.env.DB.prepare(
-          "SELECT contractor_id FROM staff WHERE LOWER(email) = ? AND active = 1 LIMIT 1"
-        )
-          .bind(email.toLowerCase())
-          .first<{ contractor_id: string }>()
-        if (staff) return staff.contractor_id
-      }
+    // Check custom claim or org metadata
+    const meta = payload.public_metadata as Record<string, unknown> | undefined
+    const fromJwt =
+      payload.contractorId ??
+      meta?.contractorId ??
+      payload.org_id ??
+      null
+    if (fromJwt) return fromJwt as string
 
-      // Dev fallback: JWT exists but no contractor association found
-      if (c.env.ENVIRONMENT === "development") {
-        return c.req.header("x-contractor-id") ?? null
-      }
-      return null
-    } catch {
-      return null
+    // No contractorId claim — look up staff table by email
+    const email = (payload.email ?? payload.primary_email ?? payload.email_address) as string | undefined
+    if (email) {
+      const staff = await c.env.DB.prepare(
+        "SELECT contractor_id FROM staff WHERE LOWER(email) = ? AND active = 1 LIMIT 1"
+      )
+        .bind(email.toLowerCase())
+        .first<{ contractor_id: string }>()
+      if (staff) return staff.contractor_id
     }
+
+    // Dev fallback: JWT exists but no contractor association found
+    if (c.env.ENVIRONMENT === "development") {
+      return c.req.header("x-contractor-id") ?? null
+    }
+    return null
   }
 
   // Dev fallback: no JWT at all, allow x-contractor-id header
