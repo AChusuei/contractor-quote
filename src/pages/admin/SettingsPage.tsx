@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { useAuth } from "@clerk/clerk-react"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -451,6 +451,8 @@ export function SettingsPage() {
 
   // ---- Logo preview ----
   const [logoPreview, setLogoPreview] = useState<string>("")
+  const [selectedFileName, setSelectedFileName] = useState<string>("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load profile from API on mount
   useEffect(() => {
@@ -490,6 +492,8 @@ export function SettingsPage() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    setSelectedFileName(file.name)
 
     // Show preview immediately
     const reader = new FileReader()
@@ -562,12 +566,26 @@ export function SettingsPage() {
               )}
               <div className="flex-1">
                 <input
+                  ref={fileInputRef}
                   id="logoUpload"
                   type="file"
                   accept="image/*"
                   onChange={handleLogoUpload}
-                  className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-accent/80"
+                  className="hidden"
                 />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Choose File
+                  </Button>
+                  {selectedFileName && (
+                    <span className="text-sm text-muted-foreground">{selectedFileName}</span>
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   PNG, JPG, or SVG. Used in email signatures and white-label branding.
                 </p>
