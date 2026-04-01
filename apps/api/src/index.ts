@@ -31,6 +31,7 @@ import { rateLimit } from "./middleware/rateLimit"
 import { sendNewQuoteNotification } from "./lib/email"
 import { verifyTurnstileToken } from "./lib/turnstile"
 import { verifyClerkJwt } from "./lib/jwtVerify"
+import { insertAuditEvent, extractEmailFromJwt } from "./lib/audit"
 
 // ---------------------------------------------------------------------------
 // Bindings — mirrors wrangler.toml
@@ -203,6 +204,16 @@ app.patch("/contractors/:contractorId", requireAuth(), requireContractorOwnershi
   )
     .bind(...binds)
     .run()
+
+  const actorEmail = extractEmailFromJwt(c.req.header("authorization")) ?? "unknown"
+  await insertAuditEvent(c.env.DB, {
+    actorEmail,
+    actorType: "staff",
+    entityType: "contractor",
+    entityId: contractorId,
+    action: "update",
+    details: { fields: Object.keys(body).filter((k) => k in allowedFields) },
+  }).catch(() => {})
 
   return c.json({ ok: true, data: { updated: true } })
 })
@@ -2316,6 +2327,16 @@ app.post(
       createdAt: created.created_at,
     }
 
+    const actorEmail = extractEmailFromJwt(c.req.header("authorization")) ?? "unknown"
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "staff",
+      entityType: "staff",
+      entityId: staffId,
+      action: "create",
+      details: { name: data.name, email: data.email, role: data.role },
+    }).catch(() => {})
+
     const res: ApiOk<typeof staffMember> = { ok: true, data: staffMember }
     return c.json(res, 201)
   }
@@ -2330,12 +2351,12 @@ app.patch(
     const contractorId = c.get("contractorId") as string
     const staffId = c.req.param("staffId")
 
-    // Verify staff belongs to this contractor
+    // Verify staff belongs to this contractor (also captures old values for audit)
     const existing = await c.env.DB.prepare(
-      "SELECT id FROM staff WHERE id = ? AND contractor_id = ?"
+      "SELECT id, name, email, role, phone, active FROM staff WHERE id = ? AND contractor_id = ?"
     )
       .bind(staffId, contractorId)
-      .first<{ id: string }>()
+      .first<{ id: string; name: string; email: string; role: string; phone: string | null; active: number }>()
 
     if (!existing) {
       return apiError(c, "NOT_FOUND", "Staff member not found")
@@ -2453,6 +2474,24 @@ app.patch(
       phone: updated.phone ?? null,
       active: updated.active === 1,
       createdAt: updated.created_at,
+    }
+
+    if (setClauses.length > 0) {
+      const changedFields: Record<string, { old: unknown; new: unknown }> = {}
+      if (data.name !== undefined && data.name !== existing.name) changedFields.name = { old: existing.name, new: data.name }
+      if (data.email !== undefined && data.email !== existing.email) changedFields.email = { old: existing.email, new: data.email }
+      if (data.role !== undefined && data.role !== existing.role) changedFields.role = { old: existing.role, new: data.role }
+      if (data.phone !== undefined && data.phone !== existing.phone) changedFields.phone = { old: existing.phone, new: data.phone }
+      if (data.active !== undefined && (data.active ? 1 : 0) !== existing.active) changedFields.active = { old: existing.active === 1, new: data.active }
+      const actorEmail = extractEmailFromJwt(c.req.header("authorization")) ?? "unknown"
+      await insertAuditEvent(c.env.DB, {
+        actorEmail,
+        actorType: "staff",
+        entityType: "staff",
+        entityId: staffId,
+        action: "update",
+        details: { changes: changedFields },
+      }).catch(() => {})
     }
 
     return c.json({ ok: true, data: staffMember })
@@ -2597,6 +2636,16 @@ app.post(
       active: owner.active === 1,
       createdAt: owner.created_at,
     }
+
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "staff",
+      entityId: staffId,
+      action: existingStaff ? "update" : "create",
+      details: { contractorId, role: "owner", name: data.name, email: data.email },
+    }).catch(() => {})
 
     return c.json({ ok: true, data: staffMember }, 200)
   }
@@ -2772,6 +2821,16 @@ app.patch(
       )
       .run()
 
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "contractor",
+      entityId: contractorId,
+      action: "update",
+      details: { name: data.name, slug: data.slug, email: data.email || null },
+    }).catch(() => {})
+
     return c.json({ ok: true, data: { updated: true } })
   }
 )
@@ -2855,6 +2914,16 @@ app.post(
       (body.address as string)?.trim() ?? null,
     ).run()
 
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "contractor",
+      entityId: id,
+      action: "create",
+      details: { name, slug },
+    }).catch(() => {})
+
     return c.json({ ok: true, data: { id, slug, name } }, 201)
   }
 )
@@ -2937,6 +3006,16 @@ app.post(
       .bind(id, normalizedEmail, name)
       .run()
 
+    const actorEmailPlatform = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail: actorEmailPlatform,
+      actorType: "super_admin",
+      entityType: "super_user",
+      entityId: id,
+      action: "create",
+      details: { email: normalizedEmail, name },
+    }).catch(() => {})
+
     return c.json({ ok: true, data: { id, email: normalizedEmail, name, createdAt: new Date().toISOString() } }, 201)
   }
 )
@@ -2968,6 +3047,15 @@ app.delete(
     )
       .bind(id)
       .run()
+
+    await insertAuditEvent(c.env.DB, {
+      actorEmail: callerEmail,
+      actorType: "super_admin",
+      entityType: "super_user",
+      entityId: id,
+      action: "delete",
+      details: { email: target.email },
+    }).catch(() => {})
 
     return c.json({ ok: true, data: { deleted: true } })
   }
@@ -3060,6 +3148,16 @@ app.post(
       .bind(id, normalizedEmail, name)
       .run()
 
+    const actorEmailSuper = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail: actorEmailSuper,
+      actorType: "super_admin",
+      entityType: "super_user",
+      entityId: id,
+      action: "create",
+      details: { email: normalizedEmail, name },
+    }).catch(() => {})
+
     return c.json({ ok: true, data: { id, email: normalizedEmail, name, createdAt: new Date().toISOString() } }, 201)
   }
 )
@@ -3092,7 +3190,96 @@ app.delete(
       .bind(id)
       .run()
 
+    await insertAuditEvent(c.env.DB, {
+      actorEmail: callerEmail,
+      actorType: "super_admin",
+      entityType: "super_user",
+      entityId: id,
+      action: "delete",
+      details: { email: target.email },
+    }).catch(() => {})
+
     return c.json({ ok: true, data: { deleted: true } })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Audit log (super admin only)
+// ---------------------------------------------------------------------------
+app.get(
+  "/audit-log",
+  requireSuperAdmin(),
+  async (c) => {
+    const entityType = c.req.query("entityType")
+    const dateFrom = c.req.query("dateFrom")
+    const dateTo = c.req.query("dateTo")
+    const pageStr = c.req.query("page") ?? "1"
+    const page = Math.max(1, parseInt(pageStr, 10) || 1)
+    const limit = 50
+    const offset = (page - 1) * limit
+
+    const conditions: string[] = []
+    const binds: unknown[] = []
+
+    if (entityType && ["staff", "contractor", "super_user"].includes(entityType)) {
+      conditions.push("entity_type = ?")
+      binds.push(entityType)
+    }
+    if (dateFrom) {
+      conditions.push("created_at >= ?")
+      binds.push(dateFrom)
+    }
+    if (dateTo) {
+      conditions.push("created_at <= ?")
+      binds.push(dateTo)
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, actor_email, actor_type, entity_type, entity_id, action, details, created_at
+       FROM audit_events ${where}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+      .bind(...binds, limit, offset)
+      .all<{
+        id: string
+        actor_email: string
+        actor_type: string
+        entity_type: string
+        entity_id: string
+        action: string
+        details: string | null
+        created_at: string
+      }>()
+
+    const countRow = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM audit_events ${where}`
+    )
+      .bind(...binds)
+      .first<{ total: number }>()
+
+    const events = (results ?? []).map((r) => ({
+      id: r.id,
+      actorEmail: r.actor_email,
+      actorType: r.actor_type,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      action: r.action,
+      details: r.details ? JSON.parse(r.details) : null,
+      createdAt: r.created_at,
+    }))
+
+    return c.json({
+      ok: true,
+      data: {
+        events,
+        total: countRow?.total ?? 0,
+        page,
+        limit,
+      },
+    })
   }
 )
 
