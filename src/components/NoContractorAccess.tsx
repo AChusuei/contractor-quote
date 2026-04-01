@@ -12,7 +12,7 @@ export function NoContractorAccess() {
           administrator to get access.
         </p>
         <button
-          onClick={() => signOut()}
+          onClick={() => signOut({ redirectUrl: "/admin/sign-in" })}
           className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           Sign Out
