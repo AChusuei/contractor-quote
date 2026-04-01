@@ -15,6 +15,7 @@ interface ContractorSessionValue {
   isSuperAdmin: boolean
   /** Full contractor list — populated for super admins only (for dropdown). */
   contractors: ContractorInfo[]
+  logoUrl: string | null
   loading: boolean
   error: string | null
 }
@@ -24,6 +25,7 @@ const ContractorSessionContext = createContext<ContractorSessionValue>({
   contractorName: "",
   isSuperAdmin: false,
   contractors: [],
+  logoUrl: null,
   loading: true,
   error: null,
 })
@@ -40,6 +42,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
     contractorName: "",
     isSuperAdmin: false,
     contractors: [],
+    logoUrl: null,
     loading: true,
     error: null,
   })
@@ -52,21 +55,26 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
     const superContractorName = sessionStorage.getItem("cq_super_contractor_name")
 
     if (superContractorId && superContractorName) {
-      // Super admin impersonating a contractor — fetch full contractor list for dropdown
-      apiGet<ContractorInfo[]>("/platform/contractors")
-        .then((res) => {
-          const contractors = res.ok
-            ? (res.data as Array<{ id: string; name: string; slug?: string }>).map((c) => ({
+      // Super admin impersonating a contractor — fetch full contractor list and logo in parallel
+      Promise.all([
+        apiGet<ContractorInfo[]>("/platform/contractors"),
+        apiGet<{ logoUrl: string | null }>(`/contractors/${superContractorId}`),
+      ])
+        .then(([contractorsRes, profileRes]) => {
+          const contractors = contractorsRes.ok
+            ? (contractorsRes.data as Array<{ id: string; name: string; slug?: string }>).map((c) => ({
                 id: c.id,
                 name: c.name,
                 slug: c.slug,
               }))
             : []
+          const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
           setValue({
             contractorId: superContractorId,
             contractorName: superContractorName,
             isSuperAdmin: true,
             contractors,
+            logoUrl,
             loading: false,
             error: null,
           })
@@ -77,6 +85,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             contractorName: superContractorName,
             isSuperAdmin: true,
             contractors: [],
+            logoUrl: null,
             loading: false,
             error: null,
           })
@@ -92,13 +101,16 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
           } else {
             // Regular staff — look up their contractor by email via the API
             return apiGet<{ contractorId: string; contractorName: string; role: string }>("/me/contractor")
-              .then((staffRes) => {
+              .then(async (staffRes) => {
                 if (staffRes.ok) {
+                  const profileRes = await apiGet<{ logoUrl: string | null }>(`/contractors/${staffRes.data.contractorId}`)
+                  const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
                   setValue({
                     contractorId: staffRes.data.contractorId,
                     contractorName: staffRes.data.contractorName,
                     isSuperAdmin: false,
                     contractors: [],
+                    logoUrl,
                     loading: false,
                     error: null,
                   })

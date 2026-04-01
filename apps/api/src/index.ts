@@ -117,7 +117,7 @@ app.get("/contractors/by-slug/:slug", async (c) => {
       id: contractor.id,
       slug: contractor.slug,
       name: contractor.name,
-      logoUrl: contractor.logo_url,
+      logoUrl: contractor.logo_url ? `/api/v1/contractors/${contractor.id}/logo` : null,
       calendarUrl: contractor.calendar_url,
       phone: contractor.phone,
     },
@@ -150,7 +150,7 @@ app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(
       address: contractor.address,
       websiteUrl: contractor.website_url,
       licenseNumber: contractor.license_number,
-      logoUrl: contractor.logo_url,
+      logoUrl: contractor.logo_url ? `/api/v1/contractors/${contractorId}/logo` : null,
       calendarUrl: contractor.calendar_url,
     },
   })
@@ -1275,6 +1275,35 @@ app.delete(
 )
 
 // ---------------------------------------------------------------------------
+// Serve contractor logo (public — no auth required)
+// ---------------------------------------------------------------------------
+app.get("/contractors/:contractorId/logo", async (c) => {
+  const contractorId = c.req.param("contractorId")
+
+  const contractor = await c.env.DB.prepare(
+    "SELECT logo_url FROM contractors WHERE id = ?"
+  )
+    .bind(contractorId)
+    .first<{ logo_url: string | null }>()
+
+  if (!contractor?.logo_url) {
+    return apiError(c, "NOT_FOUND", "No logo found")
+  }
+
+  const object = await c.env.STORAGE.get(contractor.logo_url)
+  if (!object) {
+    return apiError(c, "NOT_FOUND", "Logo file not found in storage")
+  }
+
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": object.httpMetadata?.contentType ?? "image/png",
+      "Cache-Control": "public, max-age=86400",
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Upload contractor logo
 // ---------------------------------------------------------------------------
 const MAX_LOGO_BYTES = 2 * 1024 * 1024 // 2MB
@@ -1349,18 +1378,15 @@ app.post(
       httpMetadata: { contentType: file.type },
     })
 
-    // --- Build the public URL ---
-    // In production this would be a custom domain or R2 public bucket URL.
-    // For now, store the R2 key as the logo_url value.
-    const logoUrl = r2Key
-
-    // --- Update D1 ---
+    // --- Update D1 with R2 key ---
     await c.env.DB.prepare(
       "UPDATE contractors SET logo_url = ? WHERE id = ?"
     )
-      .bind(logoUrl, contractorId)
+      .bind(r2Key, contractorId)
       .run()
 
+    // Return the public API URL for the logo
+    const logoUrl = `/api/v1/contractors/${contractorId}/logo`
     return c.json({ ok: true, data: { logoUrl } })
   }
 )

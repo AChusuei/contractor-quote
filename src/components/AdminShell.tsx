@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import { useAuth, UserButton } from "@clerk/clerk-react"
-import logoUrl from "@/assets/logo.png"
+import staticLogoUrl from "@/assets/logo.png"
 import { apiGet, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 
-const LOGO_URL = logoUrl || (import.meta.env.VITE_CQ_LOGO_URL as string | undefined)
 const CLERK_CONFIGURED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
 
 // Only rendered inside a ClerkProvider (when CLERK_CONFIGURED is true)
@@ -149,6 +148,8 @@ function ContractorDropdown() {
 // Full shell content — only rendered when Clerk confirms user is signed in
 function ClerkAdminShellContent() {
   const { isLoaded, isSignedIn } = useAuth()
+  const { logoUrl: sessionLogoUrl } = useContractorSession()
+  const logoUrl = sessionLogoUrl ?? staticLogoUrl
 
   // While Clerk loads or user is not authenticated, show no header.
   // ProtectedRoute (wrapping page content via Outlet) handles the loading
@@ -166,8 +167,8 @@ function ClerkAdminShellContent() {
   return (
     <div className="min-h-screen bg-background">
       <header className="flex h-14 shrink-0 items-center border-b bg-background px-6 gap-6">
-        {LOGO_URL ? (
-          <img src={LOGO_URL} alt="Logo" className="h-7 w-auto object-contain" />
+        {logoUrl ? (
+          <img src={logoUrl} alt="Logo" className="h-7 w-auto object-contain" />
         ) : (
           <span className="font-semibold text-sm">Admin</span>
         )}
@@ -188,8 +189,8 @@ export function AdminShell() {
   return (
     <div className="min-h-screen bg-background">
       <header className="flex h-14 shrink-0 items-center border-b bg-background px-6 gap-6">
-        {LOGO_URL ? (
-          <img src={LOGO_URL} alt="Logo" className="h-7 w-auto object-contain" />
+        {staticLogoUrl ? (
+          <img src={staticLogoUrl} alt="Logo" className="h-7 w-auto object-contain" />
         ) : (
           <span className="font-semibold text-sm">Admin</span>
         )}

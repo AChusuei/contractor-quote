@@ -43,25 +43,6 @@ const themeOptions: { value: Theme; label: string; description: string }[] = [
 // Contractor Profile
 // ---------------------------------------------------------------------------
 
-const PROFILE_KEY = "cq_contractor_profile"
-
-function loadProfile(): ContractorProfileData {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY)
-    if (raw) return JSON.parse(raw) as ContractorProfileData
-  } catch {
-    // ignore corrupt data
-  }
-  return {
-    name: "",
-    email: "",
-    phone: "",
-    website: "",
-    address: "",
-    licenseNumber: "",
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Staff
 // ---------------------------------------------------------------------------
@@ -468,56 +449,43 @@ export function SettingsPage() {
     },
   })
 
-  // Load profile from API — source of truth
+  // ---- Logo preview ----
+  const [logoPreview, setLogoPreview] = useState<string>("")
+
+  // Load profile from API on mount
   useEffect(() => {
     if (!contractorId) return
     apiGet<{
       name: string
-      email?: string | null
-      phone?: string | null
-      address?: string | null
-      websiteUrl?: string | null
-      licenseNumber?: string | null
-      logoUrl?: string | null
+      email: string | null
+      phone: string | null
+      address: string | null
+      websiteUrl: string | null
+      licenseNumber: string | null
+      logoUrl: string | null
     }>(`/contractors/${encodeURIComponent(contractorId)}`).then((res) => {
       if (res.ok) {
         reset({
           name: res.data.name ?? "",
           email: res.data.email ?? "",
           phone: res.data.phone ?? "",
-          address: res.data.address ?? "",
           website: res.data.websiteUrl ?? "",
+          address: res.data.address ?? "",
           licenseNumber: res.data.licenseNumber ?? "",
         })
-        if (res.data.logoUrl) setLogoPreview(res.data.logoUrl)
-      } else {
-        // Fall back to localStorage cache if API unavailable
-        reset(loadProfile())
+        setLogoPreview(res.data.logoUrl ?? "")
       }
     })
   }, [contractorId, reset])
 
   async function onSave(data: ContractorProfileData) {
-    // Save to localStorage as immediate cache
-    localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...data, logoUrl: logoPreview }))
-
-    // Also try to save to API
     if (contractorId) {
-      await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, { ...data, logoUrl: logoPreview })
+      await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
     }
 
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
-
-  // ---- Logo preview ----
-  const [logoPreview, setLogoPreview] = useState<string>(() => {
-    try {
-      const raw = localStorage.getItem(PROFILE_KEY)
-      if (raw) return (JSON.parse(raw) as Record<string, unknown>).logoUrl as string ?? ""
-    } catch { /* ignore */ }
-    return ""
-  })
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
