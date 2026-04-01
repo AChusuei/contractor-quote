@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { apiGet, apiPost, apiPatch, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 import { contractorProfileSchema, type ContractorProfileData, ContractorProfileForm } from "@/components/forms/ContractorProfileForm"
+import { useAutoSave } from "@/hooks/useAutoSave"
 
 // ---------------------------------------------------------------------------
 // Theme
@@ -429,13 +430,12 @@ export function SettingsPage() {
   }
 
   // ---- Profile form ----
-  const [saved, setSaved] = useState(false)
-
   const {
     register,
-    handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    watch,
+    getValues,
+    formState: { errors },
   } = useForm<ContractorProfileData>({
     resolver: zodResolver(contractorProfileSchema),
     mode: "onTouched",
@@ -480,14 +480,18 @@ export function SettingsPage() {
     })
   }, [contractorId, reset])
 
-  async function onSave(data: ContractorProfileData) {
-    if (contractorId) {
-      await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, data)
-    }
+  const performSave = useCallback(async () => {
+    if (!contractorId) return
+    const { website, ...rest } = getValues()
+    await apiPatch(`/contractors/${encodeURIComponent(contractorId)}`, { ...rest, websiteUrl: website })
+  }, [contractorId, getValues])
 
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
+  const { trigger: triggerAutoSave } = useAutoSave(performSave)
+
+  useEffect(() => {
+    const sub = watch(() => triggerAutoSave())
+    return () => sub.unsubscribe()
+  }, [watch, triggerAutoSave])
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -543,7 +547,7 @@ export function SettingsPage() {
 
       {/* ---- Profile Tab ---- */}
       {activeTab === "profile" && (
-        <form onSubmit={handleSubmit(onSave)} className="space-y-6">
+        <div className="space-y-6">
           <div>
             <h2 className="text-lg font-medium">Contractor Profile</h2>
             <p className="text-sm text-muted-foreground">
@@ -593,18 +597,7 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* Save */}
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving\u2026" : "Save Profile"}
-            </Button>
-            {saved && (
-              <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                Profile saved
-              </span>
-            )}
-          </div>
-        </form>
+        </div>
       )}
 
       {/* ---- Staff Tab ---- */}
