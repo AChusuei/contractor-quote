@@ -141,6 +141,7 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   function handleSelect(contractor: { id: string; name: string }) {
     sessionStorage.setItem("cq_super_contractor_id", contractor.id)
     sessionStorage.setItem("cq_super_contractor_name", contractor.name)
+    sessionStorage.removeItem("cq_super_contractor_logo")
     setOpen(false)
     // Navigate to quotes (inside ContractorSessionProvider) with a full reload
     // so the provider picks up the new sessionStorage values
@@ -191,9 +192,47 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
 
 // Full shell content — only rendered when Clerk confirms user is signed in
 function ClerkAdminShellContent() {
-  const { isLoaded, isSignedIn } = useAuth()
-  const { logoUrl: sessionLogoUrl } = useContractorSession()
-  const logoUrl = sessionLogoUrl ?? staticLogoUrl
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { logoUrl: sessionLogoUrl, loading: sessionLoading } = useContractorSession()
+  const [fetchedLogoUrl, setFetchedLogoUrl] = useState<string | null>(
+    () => sessionStorage.getItem("cq_super_contractor_logo") || null
+  )
+
+  // When ContractorSessionProvider resolves with a logo, cache it for non-provider pages
+  useEffect(() => {
+    if (sessionLogoUrl !== null) {
+      sessionStorage.setItem("cq_super_contractor_logo", sessionLogoUrl)
+      setFetchedLogoUrl(sessionLogoUrl)
+    }
+  }, [sessionLogoUrl])
+
+  // On pages outside ContractorSessionProvider the default context keeps loading:true forever.
+  // Fetch the logo independently so the header is correct on those pages too.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return
+    if (sessionLogoUrl !== null) return // provider already has it
+    if (!sessionLoading) return // provider loaded but contractor has no logo — respect that
+
+    const contractorId = sessionStorage.getItem("cq_super_contractor_id")
+    if (!contractorId) return
+
+    const cached = sessionStorage.getItem("cq_super_contractor_logo")
+    if (cached) {
+      setFetchedLogoUrl(cached)
+      return
+    }
+
+    setAuthProvider(() => getToken())
+    apiGet<{ logoUrl: string | null }>(`/contractors/${contractorId}`).then((res) => {
+      const url = res.ok ? (res.data as { logoUrl: string | null }).logoUrl ?? null : null
+      if (url) {
+        sessionStorage.setItem("cq_super_contractor_logo", url)
+        setFetchedLogoUrl(url)
+      }
+    }).catch(() => {})
+  }, [isLoaded, isSignedIn, getToken, sessionLogoUrl, sessionLoading])
+
+  const logoUrl = sessionLogoUrl ?? fetchedLogoUrl ?? staticLogoUrl
 
   // While Clerk loads or user is not authenticated, show no header.
   // ProtectedRoute (wrapping page content via Outlet) handles the loading

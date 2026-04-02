@@ -73,6 +73,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
               }))
             : []
           const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
+          if (logoUrl) sessionStorage.setItem("cq_super_contractor_logo", logoUrl)
           setValue({
             contractorId: superContractorId,
             contractorName: superContractorName,
@@ -111,6 +112,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
                 if (staffRes.ok) {
                   const profileRes = await apiGet<{ logoUrl: string | null }>(`/contractors/${staffRes.data.contractorId}`)
                   const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
+                  if (logoUrl) sessionStorage.setItem("cq_super_contractor_logo", logoUrl)
                   setValue({
                     contractorId: staffRes.data.contractorId,
                     contractorName: staffRes.data.contractorName,
