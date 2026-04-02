@@ -193,7 +193,7 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
 function ClerkAdminShellContent() {
   const { isLoaded, isSignedIn } = useAuth()
   const { logoUrl: sessionLogoUrl } = useContractorSession()
-  const logoUrl = sessionLogoUrl ?? staticLogoUrl
+  const logoUrl = sessionLogoUrl ?? sessionStorage.getItem("cq_logo_url") ?? staticLogoUrl
 
   // While Clerk loads or user is not authenticated, show no header.
   // ProtectedRoute (wrapping page content via Outlet) handles the loading
