@@ -3,8 +3,24 @@ import { DevToolbar } from "@/components/DevToolbar"
 import staticLogoUrl from "@/assets/logo.png"
 import { useContractor } from "@/hooks/useContractor"
 
+const isLocalhost =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1" ||
+  /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)
+
 export function AppShell() {
-  const { contractor } = useContractor()
+  const { contractor, loading, error } = useContractor()
+
+  if (isLocalhost && !loading && !contractor) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">
+          {error ?? "Select a contractor from the admin portal to preview the intake form."}
+        </p>
+      </div>
+    )
+  }
+
   const logoUrl = contractor?.logoUrl ?? staticLogoUrl
 
   return (

@@ -26,22 +26,25 @@ export function useContractor(): ContractorContextValue {
 }
 
 /**
- * Extract the contractor slug from the subdomain.
- * e.g. central-cabinets.contractorquote.work → "central-cabinets"
- * In local dev (localhost), falls back to VITE_CQ_CONTRACTOR_SLUG env var.
+ * Returns true when running on localhost (no subdomain available).
  */
-export function getSlugFromDomain(): string | null {
+function isLocalhost(): boolean {
   const hostname = window.location.hostname
-  // Local dev — no subdomain (localhost, 127.0.0.1, or any IP address)
-  const isLocalDev =
+  return (
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
-    /^\d+\.\d+\.\d+\.\d+$/.test(hostname) // any IPv4 address
-  if (isLocalDev) {
-    return (import.meta.env.VITE_CQ_CONTRACTOR_SLUG as string | undefined) ?? "central-cabinets"
-  }
-  // Production — extract subdomain (e.g. central-cabinets.quotetool.io)
-  const parts = hostname.split(".")
+    /^\d+\.\d+\.\d+\.\d+$/.test(hostname)
+  )
+}
+
+/**
+ * Extract the contractor slug from the subdomain.
+ * e.g. central-cabinets.contractorquote.work → "central-cabinets"
+ * Returns null on localhost — use sessionStorage lookup instead.
+ */
+export function getSlugFromDomain(): string | null {
+  if (isLocalhost()) return null
+  const parts = window.location.hostname.split(".")
   if (parts.length >= 3) {
     return parts[0]
   }
@@ -64,6 +67,21 @@ export async function fetchContractorBySlug(slug: string): Promise<ContractorPub
 }
 
 /**
+ * Fetch contractor public info by ID from the API (used for localhost dev preview).
+ */
+export async function fetchContractorById(id: string): Promise<ContractorPublicInfo> {
+  const res = await fetch(`/api/v1/contractors/by-id/${encodeURIComponent(id)}`)
+  if (!res.ok) {
+    throw new Error(`Contractor not found: ${id}`)
+  }
+  const json = await res.json() as { ok: boolean; data: ContractorPublicInfo }
+  if (!json.ok) {
+    throw new Error(`Contractor not found: ${id}`)
+  }
+  return json.data
+}
+
+/**
  * Hook that loads contractor info on mount. Use inside ContractorContext.Provider.
  */
 export function useContractorLoader(): ContractorContextValue {
@@ -72,6 +90,20 @@ export function useContractorLoader(): ContractorContextValue {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (isLocalhost()) {
+      const contractorId = sessionStorage.getItem("cq_super_contractor_id")
+      if (!contractorId) {
+        setError("Select a contractor from the admin portal to preview the intake form.")
+        setLoading(false)
+        return
+      }
+      fetchContractorById(contractorId)
+        .then(setContractor)
+        .catch((err) => setError(err instanceof Error ? err.message : "Failed to load contractor"))
+        .finally(() => setLoading(false))
+      return
+    }
+
     const slug = getSlugFromDomain()
     if (!slug) {
       setError("Could not determine contractor from URL")
