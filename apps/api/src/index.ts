@@ -128,6 +128,34 @@ app.get("/contractors/by-slug/:slug", async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// Public contractor lookup by ID (unauthenticated — localhost dev only)
+// ---------------------------------------------------------------------------
+app.get("/contractors/by-id/:id", async (c) => {
+  const id = c.req.param("id")
+  const contractor = await c.env.DB.prepare(
+    "SELECT id, slug, name, logo_url, calendar_url, phone FROM contractors WHERE id = ?"
+  )
+    .bind(id)
+    .first<{ id: string; slug: string; name: string; logo_url: string | null; calendar_url: string | null; phone: string | null }>()
+
+  if (!contractor) {
+    return apiError(c, "NOT_FOUND", "Contractor not found")
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      id: contractor.id,
+      slug: contractor.slug,
+      name: contractor.name,
+      logoUrl: contractor.logo_url ? `/api/v1/contractors/${contractor.id}/logo` : null,
+      calendarUrl: contractor.calendar_url,
+      phone: contractor.phone,
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Get contractor profile (authenticated)
 // ---------------------------------------------------------------------------
 app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
