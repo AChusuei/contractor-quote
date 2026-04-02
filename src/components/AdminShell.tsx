@@ -69,6 +69,17 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
           ))}
         </>
       )}
+      <div className="mx-1 h-5 w-px bg-border" aria-hidden />
+      <Link
+        to="/admin/appearance"
+        className={`rounded px-3 py-1.5 text-sm transition-colors ${
+          location.pathname.startsWith("/admin/appearance")
+            ? "bg-blue-50 font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-200"
+            : "text-blue-700 hover:bg-blue-50 hover:text-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20 dark:hover:text-blue-200"
+        }`}
+      >
+        Appearance
+      </Link>
     </nav>
   )
 }

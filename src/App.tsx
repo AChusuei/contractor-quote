@@ -21,6 +21,7 @@ import { SuperContractorsPage } from "@/pages/admin/super/SuperContractorsPage"
 import { SuperContractorDetailPage } from "@/pages/admin/super/SuperContractorDetailPage"
 import { SuperUsersPage } from "@/pages/admin/super/SuperUsersPage"
 import { SuperAuditLogPage } from "@/pages/admin/super/SuperAuditLogPage"
+import { AppearancePage } from "@/pages/admin/AppearancePage"
 import { ContractorSessionProvider } from "@/contexts/ContractorSession"
 
 interface AppProps {
@@ -55,6 +56,7 @@ export default function App({ clerkConfigured }: AppProps) {
           <Route path="/admin/contractors/:id" element={<ProtectedRoute><SuperContractorDetailPage /></ProtectedRoute>} />
           <Route path="/admin/super-users" element={<ProtectedRoute><SuperUsersPage /></ProtectedRoute>} />
           <Route path="/admin/audit-log" element={<ProtectedRoute><SuperAuditLogPage /></ProtectedRoute>} />
+          <Route path="/admin/appearance" element={<ProtectedRoute><AppearancePage /></ProtectedRoute>} />
         </Route>
       )}
 
