@@ -2527,6 +2527,23 @@ app.patch(
 )
 
 // ---------------------------------------------------------------------------
+// Dev-only routes (ENVIRONMENT === "development" guard — never reached in prod)
+// ---------------------------------------------------------------------------
+
+// List all contractors — no auth required, dev only
+app.get("/dev/contractors", async (c) => {
+  if ((c.env as Record<string, unknown>).ENVIRONMENT !== "development") {
+    return apiError(c, "FORBIDDEN", "Dev endpoint not available in production")
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, slug, name FROM contractors ORDER BY name ASC`
+  ).all<{ id: string; slug: string; name: string }>()
+
+  return c.json({ ok: true, data: results ?? [] })
+})
+
+// ---------------------------------------------------------------------------
 // Platform admin routes
 // ---------------------------------------------------------------------------
 
