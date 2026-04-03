@@ -195,13 +195,13 @@ function ClerkAdminShellContent() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const { logoUrl: sessionLogoUrl, loading: sessionLoading } = useContractorSession()
   const [fetchedLogoUrl, setFetchedLogoUrl] = useState<string | null>(
-    () => sessionStorage.getItem("cq_super_contractor_logo") || null
+    () => sessionStorage.getItem("cq_logo_url") || null
   )
 
   // When ContractorSessionProvider resolves with a logo, cache it for non-provider pages
   useEffect(() => {
     if (sessionLogoUrl !== null) {
-      sessionStorage.setItem("cq_super_contractor_logo", sessionLogoUrl)
+      sessionStorage.setItem("cq_logo_url", sessionLogoUrl)
       setFetchedLogoUrl(sessionLogoUrl)
     }
   }, [sessionLogoUrl])
@@ -216,7 +216,7 @@ function ClerkAdminShellContent() {
     const contractorId = sessionStorage.getItem("cq_super_contractor_id")
     if (!contractorId) return
 
-    const cached = sessionStorage.getItem("cq_super_contractor_logo")
+    const cached = sessionStorage.getItem("cq_logo_url")
     if (cached) {
       setFetchedLogoUrl(cached)
       return
@@ -226,7 +226,7 @@ function ClerkAdminShellContent() {
     apiGet<{ logoUrl: string | null }>(`/contractors/${contractorId}`).then((res) => {
       const url = res.ok ? (res.data as { logoUrl: string | null }).logoUrl ?? null : null
       if (url) {
-        sessionStorage.setItem("cq_super_contractor_logo", url)
+        sessionStorage.setItem("cq_logo_url", url)
         setFetchedLogoUrl(url)
       }
     }).catch(() => {})

@@ -21,6 +21,7 @@ export function AppShell() {
     )
   }
 
+
   const logoUrl = contractor?.logoUrl ?? staticLogoUrl
 
   return (
@@ -33,7 +34,10 @@ export function AppShell() {
         }
       </header>
       <main className="p-6">
-        <Outlet />
+        {!loading && error && !contractor
+          ? <p className="text-muted-foreground">{error}</p>
+          : <Outlet />
+        }
       </main>
     </div>
   )

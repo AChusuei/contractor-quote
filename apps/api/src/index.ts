@@ -128,7 +128,7 @@ app.get("/contractors/by-slug/:slug", async (c) => {
 })
 
 // ---------------------------------------------------------------------------
-// Public contractor lookup by ID (unauthenticated — for localhost dev preview)
+// Public contractor lookup by ID (unauthenticated — localhost dev only)
 // ---------------------------------------------------------------------------
 app.get("/contractors/by-id/:id", async (c) => {
   const id = c.req.param("id")

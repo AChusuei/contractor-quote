@@ -25,10 +25,7 @@ export function useContractor(): ContractorContextValue {
   return useContext(ContractorContext)
 }
 
-/**
- * Returns true when running on localhost (no subdomain available).
- */
-function isLocalhost(): boolean {
+function isLocalDev(): boolean {
   const hostname = window.location.hostname
   return (
     hostname === "localhost" ||
@@ -40,10 +37,11 @@ function isLocalhost(): boolean {
 /**
  * Extract the contractor slug from the subdomain.
  * e.g. central-cabinets.contractorquote.work → "central-cabinets"
- * Returns null on localhost — use sessionStorage lookup instead.
+ * Returns null on localhost (use sessionStorage instead).
  */
 export function getSlugFromDomain(): string | null {
-  if (isLocalhost()) return null
+  if (isLocalDev()) return null
+  // Production — extract subdomain (e.g. central-cabinets.quotetool.io)
   const parts = window.location.hostname.split(".")
   if (parts.length >= 3) {
     return parts[0]
@@ -67,7 +65,7 @@ export async function fetchContractorBySlug(slug: string): Promise<ContractorPub
 }
 
 /**
- * Fetch contractor public info by ID from the API (used for localhost dev preview).
+ * Fetch contractor public info by ID from the API.
  */
 export async function fetchContractorById(id: string): Promise<ContractorPublicInfo> {
   const res = await fetch(`/api/v1/contractors/by-id/${encodeURIComponent(id)}`)
@@ -90,7 +88,7 @@ export function useContractorLoader(): ContractorContextValue {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isLocalhost()) {
+    if (isLocalDev()) {
       const contractorId = sessionStorage.getItem("cq_super_contractor_id")
       if (!contractorId) {
         setError("Select a contractor from the admin portal to preview the intake form.")
