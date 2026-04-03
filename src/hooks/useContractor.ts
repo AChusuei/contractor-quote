@@ -90,12 +90,16 @@ export function useContractorLoader(): ContractorContextValue {
   useEffect(() => {
     if (isLocalDev()) {
       const contractorId = sessionStorage.getItem("cq_super_contractor_id")
-      if (!contractorId) {
-        setError("Select a contractor from admin portal")
-        setLoading(false)
+      if (contractorId) {
+        fetchContractorById(contractorId)
+          .then(setContractor)
+          .catch((err) => setError(err instanceof Error ? err.message : "Failed to load contractor"))
+          .finally(() => setLoading(false))
         return
       }
-      fetchContractorById(contractorId)
+      const fallbackSlug =
+        import.meta.env.VITE_CQ_CONTRACTOR_SLUG as string | undefined ?? "central-cabinets"
+      fetchContractorBySlug(fallbackSlug)
         .then(setContractor)
         .catch((err) => setError(err instanceof Error ? err.message : "Failed to load contractor"))
         .finally(() => setLoading(false))
