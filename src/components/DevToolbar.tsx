@@ -1,6 +1,74 @@
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 
 // ---------------------------------------------------------------------------
+// Dev contractor dropdown
+// ---------------------------------------------------------------------------
+
+interface ContractorOption {
+  id: string
+  slug: string
+  name: string
+}
+
+function DevContractorDropdown() {
+  const [open, setOpen] = useState(false)
+  const [contractors, setContractors] = useState<ContractorOption[]>([])
+
+  const contractorId = sessionStorage.getItem("cq_super_contractor_id") ?? ""
+  const contractorName = sessionStorage.getItem("cq_super_contractor_name") ?? ""
+
+  useEffect(() => {
+    fetch("/api/v1/dev/contractors")
+      .then((r) => r.json())
+      .then((json: { ok: boolean; data: ContractorOption[] }) => {
+        if (json.ok) setContractors(json.data)
+      })
+      .catch(() => {})
+  }, [])
+
+  function handleSelect(c: ContractorOption) {
+    sessionStorage.setItem("cq_super_contractor_id", c.id)
+    sessionStorage.setItem("cq_super_contractor_name", c.name)
+    setOpen(false)
+    window.location.reload()
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
+      >
+        {contractorId
+          ? <><span className="opacity-60">dev:</span> <strong>{contractorName}</strong></>
+          : <span>Pick contractor</span>
+        }
+        <span aria-hidden>▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 min-w-full rounded-md border border-border bg-background shadow-md">
+            {contractors.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => handleSelect(c)}
+                className={`w-full whitespace-nowrap text-left px-3 py-1.5 text-xs hover:bg-accent ${
+                  c.id === contractorId ? "font-medium text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                {c.name}
+                <span className="ml-1.5 font-mono opacity-50">{c.slug}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Dev action slot — pages can register a fill action
 // ---------------------------------------------------------------------------
 
@@ -78,6 +146,8 @@ export function DevToolbar() {
 
   return (
     <div className="fixed top-2 right-2 z-50 flex items-center gap-2 rounded-md border bg-background/80 backdrop-blur px-2 py-1 text-xs shadow-sm">
+      <DevContractorDropdown />
+      <span className="text-muted-foreground/40">|</span>
       {action && (
         <>
           <button
