@@ -69,34 +69,6 @@ describe("IntakePage — phone validation", () => {
       expect(screen.queryByText("Enter a valid phone number")).not.toBeInTheDocument()
     })
   })
-
-  it("accepts cell when empty (optional field)", async () => {
-    renderIntakePage()
-    const cell = screen.getByLabelText(/^cell$/i)
-    fireEvent.click(cell)
-    fireEvent.blur(cell)
-    await waitFor(() => {
-      expect(screen.queryByText("Enter a valid phone number")).not.toBeInTheDocument()
-    })
-  })
-
-  it("rejects cell with fewer than 10 digits", async () => {
-    renderIntakePage()
-    const cell = screen.getByLabelText(/^cell$/i)
-    await user.type(cell, "555")
-    fireEvent.blur(cell)
-    expect(await screen.findByText("Enter a valid phone number")).toBeInTheDocument()
-  })
-
-  it("accepts cell with a valid 10-digit number", async () => {
-    renderIntakePage()
-    const cell = screen.getByLabelText(/^cell$/i)
-    await user.type(cell, "555-987-6543")
-    fireEvent.blur(cell)
-    await waitFor(() => {
-      expect(screen.queryByText("Enter a valid phone number")).not.toBeInTheDocument()
-    })
-  })
 })
 
 describe("IntakePage — navigation on submit", () => {

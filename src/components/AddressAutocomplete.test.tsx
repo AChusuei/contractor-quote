@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, act } from "@testing-library/react"
+import { render, screen, act, fireEvent } from "@testing-library/react"
 import { AddressAutocomplete } from "./AddressAutocomplete"
 import type { AddressProvider, AddressSuggestion } from "@/lib/address/types"
 
@@ -51,6 +51,7 @@ describe("AddressAutocomplete — trim dedup", () => {
 
   it("calls suggest() when text is typed", async () => {
     const { rerender } = render(<AddressAutocomplete value="" onChange={() => {}} />)
+    fireEvent.focus(screen.getByRole("combobox"))
     rerender(<AddressAutocomplete value="123 Main" onChange={() => {}} />)
     await advanceDebounce()
     expect(suggestSpy).toHaveBeenCalledTimes(1)
@@ -59,6 +60,7 @@ describe("AddressAutocomplete — trim dedup", () => {
 
   it("does not call suggest() again when only trailing whitespace is added", async () => {
     const { rerender } = render(<AddressAutocomplete value="" onChange={() => {}} />)
+    fireEvent.focus(screen.getByRole("combobox"))
 
     // First render with a real value — triggers one call
     rerender(<AddressAutocomplete value="123 Main" onChange={() => {}} />)
@@ -75,6 +77,7 @@ describe("AddressAutocomplete — trim dedup", () => {
 
   it("does call suggest() again when substantive text changes", async () => {
     const { rerender } = render(<AddressAutocomplete value="" onChange={() => {}} />)
+    fireEvent.focus(screen.getByRole("combobox"))
 
     rerender(<AddressAutocomplete value="123 Main" onChange={() => {}} />)
     await advanceDebounce()

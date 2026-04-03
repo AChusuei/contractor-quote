@@ -38,6 +38,7 @@ playwright-report/
 .beads/
 .claude/
 .runtime/
+CLAUDE.md
 
 # Playwright
 /test-results/
