@@ -72,6 +72,7 @@ export function PhotosForm({ quoteId, publicToken, readOnly, onStateChange }: Ph
           url: `/api/v1/quotes/${encodeURIComponent(quoteId)}/photos/${encodeURIComponent(photoId)}/file${publicToken ? `?publicToken=${encodeURIComponent(publicToken)}` : ""}`,
         },
       ])
+      setFiles((prev) => prev.filter((f) => f.file !== file))
     },
     [quoteId, publicToken]
   )
@@ -93,7 +94,7 @@ export function PhotosForm({ quoteId, publicToken, readOnly, onStateChange }: Ph
     return (
       <div>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading photos\u2026</p>
+          <p className="text-sm text-muted-foreground">Loading photos{'\u2026'}</p>
         ) : photos.length === 0 ? (
           <p className="text-sm text-muted-foreground">No photos uploaded.</p>
         ) : (
@@ -115,6 +116,16 @@ export function PhotosForm({ quoteId, publicToken, readOnly, onStateChange }: Ph
 
   return (
     <div className="space-y-4">
+      <FileUpload
+        multiple
+        accept={ACCEPT}
+        maxSize={MAX_FILE_SIZE}
+        onUpload={atLimit ? undefined : handleUpload}
+        value={files}
+        onChange={setFiles}
+        disabled={atLimit}
+      />
+
       {/* Previously uploaded photos */}
       {photos.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -131,21 +142,12 @@ export function PhotosForm({ quoteId, publicToken, readOnly, onStateChange }: Ph
                 className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
                 aria-label={`Remove ${photo.filename}`}
               >
-                \u2715
+                {'\u2715'}
               </button>
             </div>
           ))}
         </div>
       )}
-
-      <FileUpload
-        multiple
-        accept={ACCEPT}
-        maxSize={MAX_FILE_SIZE}
-        onUpload={atLimit ? undefined : handleUpload}
-        onChange={setFiles}
-        disabled={atLimit}
-      />
 
       {atLimit && (
         <p className="text-xs text-muted-foreground text-center">
