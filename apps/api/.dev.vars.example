@@ -1,0 +1,5 @@
+# Local secret overrides for Wrangler dev — copy to .dev.vars and fill in values
+# .dev.vars is gitignored; never commit actual credentials here.
+
+# Comma-separated platform admin emails
+PLATFORM_ADMIN_EMAILS=you@example.com

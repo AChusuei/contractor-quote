@@ -26,12 +26,14 @@ interface SendGridMailBody {
  */
 export async function sendNewQuoteNotification(
   params: QuoteNotificationParams,
-  sendgridApiKey: string | undefined
+  sendgridApiKey: string | undefined,
+  notificationFromEmail: string,
+  appBaseUrl: string
 ): Promise<void> {
   const { contractorEmail, contractorName, customerName, jobSiteAddress, budgetRange, quoteId } = params
 
   const subject = `New quote request from ${customerName}`
-  const portalLink = `https://app.contractorquote.com/quotes/${quoteId}`
+  const portalLink = `${appBaseUrl}/quotes/${quoteId}`
 
   const body = [
     `Hi ${contractorName},`,
@@ -59,7 +61,7 @@ export async function sendNewQuoteNotification(
 
   const mail: SendGridMailBody = {
     personalizations: [{ to: [{ email: contractorEmail }] }],
-    from: { email: "noreply@contractorquote.com", name: "Contractor Quote" },
+    from: { email: notificationFromEmail, name: "Contractor Quote" },
     subject,
     content: [{ type: "text/plain", value: body }],
   }

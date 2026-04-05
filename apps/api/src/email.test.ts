@@ -16,27 +16,27 @@ describe("sendNewQuoteNotification", () => {
   })
 
   it("logs to console when no SendGrid API key is provided", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
-    await sendNewQuoteNotification(baseParams, undefined)
+    await sendNewQuoteNotification(baseParams, undefined, "noreply@example.com", "https://app.example.com")
 
-    expect(logSpy).toHaveBeenCalledWith(
+    expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("dev mode")
     )
-    expect(logSpy).toHaveBeenCalledWith(
+    expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("admin@example.com")
     )
-    expect(logSpy).toHaveBeenCalledWith(
+    expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("Jane Doe")
     )
   })
 
   it("logs to console when SendGrid API key is empty string", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
-    await sendNewQuoteNotification(baseParams, "")
+    await sendNewQuoteNotification(baseParams, "", "noreply@example.com", "https://app.example.com")
 
-    expect(logSpy).toHaveBeenCalledWith(
+    expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("dev mode")
     )
   })
@@ -46,7 +46,7 @@ describe("sendNewQuoteNotification", () => {
       new Response(null, { status: 202 })
     )
 
-    await sendNewQuoteNotification(baseParams, "SG.test-key")
+    await sendNewQuoteNotification(baseParams, "SG.test-key", "noreply@example.com", "https://app.example.com")
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const [url, init] = fetchSpy.mock.calls[0]
@@ -60,10 +60,12 @@ describe("sendNewQuoteNotification", () => {
 
     const body = JSON.parse(init?.body as string)
     expect(body.personalizations[0].to[0].email).toBe("admin@example.com")
+    expect(body.from.email).toBe("noreply@example.com")
     expect(body.subject).toContain("Jane Doe")
     expect(body.content[0].value).toContain("123 Main St")
     expect(body.content[0].value).toContain("10-25k")
     expect(body.content[0].value).toContain("quote-abc-123")
+    expect(body.content[0].value).toContain("https://app.example.com/quotes/quote-abc-123")
   })
 
   it("logs error when SendGrid API returns non-ok status", async () => {
@@ -72,7 +74,7 @@ describe("sendNewQuoteNotification", () => {
     )
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 
-    await sendNewQuoteNotification(baseParams, "SG.bad-key")
+    await sendNewQuoteNotification(baseParams, "SG.bad-key", "noreply@example.com", "https://app.example.com")
 
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("SendGrid API error (403)")

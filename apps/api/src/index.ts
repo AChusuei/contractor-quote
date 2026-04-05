@@ -42,8 +42,10 @@ type Bindings = {
   KV: KVNamespace
   ENVIRONMENT: string
   CORS_ORIGINS: string
-  PLATFORM_ADMIN_EMAILS: string
+  NOTIFICATION_FROM_EMAIL: string
+  APP_BASE_URL: string
   // Secrets (set via `wrangler secret put`)
+  PLATFORM_ADMIN_EMAILS: string
   HUBSPOT_ACCESS_TOKEN: string
   TOKEN_SIGNING_SECRET: string
   SENDGRID_API_KEY: string
@@ -476,7 +478,7 @@ app.patch(
   "/quotes/:quoteId/draft",
   rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "draft-update" }),
   async (c) => {
-    const quoteId = c.req.param("quoteId")
+    const quoteId = c.req.param("quoteId") as string
 
     // --- Payload size gate ---
     const rawBody = await c.req.text()
@@ -628,7 +630,9 @@ app.patch(
                 budgetRange: updatedQuote.budget_range,
                 quoteId,
               },
-              c.env.SENDGRID_API_KEY
+              c.env.SENDGRID_API_KEY,
+              c.env.NOTIFICATION_FROM_EMAIL,
+              c.env.APP_BASE_URL
             ).catch((err) => {
               console.error("Failed to send quote notification email:", err)
             })
