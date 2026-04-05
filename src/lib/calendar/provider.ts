@@ -18,7 +18,7 @@ export function getCalendarProvider(): CalendarProvider | null {
     return _provider
   }
 
-  console.warn(`Unknown VITE_CQ_CALENDAR_PROVIDER: "${PROVIDER_KEY}"`)
+  if (import.meta.env.DEV) console.warn(`Unknown VITE_CQ_CALENDAR_PROVIDER: "${PROVIDER_KEY}"`)
   _provider = null
   return null
 }

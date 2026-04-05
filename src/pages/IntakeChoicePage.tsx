@@ -26,7 +26,7 @@ export function IntakeChoicePage() {
     if (quoteId) {
       const res = await apiPatch(`/quotes/${encodeURIComponent(quoteId)}`, { quotePath: path })
       if (isNetworkError(res)) {
-        console.warn("API unreachable — falling back to localStorage for quotePath")
+        if (import.meta.env.DEV) console.warn("API unreachable — falling back to localStorage for quotePath")
         attachQuotePath(path)
       }
     } else {

@@ -24,6 +24,7 @@ import "./index.css"
 import App from "./App.tsx"
 import { DevActionProvider } from "@/components/DevToolbar"
 import { ContractorProvider } from "@/components/ContractorProvider"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { seedMockQuotes } from "@/lib/quoteStore"
 
 if (import.meta.env.DEV) {
@@ -47,12 +48,14 @@ function Root() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <ContractorProvider>
-        <DevActionProvider>
-          <Root />
-        </DevActionProvider>
-      </ContractorProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ContractorProvider>
+          <DevActionProvider>
+            <Root />
+          </DevActionProvider>
+        </ContractorProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )

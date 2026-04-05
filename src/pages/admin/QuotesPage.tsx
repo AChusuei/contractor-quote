@@ -216,7 +216,7 @@ export function QuotesPage() {
         setQuotes(mapped)
       } else if (isNetworkError(res)) {
         // Fallback to mock data
-        console.warn("API unreachable — falling back to mock quotes")
+        if (import.meta.env.DEV) console.warn("API unreachable — falling back to mock quotes")
         const data = await fetchQuotes()
         setQuotes(data)
       } else {

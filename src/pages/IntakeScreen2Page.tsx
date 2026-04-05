@@ -151,7 +151,7 @@ export function IntakeScreen2Page() {
         scope: scopeFields,
       })
       if (isNetworkError(res)) {
-        console.warn("API unreachable — falling back to localStorage for scope")
+        if (import.meta.env.DEV) console.warn("API unreachable — falling back to localStorage for scope")
         attachScope(scopeFields)
       }
     } else {

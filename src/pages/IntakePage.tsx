@@ -21,7 +21,7 @@ const HUBSPOT_FORM_ID = import.meta.env.VITE_HUBSPOT_FORM_ID as string | undefin
 
 async function submitToHubSpot(data: CustomerInfoData): Promise<void> {
   if (!HUBSPOT_PORTAL_ID || !HUBSPOT_FORM_ID) {
-    console.warn("HubSpot credentials not configured — skipping CRM submission")
+    if (import.meta.env.DEV) console.warn("HubSpot credentials not configured — skipping CRM submission")
     return
   }
 
@@ -213,7 +213,7 @@ export function IntakePage() {
           sessionStorage.setItem("cq_active_quote_id", res.data.id)
           sessionStorage.setItem("cq_public_token", res.data.publicToken)
         } else if (isNetworkError(res)) {
-          console.warn("API unreachable — falling back to localStorage")
+          if (import.meta.env.DEV) console.warn("API unreachable — falling back to localStorage")
           const localQuote = createQuote({
             name: data.name,
             email: data.email,

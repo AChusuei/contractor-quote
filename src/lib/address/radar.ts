@@ -5,7 +5,7 @@ const API_KEY = import.meta.env.VITE_CQ_RADAR_API_KEY as string | undefined
 export class RadarProvider implements AddressProvider {
   async suggest(query: string): Promise<AddressSuggestion[]> {
     if (!API_KEY) {
-      console.warn("VITE_CQ_RADAR_API_KEY not set")
+      if (import.meta.env.DEV) console.warn("VITE_CQ_RADAR_API_KEY not set")
       return []
     }
 

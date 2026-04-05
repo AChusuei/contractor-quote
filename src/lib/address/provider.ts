@@ -24,7 +24,7 @@ export function getAddressProvider(): AddressProvider | null {
     return _provider
   }
 
-  console.warn(`Unknown VITE_CQ_ADDRESS_PROVIDER: "${PROVIDER_KEY}"`)
+  if (import.meta.env.DEV) console.warn(`Unknown VITE_CQ_ADDRESS_PROVIDER: "${PROVIDER_KEY}"`)
   _provider = null
   return null
 }

@@ -73,7 +73,7 @@ export async function api<T>(
 
     return (await res.json()) as ApiResponse<T>
   } catch {
-    console.warn(`API unreachable: ${method} ${path} — falling back to local data`)
+    if (import.meta.env.DEV) console.warn(`API unreachable: ${method} ${path} — falling back to local data`)
     return { ok: false, error: "API unreachable", code: "NETWORK_ERROR" }
   }
 }
@@ -94,7 +94,7 @@ export async function apiUpload<T>(
     })
     return (await res.json()) as ApiResponse<T>
   } catch {
-    console.warn(`API unreachable: POST ${path} — upload failed`)
+    if (import.meta.env.DEV) console.warn(`API unreachable: POST ${path} — upload failed`)
     return { ok: false, error: "API unreachable", code: "NETWORK_ERROR" }
   }
 }

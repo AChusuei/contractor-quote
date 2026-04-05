@@ -14,7 +14,7 @@ export class MapboxProvider implements AddressProvider {
 
   async suggest(query: string): Promise<AddressSuggestion[]> {
     if (!API_KEY) {
-      console.warn("VITE_CQ_MAPBOX_API_KEY:", API_KEY ? "set" : "NOT SET")
+      if (import.meta.env.DEV) console.warn("VITE_CQ_MAPBOX_API_KEY:", API_KEY ? "set" : "NOT SET")
       return []
     }
 

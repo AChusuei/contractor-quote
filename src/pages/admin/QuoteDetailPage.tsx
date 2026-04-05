@@ -442,7 +442,7 @@ export function QuoteDetailPage() {
       }
       setQuote(mapApiQuote(apiQuote))
     } else if (isNetworkError(res)) {
-      console.warn("API unreachable — falling back to localStorage for quote detail")
+      if (import.meta.env.DEV) console.warn("API unreachable — falling back to localStorage for quote detail")
       setUseLocalFallback(true)
       const q = getQuote(id)
       if (!q) { setNotFound(true); return }

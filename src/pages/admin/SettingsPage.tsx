@@ -271,7 +271,7 @@ export function SettingsPage() {
       if (res.ok && Array.isArray(res.data)) {
         setStaffList((res.data as Record<string, unknown>[]).map(mapApiStaff))
       } else if (isNetworkError(res)) {
-        console.warn("API unreachable — falling back to localStorage for staff")
+        if (import.meta.env.DEV) console.warn("API unreachable — falling back to localStorage for staff")
         setStaffList(loadStaffFromStorage())
       } else {
         setStaffList(loadStaffFromStorage())
