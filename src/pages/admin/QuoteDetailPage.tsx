@@ -284,7 +284,14 @@ function ScopeTab({
   }, [valuesRef, getValues])
 
   useEffect(() => {
-    const sub = watch(() => onFieldChange())
+    let didMount = false
+    const sub = watch(() => {
+      if (!didMount) {
+        didMount = true
+        return
+      }
+      onFieldChange()
+    })
     return () => sub.unsubscribe()
   }, [onFieldChange, watch])
 
