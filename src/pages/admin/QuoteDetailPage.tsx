@@ -51,7 +51,6 @@ function mapApiQuote(raw: Record<string, unknown>): QuoteWithCustomer {
     howDidYouFindUs: (raw.howDidYouFindUs as string) ?? "",
     referredByContractor: (raw.referredByContractor as string) ?? undefined,
     scope: scope ?? undefined,
-    quotePath: (raw.quotePath as Quote["quotePath"]) ?? undefined,
     photoSessionId: (raw.photoSessionId as string) ?? undefined,
     status: raw.status as QuoteStatus,
     statusHistory: (raw.statusHistory as Quote["statusHistory"]) ?? [],

@@ -65,8 +65,6 @@ export type Quote = {
   budgetRange?: "<10k" | "10-25k" | "25-50k" | "50k+"
   // Step 2 — scope (optional, added after step 2)
   scope?: QuoteScope
-  // Step 4 — quote path choice
-  quotePath?: "site_visit" | "estimate_requested"
   // Storage
   photoSessionId?: string
   // Admin-managed fields
@@ -145,17 +143,6 @@ export function attachPhotoSession(photoSessionId: string): void {
   const idx = all.findIndex((q) => q.id === id)
   if (idx === -1) return
   all[idx] = { ...all[idx], photoSessionId }
-  writeAll(all)
-}
-
-/** Record the quote path chosen in step 4. */
-export function attachQuotePath(quotePath: "site_visit" | "estimate_requested"): void {
-  const id = getActiveQuoteId()
-  if (!id) return
-  const all = readAll()
-  const idx = all.findIndex((q) => q.id === id)
-  if (idx === -1) return
-  all[idx] = { ...all[idx], quotePath }
   writeAll(all)
 }
 
@@ -243,7 +230,6 @@ export function seedMockQuotes(): void {
         designHelp: "yes",
         additionalNotes: "Want to open up the wall between kitchen and dining room.",
       },
-      quotePath: "site_visit",
       status: "site_visit_scheduled",
       statusHistory: [
         { status: "lead", timestamp: "2026-03-22T14:30:00Z" },
@@ -280,7 +266,6 @@ export function seedMockQuotes(): void {
         islandPeninsula: "none",
         designHelp: "no",
       },
-      quotePath: "estimate_requested",
       status: "estimate_sent",
       statusHistory: [
         { status: "lead", timestamp: "2026-03-21T10:15:00Z" },
@@ -319,7 +304,6 @@ export function seedMockQuotes(): void {
         designHelp: "yes",
         additionalNotes: "Full gut renovation. Moving gas line for range relocation.",
       },
-      quotePath: "site_visit",
       status: "lead",
       statusHistory: [
         { status: "lead", timestamp: "2026-03-20T16:45:00Z" },
