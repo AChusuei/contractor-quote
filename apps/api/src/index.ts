@@ -3328,4 +3328,32 @@ app.get(
   }
 )
 
-export default app
+// ---------------------------------------------------------------------------
+// Required secrets — must be present in all non-development environments.
+// Validated on every request so any request to an unconfigured Worker fails
+// immediately with a clear error rather than a cryptic failure deep in a handler.
+// ---------------------------------------------------------------------------
+const REQUIRED_SECRETS = [
+  "HUBSPOT_ACCESS_TOKEN",
+  "TOKEN_SIGNING_SECRET",
+  "SENDGRID_API_KEY",
+  "TURNSTILE_SECRET_KEY",
+  "CLERK_JWKS_URL",
+] as const
+
+export default {
+  async fetch(request: Request, env: Bindings, ctx: ExecutionContext): Promise<Response> {
+    if (env.ENVIRONMENT !== "development") {
+      const missing = REQUIRED_SECRETS.filter((key) => !env[key])
+      if (missing.length > 0) {
+        const msg = `Worker startup failed: missing required env vars: ${missing.join(", ")}`
+        console.error(msg)
+        return new Response(JSON.stringify({ ok: false, error: msg }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+    }
+    return app.fetch(request, env, ctx)
+  },
+}
