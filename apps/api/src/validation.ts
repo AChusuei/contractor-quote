@@ -147,6 +147,7 @@ export const quoteUpdateSchema = z
     cell: sanitizedMax(50, "Cell number is too long"),
     howDidYouFindUs: sanitizedMax(500, "Response is too long"),
     referredByContractor: sanitizedMax(200, "Referral name is too long"),
+    contractorNotes: sanitizedMax(10000, "Notes must be 10,000 characters or fewer"),
   })
   .partial()
   .refine(

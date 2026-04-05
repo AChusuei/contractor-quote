@@ -464,6 +464,29 @@ describe("PATCH /api/v1/quotes/:quoteId", () => {
     })
     expect(res.status).toBe(413)
   })
+
+  it("updates contractorNotes and returns it in the response", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id)
+
+    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...authHeaders(contractor.id) },
+      body: JSON.stringify({ contractorNotes: "Load-bearing wall — needs structural engineer." }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; data: { contractorNotes: string } }
+    expect(body.ok).toBe(true)
+    expect(body.data.contractorNotes).toBe("Load-bearing wall — needs structural engineer.")
+
+    // Verify persisted via GET
+    const getRes = await SELF.fetch(apiUrl(`/quotes/${quote.id}`), {
+      headers: authHeaders(contractor.id),
+    })
+    const getBody = (await getRes.json()) as { ok: boolean; data: { contractorNotes: string } }
+    expect(getBody.data.contractorNotes).toBe("Load-bearing wall — needs structural engineer.")
+  })
 })
 
 // ---------------------------------------------------------------------------

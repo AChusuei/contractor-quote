@@ -306,6 +306,30 @@ function ScopeTab({
 }
 
 // ---------------------------------------------------------------------------
+// Contractor notes panel — internal notes, auto-saved via PATCH
+// ---------------------------------------------------------------------------
+
+function ContractorNotesPanel({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <SectionHeading>Contractor Notes</SectionHeading>
+      <textarea
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none min-h-[120px] focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Internal notes visible only to your team…"
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Delete quote panel
 // ---------------------------------------------------------------------------
 
@@ -402,6 +426,8 @@ export function QuoteDetailPage() {
   const pendingEditsRef = useRef<Record<string, unknown>>({})
   const [useLocalFallback, setUseLocalFallback] = useState(false)
   const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [contractorNotes, setContractorNotes] = useState("")
+  const prevQuoteIdRef = useRef<string | null>(null)
 
   // Wire up Clerk auth
   useEffect(() => {
@@ -434,10 +460,6 @@ export function QuoteDetailPage() {
             status: (a.newValue as string) as QuoteStatus,
             timestamp: a.createdAt as string,
           }))
-        apiQuote.contractorNotes = actRes.data.activities
-          .filter((a) => a.type === "note")
-          .map((a) => a.content as string)
-          .join("\n")
       }
       setQuote(mapApiQuote(apiQuote))
     } else if (isNetworkError(res)) {
@@ -457,6 +479,14 @@ export function QuoteDetailPage() {
   useEffect(() => {
     loadQuote()
   }, [loadQuote])
+
+  // Initialize contractorNotes from quote on first load (not on subsequent refreshes)
+  useEffect(() => {
+    if (quote && quote.id !== prevQuoteIdRef.current) {
+      setContractorNotes(quote.contractorNotes ?? "")
+      prevQuoteIdRef.current = quote.id
+    }
+  }, [quote])
 
   // ---------------------------------------------------------------------------
   // Auto-save
@@ -496,6 +526,13 @@ export function QuoteDetailPage() {
 
   /** Called by child forms on every field change via tab wrappers. */
   const onFieldChange = useCallback(() => {
+    triggerAutoSave()
+  }, [triggerAutoSave])
+
+  /** Called when contractor notes textarea changes. */
+  const handleNotesChange = useCallback((value: string) => {
+    setContractorNotes(value)
+    pendingEditsRef.current.contractorNotes = value
     triggerAutoSave()
   }, [triggerAutoSave])
 
@@ -676,6 +713,7 @@ export function QuoteDetailPage() {
         {/* Right — sidebar */}
         <div className="space-y-8">
           <StatusPanel quote={quote} onStatusChange={handleStatusChange} />
+          <ContractorNotesPanel value={contractorNotes} onChange={handleNotesChange} />
           <DeleteQuotePanel
             quoteId={quote.id}
             onDeleted={() => navigate("/admin/quotes")}

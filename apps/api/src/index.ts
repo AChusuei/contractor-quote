@@ -716,7 +716,7 @@ app.get(
               q.job_site_address, q.property_type, q.budget_range,
               c.how_did_you_find_us, c.referred_by_contractor,
               q.scope, q.public_token,
-              q.status, q.created_at
+              q.status, q.created_at, q.contractor_notes
        FROM quotes q
        JOIN customers c ON q.customer_id = c.id
        WHERE q.id = ?`
@@ -756,6 +756,7 @@ app.get(
       publicToken: row.public_token,
       status: row.status,
       createdAt: row.created_at,
+      contractorNotes: row.contractor_notes ?? null,
     }
 
     const res: ApiOk<typeof quote> = { ok: true, data: quote }
@@ -828,6 +829,7 @@ app.patch(
       propertyType: { column: "property_type", value: data.propertyType },
       budgetRange: { column: "budget_range", value: data.budgetRange },
       scope: { column: "scope", value: data.scope !== undefined ? JSON.stringify(data.scope) : undefined },
+      contractorNotes: { column: "contractor_notes", value: data.contractorNotes },
     }
 
     // Update customer fields if any
@@ -882,7 +884,8 @@ app.patch(
               c.name, c.email, c.phone, c.cell,
               q.job_site_address, q.property_type, q.budget_range,
               c.how_did_you_find_us, c.referred_by_contractor,
-              q.scope, q.public_token, q.status, q.created_at
+              q.scope, q.public_token, q.status, q.created_at,
+              q.contractor_notes
        FROM quotes q
        JOIN customers c ON q.customer_id = c.id
        WHERE q.id = ?`
@@ -912,6 +915,7 @@ app.patch(
         publicToken: updated.public_token,
         status: updated.status,
         createdAt: updated.created_at,
+        contractorNotes: updated.contractor_notes ?? null,
       },
     })
   }
