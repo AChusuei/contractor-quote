@@ -469,8 +469,20 @@ export function QuoteDetailPage() {
   const performSave = useCallback(async () => {
     if (!id || !quote) return
     flushCurrentTab()
-    const edits = { ...pendingEditsRef.current }
-    if (Object.keys(edits).length === 0) return
+    const flushed = { ...pendingEditsRef.current }
+    // Only send fields that actually differ from the stored quote
+    const edits: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(flushed)) {
+      const stored = quote[key as keyof typeof quote]
+      if (JSON.stringify(value) !== JSON.stringify(stored)) {
+        edits[key] = value
+      }
+    }
+    if (Object.keys(edits).length === 0) {
+      pendingEditsRef.current = {}
+      isDirtyRef.current = false
+      return
+    }
 
     if (useLocalFallback) {
       updateQuote(id, edits)

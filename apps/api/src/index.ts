@@ -864,13 +864,27 @@ app.patch(
         .run()
     }
 
-    // --- Log activity ---
-    await c.env.DB.prepare(
-      `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
-       VALUES (?, ?, ?, ?, 'quote_edited', ?)`
-    )
-      .bind(quoteId, contractorId, staffId, actorEmail, JSON.stringify(Object.keys(data)))
-      .run()
+    // --- Log activity (merge rapid edits into one entry within 5-min window) ---
+    const changedKeys = Object.keys(data)
+    const recent = await c.env.DB.prepare(
+      `SELECT id, content FROM quote_activity
+       WHERE quote_id = ? AND type = 'quote_edited' AND staff_id IS ?
+         AND datetime(created_at) >= datetime('now', '-5 minutes')
+       ORDER BY id DESC LIMIT 1`
+    ).bind(quoteId, staffId ?? null).first<{ id: number; content: string | null }>()
+
+    if (recent) {
+      const existing: string[] = JSON.parse(recent.content ?? "[]")
+      const merged = Array.from(new Set([...existing, ...changedKeys]))
+      await c.env.DB.prepare(
+        `UPDATE quote_activity SET content = ? WHERE id = ?`
+      ).bind(JSON.stringify(merged), recent.id).run()
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
+         VALUES (?, ?, ?, ?, 'quote_edited', ?)`
+      ).bind(quoteId, contractorId, staffId, actorEmail, JSON.stringify(changedKeys)).run()
+    }
 
     // --- Fetch and return updated quote ---
     const updated = await c.env.DB.prepare(

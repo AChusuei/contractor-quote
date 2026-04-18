@@ -46,6 +46,29 @@ function formatDateTime(iso: string): string {
   })
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  jobSiteAddress: "Job site address",
+  propertyType: "Property type",
+  budgetRange: "Budget range",
+  scope: "Project scope",
+  name: "Customer name",
+  email: "Email",
+  phone: "Phone",
+  cell: "Cell",
+  howDidYouFindUs: "How they found us",
+  referredByContractor: "Referred by contractor",
+}
+
+function formatEditedFields(content: string): string {
+  try {
+    const keys = JSON.parse(content) as string[]
+    const labels = keys.map((k) => FIELD_LABELS[k] ?? k)
+    return "Updated: " + labels.join(", ")
+  } catch {
+    return content
+  }
+}
+
 function ActivityEntry({ item }: { item: ActivityItem }) {
   const icon = ACTIVITY_ICONS[item.type] ?? "\u2022"
   const label = ACTIVITY_LABELS[item.type] ?? item.type
@@ -53,6 +76,8 @@ function ActivityEntry({ item }: { item: ActivityItem }) {
   let detail: string | null = null
   if (item.type === "status_change" && item.newValue) {
     detail = STATUS_LABELS[item.newValue as QuoteStatus] ?? item.newValue
+  } else if (item.type === "quote_edited" && item.content) {
+    detail = formatEditedFields(item.content)
   } else if (item.content) {
     detail = item.content
   }
