@@ -870,13 +870,74 @@ app.patch(
         .run()
     }
 
-    // --- Log activity ---
-    await c.env.DB.prepare(
-      `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
-       VALUES (?, ?, ?, ?, 'quote_edited', ?)`
-    )
-      .bind(quoteId, contractorId, staffId, actorEmail, JSON.stringify(Object.keys(data)))
-      .run()
+    // --- Log activity: fetch old values, build {field,from,to}[], merge within 5-min window ---
+    type ChangeRecord = { field: string; from: unknown; to: unknown }
+
+    const oldRow = await c.env.DB.prepare(
+      `SELECT q.job_site_address, q.property_type, q.budget_range, q.scope,
+              c.name, c.email, c.phone, c.cell,
+              c.how_did_you_find_us, c.referred_by_contractor
+       FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?`
+    ).bind(quoteId).first<Record<string, unknown>>()
+
+    const oldValues: Record<string, unknown> = oldRow ? {
+      jobSiteAddress: oldRow.job_site_address,
+      propertyType: oldRow.property_type,
+      budgetRange: oldRow.budget_range,
+      scope: typeof oldRow.scope === "string" ? JSON.parse(oldRow.scope) : (oldRow.scope ?? {}),
+      name: oldRow.name,
+      email: oldRow.email,
+      phone: oldRow.phone,
+      cell: oldRow.cell,
+      howDidYouFindUs: oldRow.how_did_you_find_us,
+      referredByContractor: oldRow.referred_by_contractor,
+    } : {}
+
+    const newChanges: ChangeRecord[] = []
+    for (const key of Object.keys(data)) {
+      if (key === "scope" && data.scope !== undefined) {
+        const oldScope = (oldValues.scope as Record<string, unknown>) ?? {}
+        for (const [subKey, newVal] of Object.entries(data.scope)) {
+          const oldVal = oldScope[subKey] ?? null
+          if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            newChanges.push({ field: `scope.${subKey}`, from: oldVal, to: newVal })
+          }
+        }
+      } else {
+        const newVal = data[key as keyof typeof data]
+        const oldVal = oldValues[key] ?? null
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+          newChanges.push({ field: key, from: oldVal, to: newVal })
+        }
+      }
+    }
+
+    if (newChanges.length > 0) {
+      const recent = await c.env.DB.prepare(
+        `SELECT id, content FROM quote_activity
+         WHERE quote_id = ? AND type = 'quote_edited' AND staff_id IS ?
+           AND datetime(created_at) >= datetime('now', '-5 minutes')
+         ORDER BY id DESC LIMIT 1`
+      ).bind(quoteId, staffId ?? null).first<{ id: number; content: string | null }>()
+
+      if (recent) {
+        // Merge: keep oldest `from` per field, use newest `to`
+        const existing: ChangeRecord[] = JSON.parse(recent.content ?? "[]")
+        const byField = new Map<string, ChangeRecord>(existing.map((c) => [c.field, c]))
+        for (const change of newChanges) {
+          const prev = byField.get(change.field)
+          byField.set(change.field, { field: change.field, from: prev ? prev.from : change.from, to: change.to })
+        }
+        await c.env.DB.prepare(
+          `UPDATE quote_activity SET content = ? WHERE id = ?`
+        ).bind(JSON.stringify(Array.from(byField.values())), recent.id).run()
+      } else {
+        await c.env.DB.prepare(
+          `INSERT INTO quote_activity (quote_id, contractor_id, staff_id, actor_email, type, content)
+           VALUES (?, ?, ?, ?, 'quote_edited', ?)`
+        ).bind(quoteId, contractorId, staffId, actorEmail, JSON.stringify(newChanges)).run()
+      }
+    }
 
     // --- Fetch and return updated quote ---
     const updated = await c.env.DB.prepare(

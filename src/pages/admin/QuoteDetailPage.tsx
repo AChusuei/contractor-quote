@@ -76,7 +76,8 @@ function StatusBadge({ status }: { status: QuoteStatus }) {
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
+  const normalized = /Z|[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso.replace(" ", "T") + "Z"
+  return new Date(normalized).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -424,6 +425,7 @@ export function QuoteDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>("scope")
   const valuesRef = useRef<(() => Record<string, unknown>) | null>(null)
   const pendingEditsRef = useRef<Record<string, unknown>>({})
+  const isDirtyRef = useRef(false)
   const [useLocalFallback, setUseLocalFallback] = useState(false)
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [contractorNotes, setContractorNotes] = useState("")
@@ -503,8 +505,20 @@ export function QuoteDetailPage() {
   const performSave = useCallback(async () => {
     if (!id || !quote) return
     flushCurrentTab()
-    const edits = { ...pendingEditsRef.current }
-    if (Object.keys(edits).length === 0) return
+    const flushed = { ...pendingEditsRef.current }
+    // Only send fields that actually differ from the stored quote
+    const edits: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(flushed)) {
+      const stored = quote[key as keyof typeof quote]
+      if (JSON.stringify(value) !== JSON.stringify(stored)) {
+        edits[key] = value
+      }
+    }
+    if (Object.keys(edits).length === 0) {
+      pendingEditsRef.current = {}
+      isDirtyRef.current = false
+      return
+    }
 
     if (useLocalFallback) {
       updateQuote(id, edits)
@@ -520,12 +534,14 @@ export function QuoteDetailPage() {
       }
     }
     pendingEditsRef.current = {}
+    isDirtyRef.current = false
   }, [id, quote, useLocalFallback, flushCurrentTab])
 
   const { trigger: triggerAutoSave, flush: flushAutoSave } = useAutoSave(performSave)
 
   /** Called by child forms on every field change via tab wrappers. */
   const onFieldChange = useCallback(() => {
+    isDirtyRef.current = true
     triggerAutoSave()
   }, [triggerAutoSave])
 
@@ -536,11 +552,11 @@ export function QuoteDetailPage() {
     triggerAutoSave()
   }, [triggerAutoSave])
 
-  /** Switch tabs — flush immediately before switching. */
+  /** Switch tabs — flush immediately before switching, but only if something changed. */
   const handleTabChange = useCallback(
     async (tab: TabId) => {
-      flushCurrentTab()
-      if (Object.keys(pendingEditsRef.current).length > 0) {
+      if (isDirtyRef.current) {
+        flushCurrentTab()
         await flushAutoSave()
       }
       setActiveTab(tab)
