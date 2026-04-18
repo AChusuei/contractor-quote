@@ -523,7 +523,8 @@ export function QuoteDetailPage() {
 
     if (useLocalFallback) {
       updateQuote(id, edits)
-      setQuote(getQuote(id))
+      const localQuote = getQuote(id)
+      if (localQuote) setQuote({ ...localQuote, publicToken: quote.publicToken, customerId: quote.customerId })
     } else {
       const res = await apiPatch(`/quotes/${encodeURIComponent(id)}`, edits)
       if (res.ok) {
@@ -535,7 +536,8 @@ export function QuoteDetailPage() {
         if (actRes.ok) setActivities(actRes.data.activities)
       } else {
         updateQuote(id, edits)
-        setQuote(getQuote(id))
+        const localQuote = getQuote(id)
+        if (localQuote) setQuote({ ...localQuote, publicToken: quote.publicToken, customerId: quote.customerId })
       }
     }
     pendingEditsRef.current = {}
@@ -574,11 +576,12 @@ export function QuoteDetailPage() {
   // ---------------------------------------------------------------------------
 
   const handleStatusChange = async (status: QuoteStatus) => {
-    if (!id) return
+    if (!id || !quote) return
 
     if (useLocalFallback) {
       updateStatus(id, status)
-      setQuote(getQuote(id))
+      const localQuote = getQuote(id)
+      if (localQuote) setQuote({ ...localQuote, publicToken: quote.publicToken, customerId: quote.customerId })
     } else {
       const res = await apiPost(`/quotes/${encodeURIComponent(id)}/activity`, {
         type: "status_change",
@@ -588,7 +591,8 @@ export function QuoteDetailPage() {
         await loadQuote()
       } else {
         updateStatus(id, status)
-        setQuote(getQuote(id))
+        const localQuote = getQuote(id)
+        if (localQuote) setQuote({ ...localQuote, publicToken: quote.publicToken, customerId: quote.customerId })
       }
     }
   }
