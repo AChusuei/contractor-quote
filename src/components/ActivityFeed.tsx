@@ -50,20 +50,87 @@ const FIELD_LABELS: Record<string, string> = {
   jobSiteAddress: "Job site address",
   propertyType: "Property type",
   budgetRange: "Budget range",
-  scope: "Project scope",
   name: "Customer name",
   email: "Email",
   phone: "Phone",
   cell: "Cell",
   howDidYouFindUs: "How they found us",
   referredByContractor: "Referred by contractor",
+  "scope.scopeType": "Scope type",
+  "scope.layoutChanges": "Layout changes",
+  "scope.kitchenSize": "Kitchen size",
+  "scope.cabinets": "Cabinets",
+  "scope.cabinetDoorStyle": "Cabinet door style",
+  "scope.countertopMaterial": "Countertop material",
+  "scope.countertopEdge": "Countertop edge",
+  "scope.sinkType": "Sink type",
+  "scope.backsplash": "Backsplash",
+  "scope.flooringAction": "Flooring",
+  "scope.flooringType": "Flooring type",
+  "scope.applianceFridge": "Fridge",
+  "scope.applianceRange": "Range",
+  "scope.applianceDishwasher": "Dishwasher",
+  "scope.applianceHood": "Hood",
+  "scope.applianceMicrowave": "Microwave",
+  "scope.islandPeninsula": "Island/peninsula",
+  "scope.designHelp": "Design help",
+  "scope.additionalNotes": "Additional notes",
+}
+
+const VALUE_LABELS: Record<string, string> = {
+  // propertyType
+  house: "House", apt: "Apartment", building: "Building", townhouse: "Townhouse",
+  // budgetRange
+  "<10k": "Under $10k", "10-25k": "$10k–$25k", "25-50k": "$25k–$50k", "50k+": "$50k+",
+  // scopeType
+  supply_only: "Supply only", supply_install: "Supply & install",
+  // kitchenSize
+  small: "Small", medium: "Medium", large: "Large", open_concept: "Open concept",
+  // cabinets
+  new: "New", reface: "Reface", keep: "Keep",
+  // flooring
+  replace: "Replace",
+  // backsplash / yes-no
+  yes: "Yes", no: "No", undecided: "Undecided",
+  // appliances
+  existing: "Existing", none: "None",
+  // islandPeninsula
+  island: "Island", peninsula: "Peninsula", both: "Both",
+}
+
+// Fields where showing raw old/new values would be too noisy or too long
+const LONG_TEXT_FIELDS = new Set(["jobSiteAddress", "scope.additionalNotes", "scope.cabinetDoorStyle",
+  "scope.countertopMaterial", "scope.countertopEdge", "scope.sinkType", "scope.flooringType"])
+
+type ChangeRecord = { field: string; from: unknown; to: unknown }
+
+function labelValue(v: unknown): string {
+  if (v == null || v === "") return "—"
+  const s = String(v)
+  return VALUE_LABELS[s] ?? s
 }
 
 function formatEditedFields(content: string): string {
   try {
-    const keys = JSON.parse(content) as string[]
-    const labels = keys.map((k) => FIELD_LABELS[k] ?? k)
-    return "Updated: " + labels.join(", ")
+    const parsed: unknown = JSON.parse(content)
+    if (!Array.isArray(parsed) || parsed.length === 0) return content
+
+    // New format: [{field, from, to}]
+    if (typeof parsed[0] === "object" && parsed[0] !== null && "field" in parsed[0]) {
+      return (parsed as ChangeRecord[]).map(({ field, from, to }) => {
+        const label = FIELD_LABELS[field] ?? field
+        if (LONG_TEXT_FIELDS.has(field)) return `${label} updated`
+        return `${label}: ${labelValue(from)} → ${labelValue(to)}`
+      }).join("\n")
+    }
+
+    // Legacy format: ["field1", "field2"]
+    if (typeof parsed[0] === "string") {
+      const labels = (parsed as string[]).map((k) => FIELD_LABELS[k] ?? k)
+      return "Updated: " + labels.join(", ")
+    }
+
+    return content
   } catch {
     return content
   }
