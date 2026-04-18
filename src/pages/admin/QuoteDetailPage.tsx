@@ -526,8 +526,12 @@ export function QuoteDetailPage() {
     } else {
       const res = await apiPatch(`/quotes/${encodeURIComponent(id)}`, edits)
       if (res.ok) {
-        const refreshed = await apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`)
+        const [refreshed, actRes] = await Promise.all([
+          apiGet<Record<string, unknown>>(`/quotes/${encodeURIComponent(id)}`),
+          apiGet<{ activities: ActivityItem[] }>(`/quotes/${encodeURIComponent(id)}/activity?limit=100`),
+        ])
         if (refreshed.ok) setQuote(mapApiQuote(refreshed.data))
+        if (actRes.ok) setActivities(actRes.data.activities)
       } else {
         updateQuote(id, edits)
         setQuote(getQuote(id))
