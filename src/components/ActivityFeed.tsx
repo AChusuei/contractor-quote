@@ -98,9 +98,7 @@ const VALUE_LABELS: Record<string, string> = {
   island: "Island", peninsula: "Peninsula", both: "Both",
 }
 
-// Fields where showing raw old/new values would be too noisy or too long
-const LONG_TEXT_FIELDS = new Set(["jobSiteAddress", "scope.additionalNotes", "scope.cabinetDoorStyle",
-  "scope.countertopMaterial", "scope.countertopEdge", "scope.sinkType", "scope.flooringType"])
+const MAX_TEXT_PREVIEW = 80
 
 type ChangeRecord = { field: string; from: unknown; to: unknown }
 
@@ -108,6 +106,18 @@ function labelValue(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—"
   const s = String(v)
   return VALUE_LABELS[s] ?? s
+}
+
+function truncate(s: string): string {
+  return s.length > MAX_TEXT_PREVIEW ? s.slice(0, MAX_TEXT_PREVIEW) + "…" : s
+}
+
+function labelText(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—"
+  const s = String(v)
+  const labeled = VALUE_LABELS[s]
+  if (labeled) return labeled
+  return `"${truncate(s)}"`
 }
 
 function formatEditedFields(content: string): string {
@@ -119,8 +129,7 @@ function formatEditedFields(content: string): string {
     if (typeof parsed[0] === "object" && parsed[0] !== null && "field" in parsed[0]) {
       return (parsed as ChangeRecord[]).map(({ field, from, to }) => {
         const label = FIELD_LABELS[field] ?? field
-        if (LONG_TEXT_FIELDS.has(field)) return `${label} updated`
-        return `${label}: ${labelValue(from)} → ${labelValue(to)}`
+        return `${label}: ${labelText(from)} → ${labelText(to)}`
       }).join("\n")
     }
 
