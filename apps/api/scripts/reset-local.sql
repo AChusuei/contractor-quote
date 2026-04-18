@@ -1,5 +1,6 @@
 -- Reset local D1 database (drops all tables including migration tracking)
 -- Safe to run in dev — never run against production.
+DROP TABLE IF EXISTS audit_events;
 DROP TABLE IF EXISTS data_deletion_log;
 DROP TABLE IF EXISTS quote_activity;
 DROP TABLE IF EXISTS appointments;
