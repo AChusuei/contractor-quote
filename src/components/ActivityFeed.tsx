@@ -102,12 +102,6 @@ const MAX_TEXT_PREVIEW = 80
 
 type ChangeRecord = { field: string; from: unknown; to: unknown }
 
-function labelValue(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—"
-  const s = String(v)
-  return VALUE_LABELS[s] ?? s
-}
-
 function truncate(s: string): string {
   return s.length > MAX_TEXT_PREVIEW ? s.slice(0, MAX_TEXT_PREVIEW) + "…" : s
 }

@@ -32,8 +32,8 @@ import { MailIcon } from "lucide-react"
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Extended quote with customerId from API */
-type QuoteWithCustomer = Quote & { customerId?: string }
+/** Extended quote with customerId and publicToken from API */
+type QuoteWithCustomer = Quote & { customerId?: string; publicToken?: string }
 
 /** Map API quote response to the frontend Quote type */
 function mapApiQuote(raw: Record<string, unknown>): QuoteWithCustomer {
@@ -56,6 +56,7 @@ function mapApiQuote(raw: Record<string, unknown>): QuoteWithCustomer {
     statusHistory: (raw.statusHistory as Quote["statusHistory"]) ?? [],
     contractorNotes: (raw.contractorNotes as string) ?? "",
     customerId: (raw.customerId as string) ?? undefined,
+    publicToken: (raw.publicToken as string) ?? undefined,
   }
 }
 
@@ -725,6 +726,7 @@ export function QuoteDetailPage() {
           {activeTab === "photos" && (
             <PhotosForm
               quoteId={quote.id}
+              publicToken={quote.publicToken}
               readOnly={false}
             />
           )}
