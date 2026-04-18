@@ -180,6 +180,32 @@ export function jwtAuthHeaders(contractorId: string): Record<string, string> {
   return { Authorization: `Bearer ${header}.${payload}.fake` }
 }
 
+/** Create a fake JWT with an email claim (for /me/contractor tests) */
+export function jwtEmailAuthHeaders(email: string): Record<string, string> {
+  const header = btoa(JSON.stringify({ alg: "none", typ: "JWT" }))
+  const payload = btoa(JSON.stringify({ email }))
+  return { Authorization: `Bearer ${header}.${payload}.fake` }
+}
+
+export async function seedStaff(
+  contractorId: string,
+  overrides: Partial<{ id: string; email: string; name: string; role: string }> = {}
+) {
+  const s = {
+    id: crypto.randomUUID(),
+    email: "staff@example.test",
+    name: "Staff Member",
+    role: "estimator",
+    ...overrides,
+  }
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO staff (id, contractor_id, email, name, role, active) VALUES (?, ?, ?, ?, ?, 1)"
+  )
+    .bind(s.id, contractorId, s.email, s.name, s.role)
+    .run()
+  return { ...s, contractorId }
+}
+
 // ---------------------------------------------------------------------------
 // URL helper
 // ---------------------------------------------------------------------------

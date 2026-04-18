@@ -6,8 +6,10 @@ import {
   seedCustomer,
   seedQuote,
   seedPhoto,
+  seedStaff,
   authHeaders,
   jwtAuthHeaders,
+  jwtEmailAuthHeaders,
   apiUrl,
 } from "./test-helpers"
 
@@ -1084,5 +1086,56 @@ describe("GET /api/v1/appointment-windows", () => {
     expect(slot.label).toBeTruthy()
     expect(slot.startAt).toBeTruthy()
     expect(slot.endAt).toBeTruthy()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/me/contractor
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/me/contractor", () => {
+  it("returns contractor when x-contractor-id header is provided in dev mode", async () => {
+    const contractor = await seedContractor()
+    const res = await SELF.fetch(apiUrl("/me/contractor"), {
+      headers: authHeaders(contractor.id),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; data: { contractorId: string; contractorName: string; role: string } }
+    expect(body.ok).toBe(true)
+    expect(body.data.contractorId).toBe(contractor.id)
+    expect(body.data.contractorName).toBe(contractor.name)
+    expect(body.data.role).toBe("owner")
+  })
+
+  it("returns 404 in dev mode with no x-contractor-id header and no JWT", async () => {
+    const res = await SELF.fetch(apiUrl("/me/contractor"))
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("NOT_FOUND")
+  })
+
+  it("returns contractor when JWT has email matching a staff record", async () => {
+    const contractor = await seedContractor()
+    await seedStaff(contractor.id, { email: "staff@example.test", role: "estimator" })
+    const res = await SELF.fetch(apiUrl("/me/contractor"), {
+      headers: jwtEmailAuthHeaders("staff@example.test"),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean; data: { contractorId: string; contractorName: string; role: string } }
+    expect(body.ok).toBe(true)
+    expect(body.data.contractorId).toBe(contractor.id)
+    expect(body.data.contractorName).toBe(contractor.name)
+    expect(body.data.role).toBe("estimator")
+  })
+
+  it("returns 404 when JWT email has no staff record", async () => {
+    const res = await SELF.fetch(apiUrl("/me/contractor"), {
+      headers: jwtEmailAuthHeaders("nobody@example.test"),
+    })
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("NOT_FOUND")
   })
 })

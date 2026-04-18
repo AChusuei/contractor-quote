@@ -2399,8 +2399,11 @@ app.get(
         (payload.email_address as string | undefined) ??
         null
     } else if (c.env.ENVIRONMENT === "development") {
-      // Dev fallback: no JWT, return default contractor
-      const devContractorId = c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001"
+      // Dev fallback: no JWT, require x-contractor-id header (no hardcoded default)
+      const devContractorId = c.req.header("x-contractor-id")
+      if (!devContractorId) {
+        return apiError(c, "NOT_FOUND", "No contractor association found for this user")
+      }
       const row = await c.env.DB.prepare(
         "SELECT id, name FROM contractors WHERE id = ?"
       )
