@@ -33,7 +33,10 @@ const ACTIVITY_LABELS: Record<string, string> = {
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
+  // SQLite datetime('now') returns "YYYY-MM-DD HH:MM:SS" without timezone info.
+  // Normalize to UTC ISO format so the browser converts to the user's local time.
+  const normalized = /Z|[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso.replace(" ", "T") + "Z"
+  return new Date(normalized).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",

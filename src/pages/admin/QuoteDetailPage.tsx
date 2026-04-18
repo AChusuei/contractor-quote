@@ -77,7 +77,8 @@ function StatusBadge({ status }: { status: QuoteStatus }) {
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
+  const normalized = /Z|[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso.replace(" ", "T") + "Z"
+  return new Date(normalized).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -394,6 +395,7 @@ export function QuoteDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>("scope")
   const valuesRef = useRef<(() => Record<string, unknown>) | null>(null)
   const pendingEditsRef = useRef<Record<string, unknown>>({})
+  const isDirtyRef = useRef(false)
   const [useLocalFallback, setUseLocalFallback] = useState(false)
   const [activities, setActivities] = useState<ActivityItem[]>([])
 
@@ -484,20 +486,22 @@ export function QuoteDetailPage() {
       }
     }
     pendingEditsRef.current = {}
+    isDirtyRef.current = false
   }, [id, quote, useLocalFallback, flushCurrentTab])
 
   const { trigger: triggerAutoSave, flush: flushAutoSave } = useAutoSave(performSave)
 
   /** Called by child forms on every field change via tab wrappers. */
   const onFieldChange = useCallback(() => {
+    isDirtyRef.current = true
     triggerAutoSave()
   }, [triggerAutoSave])
 
-  /** Switch tabs — flush immediately before switching. */
+  /** Switch tabs — flush immediately before switching, but only if something changed. */
   const handleTabChange = useCallback(
     async (tab: TabId) => {
-      flushCurrentTab()
-      if (Object.keys(pendingEditsRef.current).length > 0) {
+      if (isDirtyRef.current) {
+        flushCurrentTab()
         await flushAutoSave()
       }
       setActiveTab(tab)
