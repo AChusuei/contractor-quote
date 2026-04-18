@@ -239,6 +239,31 @@ describe("QuoteDetailPage", () => {
     expect(capturedPhotosFormProps.publicToken).toBeUndefined()
   })
 
+  it("preserves quote state (and publicToken for PhotosForm) when status change API fails", async () => {
+    // Regression guard: before the fix, setQuote(getQuote(id)) in the failure branch would
+    // drop publicToken (since localStorage Quote type lacks that field), potentially causing
+    // an extra photos API fetch if the user is on the Photos tab.
+    mockApiPost.mockResolvedValueOnce({ ok: false, error: "Server error" })
+
+    renderPage()
+    await screen.findByText("Alex Johnson")
+
+    // Click a status transition (lead → reviewing, no confirmation needed)
+    await user.click(screen.getByRole("button", { name: /reviewing/i }))
+
+    // After API failure, quote state should be preserved (not set to null)
+    await waitFor(() => {
+      expect(screen.getByText("Alex Johnson")).toBeInTheDocument()
+    })
+
+    // Switch to Photos tab — publicToken must still flow through
+    await user.click(screen.getByRole("button", { name: /photos/i }))
+    await waitFor(() => {
+      expect(screen.getByTestId("photos-form")).toBeInTheDocument()
+    })
+    expect(capturedPhotosFormProps.publicToken).toBe("tok-test-abc")
+  })
+
   it("delete button shows confirmation, then calls DELETE API and navigates away", async () => {
     renderPage()
     await screen.findByText("Alex Johnson")
