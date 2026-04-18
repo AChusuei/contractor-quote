@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom"
 import { DevToolbar } from "@/components/DevToolbar"
 import staticLogoUrl from "@/assets/logo.png"
 import { useContractor } from "@/hooks/useContractor"
+import { NotFoundPage } from "@/components/NotFoundPage"
 
 const isLocalhost =
   window.location.hostname === "localhost" ||
@@ -36,7 +37,7 @@ export function AppShell() {
       </header>
       <main className="p-6">
         {!loading && error && !contractor
-          ? <p className="text-muted-foreground">{error}</p>
+          ? <NotFoundPage message={error ?? undefined} />
           : <Outlet />
         }
       </main>
