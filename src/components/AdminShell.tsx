@@ -80,6 +80,13 @@ function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
       >
         Appearance
       </Link>
+      <div className="mx-1 h-5 w-px bg-border" aria-hidden />
+      <Link
+        to="/admin/logout"
+        className="rounded px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        Sign Out
+      </Link>
     </nav>
   )
 }

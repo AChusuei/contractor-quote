@@ -27,6 +27,7 @@ export function PhotosForm({ quoteId, publicToken, readOnly, onStateChange }: Ph
   const [files, setFiles] = useState<UploadFile[]>([])
   const [photos, setPhotos] = useState<PhotoMeta[]>([])
   const [loading, setLoading] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!quoteId) return
@@ -134,16 +135,38 @@ export function PhotosForm({ quoteId, publicToken, readOnly, onStateChange }: Ph
               <img
                 src={photo.url}
                 alt={photo.filename}
-                className="rounded-md border aspect-square object-cover w-full"
+                className={`rounded-md border aspect-square object-cover w-full transition-opacity ${confirmingId === photo.id ? "opacity-40" : ""}`}
               />
-              <button
-                type="button"
-                onClick={() => handleDelete(photo.id)}
-                className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                aria-label={`Remove ${photo.filename}`}
-              >
-                {'\u2715'}
-              </button>
+              {confirmingId === photo.id ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md">
+                  <p className="text-xs font-medium text-white drop-shadow">Remove photo?</p>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { void handleDelete(photo.id); setConfirmingId(null) }}
+                      className="rounded bg-destructive px-2 py-0.5 text-xs text-white"
+                    >
+                      Remove
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingId(null)}
+                      className="rounded bg-white/80 px-2 py-0.5 text-xs text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingId(photo.id)}
+                  className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label={`Remove ${photo.filename}`}
+                >
+                  {'\u2715'}
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -22,6 +22,7 @@ import { SuperContractorDetailPage } from "@/pages/admin/super/SuperContractorDe
 import { SuperUsersPage } from "@/pages/admin/super/SuperUsersPage"
 import { SuperAuditLogPage } from "@/pages/admin/super/SuperAuditLogPage"
 import { AppearancePage } from "@/pages/admin/AppearancePage"
+import { LogoutPage } from "@/pages/admin/LogoutPage"
 import { ContractorSessionProvider } from "@/contexts/ContractorSession"
 
 interface AppProps {
@@ -46,6 +47,7 @@ export default function App({ clerkConfigured }: AppProps) {
         <>
           <Route path="/admin/sign-in/*" element={<SignInPage />} />
           <Route path="/admin/redirect" element={<PostLoginRedirect />} />
+          <Route path="/admin/logout" element={<LogoutPage />} />
         </>
       )}
 
