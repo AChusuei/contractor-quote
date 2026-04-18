@@ -12,6 +12,7 @@ import {
   STATUS_COLORS,
   type QuoteStatus,
 } from "@/lib/statusTransitions"
+import { MailIcon } from "lucide-react"
 
 type CustomerQuote = {
   id: string
@@ -248,7 +249,18 @@ export function CustomerDetailPage() {
 
       <div>
         <h1 className="text-2xl font-semibold">{customer.name}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{customer.email}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-sm text-muted-foreground">{customer.email}</p>
+          {customer.email && (
+            <a
+              href={`mailto:${customer.email}`}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={`Email ${customer.email}`}
+            >
+              <MailIcon className="h-4 w-4" />
+            </a>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
