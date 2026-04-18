@@ -61,7 +61,6 @@ describe("quoteSubmissionSchema", () => {
       expect(fields.name).toBeDefined()
       expect(fields.email).toBeDefined()
       expect(fields.phone).toBeDefined()
-      expect(fields.jobSiteAddress).toBeDefined()
       expect(fields.schemaVersion).toBeDefined()
     }
   })

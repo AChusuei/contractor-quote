@@ -105,7 +105,7 @@ const LONG_TEXT_FIELDS = new Set(["jobSiteAddress", "scope.additionalNotes", "sc
 type ChangeRecord = { field: string; from: unknown; to: unknown }
 
 function labelValue(v: unknown): string {
-  if (v == null || v === "") return "—"
+  if (v === null || v === undefined || v === "") return "—"
   const s = String(v)
   return VALUE_LABELS[s] ?? s
 }

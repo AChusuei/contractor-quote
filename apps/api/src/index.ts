@@ -102,6 +102,47 @@ app.get("/health", (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// Public appointment windows (unauthenticated)
+// ---------------------------------------------------------------------------
+app.get("/appointment-windows", (c) => {
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+  const slots: Array<{ id: string; label: string; startAt: string; endAt: string }> = []
+  const tomorrow = new Date()
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  tomorrow.setUTCHours(0, 0, 0, 0)
+
+  for (let i = 0; i < 14 && slots.length < 10; i++) {
+    const date = new Date(tomorrow)
+    date.setUTCDate(tomorrow.getUTCDate() + i)
+    const dow = date.getUTCDay()
+    if (dow === 0) continue
+
+    const dayLabel = `${DAYS[dow]}, ${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`
+    const dateStr = date.toISOString().slice(0, 10)
+
+    slots.push({
+      id: `${dateStr}-morning`,
+      label: `${dayLabel} · Morning (9am – 12pm)`,
+      startAt: `${dateStr}T09:00:00`,
+      endAt: `${dateStr}T12:00:00`,
+    })
+
+    if (slots.length < 10 && dow >= 1 && dow <= 5) {
+      slots.push({
+        id: `${dateStr}-afternoon`,
+        label: `${dayLabel} · Afternoon (1pm – 5pm)`,
+        startAt: `${dateStr}T13:00:00`,
+        endAt: `${dateStr}T17:00:00`,
+      })
+    }
+  }
+
+  return c.json({ ok: true, data: slots })
+})
+
+// ---------------------------------------------------------------------------
 // Public contractor lookup by slug (unauthenticated)
 // ---------------------------------------------------------------------------
 app.get("/contractors/by-slug/:slug", async (c) => {
@@ -832,6 +873,29 @@ app.patch(
       contractorNotes: { column: "contractor_notes", value: data.contractorNotes },
     }
 
+    // --- Log activity: fetch old values BEFORE updating ---
+    type ChangeRecord = { field: string; from: unknown; to: unknown }
+
+    const oldRow = await c.env.DB.prepare(
+      `SELECT q.job_site_address, q.property_type, q.budget_range, q.scope,
+              c.name, c.email, c.phone, c.cell,
+              c.how_did_you_find_us, c.referred_by_contractor
+       FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?`
+    ).bind(quoteId).first<Record<string, unknown>>()
+
+    const oldValues: Record<string, unknown> = oldRow ? {
+      jobSiteAddress: oldRow.job_site_address,
+      propertyType: oldRow.property_type,
+      budgetRange: oldRow.budget_range,
+      scope: typeof oldRow.scope === "string" ? JSON.parse(oldRow.scope) : (oldRow.scope ?? {}),
+      name: oldRow.name,
+      email: oldRow.email,
+      phone: oldRow.phone,
+      cell: oldRow.cell,
+      howDidYouFindUs: oldRow.how_did_you_find_us,
+      referredByContractor: oldRow.referred_by_contractor,
+    } : {}
+
     // Update customer fields if any
     const customerClauses: string[] = []
     const customerBinds: unknown[] = []
@@ -869,29 +933,6 @@ app.patch(
         .bind(...quoteBinds)
         .run()
     }
-
-    // --- Log activity: fetch old values, build {field,from,to}[], merge within 5-min window ---
-    type ChangeRecord = { field: string; from: unknown; to: unknown }
-
-    const oldRow = await c.env.DB.prepare(
-      `SELECT q.job_site_address, q.property_type, q.budget_range, q.scope,
-              c.name, c.email, c.phone, c.cell,
-              c.how_did_you_find_us, c.referred_by_contractor
-       FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?`
-    ).bind(quoteId).first<Record<string, unknown>>()
-
-    const oldValues: Record<string, unknown> = oldRow ? {
-      jobSiteAddress: oldRow.job_site_address,
-      propertyType: oldRow.property_type,
-      budgetRange: oldRow.budget_range,
-      scope: typeof oldRow.scope === "string" ? JSON.parse(oldRow.scope) : (oldRow.scope ?? {}),
-      name: oldRow.name,
-      email: oldRow.email,
-      phone: oldRow.phone,
-      cell: oldRow.cell,
-      howDidYouFindUs: oldRow.how_did_you_find_us,
-      referredByContractor: oldRow.referred_by_contractor,
-    } : {}
 
     const newChanges: ChangeRecord[] = []
     for (const key of Object.keys(data)) {
@@ -1508,8 +1549,7 @@ app.post(
       .run()
 
     // Return the public API URL for the logo
-    const logoUrl = `/api/v1/contractors/${contractorId}/logo`
-    return c.json({ ok: true, data: { logoUrl } })
+    return c.json({ ok: true, data: { logoUrl: r2Key } })
   }
 )
 
@@ -1935,17 +1975,128 @@ app.patch(
 )
 
 // ---------------------------------------------------------------------------
-// Delete customer data (by customer ID — moves logic from email-based delete)
+// Delete customer data (by email or by customer UUID)
 // ---------------------------------------------------------------------------
 app.delete(
-  "/customers/:customerId",
+  "/customers/:id",
   requireAuth(),
   rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "customer-delete" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
-    const customerId = c.req.param("customerId")
+    const id = c.req.param("id")
 
-    // Verify customer belongs to this contractor
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+    // --- Email-based deletion ---
+    if (!UUID_REGEX.test(id)) {
+      const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!EMAIL_REGEX.test(id)) {
+        return c.json(
+          { ok: false, error: "Invalid email address", code: "VALIDATION_ERROR" as const },
+          400
+        )
+      }
+
+      let requestType = "contractor"
+      const rawBody = await c.req.text()
+      if (rawBody) {
+        let body: unknown
+        try {
+          body = JSON.parse(rawBody)
+        } catch {
+          return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+        }
+        const result = customerDeletionSchema.safeParse(body)
+        if (!result.success) {
+          return c.json(
+            { ok: false, error: "Validation failed", code: "VALIDATION_ERROR" as const, fields: formatZodErrors(result.error) },
+            422
+          )
+        }
+        requestType = result.data.requestType
+      }
+
+      const { results: quotes } = await c.env.DB.prepare(
+        `SELECT q.id FROM quotes q JOIN customers c ON q.customer_id = c.id
+         WHERE LOWER(c.email) = LOWER(?) AND q.contractor_id = ?`
+      )
+        .bind(id, contractorId)
+        .all<{ id: string }>()
+
+      if (!quotes || quotes.length === 0) {
+        return apiError(c, "NOT_FOUND", "No customer data found for this email")
+      }
+
+      const quoteIds = quotes.map((q) => q.id)
+      const placeholders = quoteIds.map(() => "?").join(", ")
+
+      let photosDeleted = 0
+      let appointmentsDeleted = 0
+      let activityDeleted = 0
+      let quotesDeleted = 0
+
+      const { results: photos } = await c.env.DB.prepare(
+        `SELECT storage_key FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .all<{ storage_key: string }>()
+
+      for (const photo of photos) {
+        await c.env.STORAGE.delete(photo.storage_key)
+        photosDeleted++
+      }
+
+      await c.env.DB.prepare(
+        `DELETE FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+
+      const apptResult = await c.env.DB.prepare(
+        `DELETE FROM appointments WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+      appointmentsDeleted = apptResult.meta?.changes ?? 0
+
+      const actResult = await c.env.DB.prepare(
+        `DELETE FROM quote_activity WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+      activityDeleted = actResult.meta?.changes ?? 0
+
+      const qResult = await c.env.DB.prepare(
+        `DELETE FROM quotes WHERE id IN (${placeholders}) AND contractor_id = ?`
+      )
+        .bind(...quoteIds, contractorId)
+        .run()
+      quotesDeleted = qResult.meta?.changes ?? 0
+
+      const emailBytes = new TextEncoder().encode(id.toLowerCase().trim())
+      const hashBuffer = await crypto.subtle.digest("SHA-256", emailBytes)
+      const emailHash = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")
+
+      await c.env.DB.prepare(
+        `INSERT INTO data_deletion_log (
+          contractor_id, request_type, requested_by, email_hash,
+          quotes_deleted, photos_deleted, appointments_deleted, activity_records_deleted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(contractorId, requestType, contractorId, emailHash, quotesDeleted, photosDeleted, appointmentsDeleted, activityDeleted)
+        .run()
+
+      return c.json({
+        ok: true,
+        data: { quotesDeleted, photosDeleted, appointmentsDeleted, activityRecordsDeleted: activityDeleted },
+      })
+    }
+
+    // --- UUID-based deletion ---
+    const customerId = id
+
     const customer = await c.env.DB.prepare(
       "SELECT id, email FROM customers WHERE id = ? AND contractor_id = ?"
     )
@@ -1975,7 +2126,6 @@ app.delete(
       requestType = result.data.requestType
     }
 
-    // Find all quotes for this customer
     const { results: quotes } = await c.env.DB.prepare(
       "SELECT id FROM quotes WHERE customer_id = ? AND contractor_id = ?"
     )
@@ -1992,7 +2142,6 @@ app.delete(
     if (quoteIds.length > 0) {
       const placeholders = quoteIds.map(() => "?").join(", ")
 
-      // Delete photos from R2
       const { results: photos } = await c.env.DB.prepare(
         `SELECT storage_key FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
       )
@@ -2004,7 +2153,6 @@ app.delete(
         photosDeleted++
       }
 
-      // Delete DB records
       await c.env.DB.prepare(
         `DELETE FROM photos WHERE quote_id IN (${placeholders}) AND contractor_id = ?`
       )
@@ -2033,14 +2181,12 @@ app.delete(
       quotesDeleted = quotesResult.meta?.changes ?? 0
     }
 
-    // Delete the customer record
     await c.env.DB.prepare(
       "DELETE FROM customers WHERE id = ? AND contractor_id = ?"
     )
       .bind(customerId, contractorId)
       .run()
 
-    // Hash email for audit log
     const emailBytes = new TextEncoder().encode(customer.email.toLowerCase().trim())
     const hashBuffer = await crypto.subtle.digest("SHA-256", emailBytes)
     const emailHash = Array.from(new Uint8Array(hashBuffer))
@@ -2053,16 +2199,7 @@ app.delete(
         quotes_deleted, photos_deleted, appointments_deleted, activity_records_deleted
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(
-        contractorId,
-        requestType,
-        contractorId,
-        emailHash,
-        quotesDeleted,
-        photosDeleted,
-        appointmentsDeleted,
-        activityDeleted
-      )
+      .bind(contractorId, requestType, contractorId, emailHash, quotesDeleted, photosDeleted, appointmentsDeleted, activityDeleted)
       .run()
 
     const res: ApiOk<{

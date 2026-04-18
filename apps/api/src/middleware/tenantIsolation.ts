@@ -117,10 +117,12 @@ async function extractAuthContext(c: Context): Promise<AuthContext | null> {
     return null
   }
 
-  // Dev fallback: no JWT at all, allow x-contractor-id header
+  // Dev fallback: no JWT at all, require x-contractor-id header
   if (c.env.ENVIRONMENT === "development") {
+    const devContractorId = c.req.header("x-contractor-id")
+    if (!devContractorId) return null
     return {
-      contractorId: c.req.header("x-contractor-id") ?? "00000000-0000-4000-8000-000000000001",
+      contractorId: devContractorId,
       actorEmail: null,
       staffId: null,
     }

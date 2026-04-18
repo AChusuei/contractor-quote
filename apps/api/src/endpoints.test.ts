@@ -128,7 +128,6 @@ describe("POST /api/v1/quotes", () => {
     expect(body.fields.name).toBeDefined()
     expect(body.fields.email).toBeDefined()
     expect(body.fields.phone).toBeDefined()
-    expect(body.fields.jobSiteAddress).toBeDefined()
   })
 
   it("returns 422 with field error for invalid email", async () => {

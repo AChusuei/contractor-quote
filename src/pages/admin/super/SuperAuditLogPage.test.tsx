@@ -104,18 +104,18 @@ describe("SuperAuditLogPage", () => {
     await user.click(showLink)
 
     // Expanded detail shows JSON
-    expect(await screen.findByText(/\"field\"/)).toBeInTheDocument()
+    expect(await screen.findByText(/"field"/)).toBeInTheDocument()
   })
 
   it("clicking expanded row again collapses the detail panel", async () => {
     renderPage()
     await screen.findByText("update")
     await user.click(screen.getByText("show"))
-    await screen.findByText(/\"field\"/)
+    await screen.findByText(/"field"/)
 
     await user.click(screen.getByText("hide"))
     await waitFor(() => {
-      expect(screen.queryByText(/\"field\"/)).toBeNull()
+      expect(screen.queryByText(/"field"/)).toBeNull()
     })
   })
 
