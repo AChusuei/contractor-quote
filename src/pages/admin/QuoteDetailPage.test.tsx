@@ -49,8 +49,12 @@ vi.mock("@/components/forms/ProjectScopeForm", async () => {
   }
 })
 
+let capturedPhotosFormProps: Record<string, unknown> = {}
 vi.mock("@/components/forms/PhotosForm", () => ({
-  PhotosForm: () => <div data-testid="photos-form" />,
+  PhotosForm: (props: Record<string, unknown>) => {
+    capturedPhotosFormProps = props
+    return <div data-testid="photos-form" />
+  },
 }))
 
 vi.mock("@/components/ActivityFeed", () => ({
@@ -96,6 +100,7 @@ const MOCK_QUOTE_API = {
   statusHistory: [],
   contractorNotes: "",
   customerId: null,
+  publicToken: "tok-test-abc",
   createdAt: "2026-01-01T10:00:00Z",
 }
 
@@ -124,6 +129,7 @@ describe("QuoteDetailPage", () => {
     mockApiGet.mockReset()
     mockApiPost.mockReset()
     mockApiDelete.mockReset()
+    capturedPhotosFormProps = {}
     mockApiGet.mockImplementation((path: string) => {
       if (path.includes("/activity")) return Promise.resolve({ ok: true, data: MOCK_ACTIVITY_API })
       return Promise.resolve({ ok: true, data: MOCK_QUOTE_API })
@@ -201,6 +207,36 @@ describe("QuoteDetailPage", () => {
     // Dialog dismissed, apiPost not called
     expect(mockApiPost).not.toHaveBeenCalled()
     expect(screen.queryByText(/move this quote to/i)).toBeNull()
+  })
+
+  it("passes publicToken from API response to PhotosForm", async () => {
+    renderPage()
+    await screen.findByText("Alex Johnson")
+
+    // Switch to the Photos tab to mount PhotosForm
+    await user.click(screen.getByRole("button", { name: /photos/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("photos-form")).toBeInTheDocument()
+    })
+    expect(capturedPhotosFormProps.publicToken).toBe("tok-test-abc")
+  })
+
+  it("passes undefined publicToken to PhotosForm when API omits it", async () => {
+    const quoteWithoutToken = { ...MOCK_QUOTE_API, publicToken: undefined }
+    mockApiGet.mockImplementation((path: string) => {
+      if (path.includes("/activity")) return Promise.resolve({ ok: true, data: MOCK_ACTIVITY_API })
+      return Promise.resolve({ ok: true, data: quoteWithoutToken })
+    })
+    renderPage()
+    await screen.findByText("Alex Johnson")
+
+    await user.click(screen.getByRole("button", { name: /photos/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("photos-form")).toBeInTheDocument()
+    })
+    expect(capturedPhotosFormProps.publicToken).toBeUndefined()
   })
 
   it("delete button shows confirmation, then calls DELETE API and navigates away", async () => {
