@@ -147,6 +147,23 @@ export async function seedPhoto(
   return { ...p, quoteId, contractorId }
 }
 
+export async function seedSuperUser(
+  overrides: Partial<{ id: string; email: string; name: string }> = {}
+) {
+  const u = {
+    id: "su-test-001",
+    email: "superadmin@test.example",
+    name: "Super Admin",
+    ...overrides,
+  }
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO super_users (id, email, name) VALUES (?, ?, ?)"
+  )
+    .bind(u.id, u.email, u.name)
+    .run()
+  return u
+}
+
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------

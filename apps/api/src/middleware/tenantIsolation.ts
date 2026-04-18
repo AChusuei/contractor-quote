@@ -18,18 +18,11 @@ function extractEmailFromJwt(c: Context): string | null {
 }
 
 /**
- * Check if the current caller is a platform admin by inspecting their JWT email
- * against the PLATFORM_ADMIN_EMAILS env var.
+ * Check if the current caller is a platform admin.
+ * Checks PLATFORM_ADMIN_EMAILS env var first (fast path), then falls through
+ * to the super_users table as the source of truth.
  */
 async function isPlatformAdmin(c: Context): Promise<boolean> {
-  const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS as string | undefined
-  if (!adminEmailsRaw) return false
-
-  const adminEmails = adminEmailsRaw
-    .split(",")
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean)
-
   const authHeader = c.req.header("authorization")
   if (!authHeader?.startsWith("Bearer ")) return false
 
@@ -37,7 +30,27 @@ async function isPlatformAdmin(c: Context): Promise<boolean> {
   if (!payload) return false
 
   const email = payload.email ?? payload.primary_email ?? payload.email_address
-  return Boolean(email && adminEmails.includes((email as string).toLowerCase()))
+  if (!email) return false
+
+  const normalizedEmail = (email as string).toLowerCase()
+
+  // Fast path: env var check
+  const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS as string | undefined
+  if (adminEmailsRaw) {
+    const adminEmails = adminEmailsRaw
+      .split(",")
+      .map((e: string) => e.trim().toLowerCase())
+      .filter(Boolean)
+    if (adminEmails.includes(normalizedEmail)) return true
+  }
+
+  // Fall through: check super_users table
+  const row = await c.env.DB.prepare(
+    "SELECT id FROM super_users WHERE LOWER(email) = ? LIMIT 1"
+  )
+    .bind(normalizedEmail)
+    .first()
+  return !!row
 }
 
 interface AuthContext {
