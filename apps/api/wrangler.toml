@@ -79,6 +79,6 @@ id = "f550d2c295914276a23af2d4b29dbaeb"
 
 [env.dev.vars]
 ENVIRONMENT = "development"
-CORS_ORIGINS = "https://*.dev.contractorquote.work"
+CORS_ORIGINS = "https://contractor-quote-dev.pages.dev,https://*.dev.contractorquote.work"
 NOTIFICATION_FROM_EMAIL = "noreply@contractorquote.work"
-APP_BASE_URL = "https://central-cabinets.dev.contractorquote.work"
+APP_BASE_URL = "https://contractor-quote-dev.pages.dev"
