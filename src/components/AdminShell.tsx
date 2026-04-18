@@ -1,18 +1,11 @@
 import { useEffect, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
-import { useAuth, UserButton } from "@clerk/clerk-react"
+import { useAuth } from "@clerk/clerk-react"
 import staticLogoUrl from "@/assets/logo.png"
 import { apiGet, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 
 const CLERK_CONFIGURED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
-
-// Only rendered inside a ClerkProvider (when CLERK_CONFIGURED is true)
-function AdminUserButton() {
-  const { isSignedIn } = useAuth()
-  if (!isSignedIn) return null
-  return <UserButton afterSignOutUrl="/admin/sign-in" />
-}
 
 // Navigation bar with platform admin check — only rendered inside ClerkProvider
 function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
@@ -111,7 +104,6 @@ function ClerkAdminHeader() {
       <AdminNav isPlatformAdmin={isPlatformAdmin} />
       <div className="ml-auto flex items-center gap-3">
         <ContractorDropdown isPlatformAdmin={isPlatformAdmin} />
-        <AdminUserButton />
       </div>
     </>
   )
