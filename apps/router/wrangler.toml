@@ -1,0 +1,22 @@
+name = "contractor-quote-router-dev"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+
+routes = [
+  { pattern = "*.dev.contractorquote.work/*", zone_name = "contractorquote.work" }
+]
+
+[vars]
+PAGES_URL = "https://contractor-quote-dev.pages.dev"
+
+# ---------------------------------------------------------------------------
+# Prod environment (deploy with: wrangler deploy --env prod)
+# ---------------------------------------------------------------------------
+[env.prod]
+name = "contractor-quote-router"
+routes = [
+  { pattern = "*.contractorquote.work/*", zone_name = "contractorquote.work" }
+]
+
+[env.prod.vars]
+PAGES_URL = "https://contractor-quote.pages.dev"
