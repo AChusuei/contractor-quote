@@ -37,12 +37,14 @@ const columns: DataTableColumnDef<Quote>[] = [
     id: "customerName",
     accessorKey: "customerName",
     header: "Customer",
+    cell: ({ getValue }) => <span className="font-medium">{String(getValue())}</span>,
     filterMeta: { filterVariant: "text" },
   },
   {
     id: "address",
     accessorKey: "address",
     header: "Address",
+    cell: ({ getValue }) => <span className="text-muted-foreground">{String(getValue() ?? '')}</span>,
     filterMeta: { filterVariant: "text" },
   },
   {
@@ -64,6 +66,7 @@ const columns: DataTableColumnDef<Quote>[] = [
     id: "budgetRange",
     accessorKey: "budgetRange",
     header: "Budget",
+    cell: ({ getValue }) => <span className="text-muted-foreground">{String(getValue() ?? '')}</span>,
     filterMeta: {
       filterVariant: "select",
       options: [
@@ -228,29 +231,31 @@ export function QuotesPage() {
         </p>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={quotes}
-        isLoading={isLoading}
-        error={error}
-        emptyMessage="No quotes yet."
-        onRowClick={(row) => navigate(`/admin/quotes/${row.id}`)}
-        enableGlobalFilter
-        enableColumnFilters
-        enableSorting
-        enablePagination
-        defaultPageSize={25}
-        enableExport
-        exportFilename="quotes"
-        refreshSlot={
-          <button
-            onClick={() => void loadQuotes()}
-            className="rounded border border-input bg-background px-3 py-1.5 text-xs hover:bg-accent"
-          >
-            Refresh
-          </button>
-        }
-      />
+      <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <DataTable
+          columns={columns}
+          data={quotes}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="No quotes yet."
+          onRowClick={(row) => navigate(`/admin/quotes/${row.id}`)}
+          enableGlobalFilter
+          enableColumnFilters
+          enableSorting
+          enablePagination
+          defaultPageSize={25}
+          enableExport
+          exportFilename="quotes"
+          refreshSlot={
+            <button
+              onClick={() => void loadQuotes()}
+              className="rounded border border-input bg-background px-3 py-1.5 text-xs hover:bg-accent"
+            >
+              Refresh
+            </button>
+          }
+        />
+      </div>
     </div>
   )
 }
