@@ -232,6 +232,45 @@ export function requireContractorOwnership() {
 }
 
 /**
+ * Middleware: block suspended/canceled contractor accounts.
+ * Must be used after requireAuth(). Fails open on DB errors.
+ */
+export function requireActiveBilling() {
+  return async (c: Context, next: Next) => {
+    const contractorId = c.get("contractorId") as string | undefined
+    if (!contractorId) {
+      await next()
+      return
+    }
+
+    try {
+      const row = await c.env.DB.prepare(
+        "SELECT billing_status, billing_exempt FROM contractors WHERE id = ?"
+      )
+        .bind(contractorId)
+        .first<{ billing_status: string; billing_exempt: number }>()
+
+      if (row && row.billing_exempt !== 1) {
+        if (row.billing_status === "suspended" || row.billing_status === "canceled") {
+          return c.json(
+            {
+              ok: false,
+              error: "Account suspended — update payment to restore access",
+              code: "BILLING_SUSPENDED",
+            },
+            402
+          )
+        }
+      }
+    } catch {
+      // FAIL OPEN: never block on infrastructure errors
+    }
+
+    await next()
+  }
+}
+
+/**
  * Middleware: verify the authenticated staff member has one of the allowed roles.
  * Must be used after `requireAuth()`. Checks the staff table using the staffId
  * or actorEmail set by requireAuth().
