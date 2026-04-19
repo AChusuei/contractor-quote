@@ -22,7 +22,9 @@ function makeD1Mock(
   const deleteQuotes = { meta: { changes: quoteChanges } }
   const insertLog = { meta: { changes: 1 } }
 
-  const responses = [selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
+  // requireActiveBilling runs before the handler — prepend a slot (first() always null → fail open)
+  const billingSlot = { results: [] }
+  const responses = [billingSlot, selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
 
   const prepare = vi.fn().mockImplementation(() => {
     const idx = callIndex++

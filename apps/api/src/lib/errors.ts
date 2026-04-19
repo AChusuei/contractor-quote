@@ -9,6 +9,7 @@ const STATUS_MAP: Record<ErrorCode, number> = {
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
   UNAUTHORIZED: 401,
+  BILLING_SUSPENDED: 402,
 }
 
 /**

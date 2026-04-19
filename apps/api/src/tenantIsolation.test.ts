@@ -6,6 +6,7 @@ import {
   seedCustomer,
   seedQuote,
   seedSuperUser,
+  authHeaders,
   apiUrl,
 } from "./test-helpers"
 
@@ -97,5 +98,72 @@ describe("isPlatformAdmin — super_users DB fallback", () => {
 
     // Should get 403 because auth context is contractorA, but route is contractorB
     expect(res.status).toBe(403)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// requireActiveBilling — billing guard middleware
+// ---------------------------------------------------------------------------
+
+describe("requireActiveBilling", () => {
+  it("allows access when billing_status is active", async () => {
+    const contractor = await seedContractor({ billingStatus: "active" })
+    const customer = await seedCustomer(contractor.id)
+    await seedQuote(customer.id, contractor.id)
+
+    const res = await SELF.fetch(apiUrl(`/contractors/${contractor.id}/quotes`), {
+      headers: authHeaders(contractor.id),
+    })
+
+    expect(res.status).toBe(200)
+  })
+
+  it("allows access when billing_status is past_due", async () => {
+    const contractor = await seedContractor({ billingStatus: "past_due" })
+    const customer = await seedCustomer(contractor.id)
+    await seedQuote(customer.id, contractor.id)
+
+    const res = await SELF.fetch(apiUrl(`/contractors/${contractor.id}/quotes`), {
+      headers: authHeaders(contractor.id),
+    })
+
+    expect(res.status).toBe(200)
+  })
+
+  it("blocks access with 402 when billing_status is suspended", async () => {
+    const contractor = await seedContractor({ billingStatus: "suspended" })
+
+    const res = await SELF.fetch(apiUrl(`/contractors/${contractor.id}/quotes`), {
+      headers: authHeaders(contractor.id),
+    })
+
+    expect(res.status).toBe(402)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("BILLING_SUSPENDED")
+  })
+
+  it("blocks access with 402 when billing_status is canceled", async () => {
+    const contractor = await seedContractor({ billingStatus: "canceled" })
+
+    const res = await SELF.fetch(apiUrl(`/contractors/${contractor.id}/quotes`), {
+      headers: authHeaders(contractor.id),
+    })
+
+    expect(res.status).toBe(402)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("BILLING_SUSPENDED")
+  })
+
+  it("allows access when billing_exempt is 1 regardless of billing_status", async () => {
+    const contractor = await seedContractor({ billingStatus: "suspended", billingExempt: 1 })
+
+    const res = await SELF.fetch(apiUrl(`/contractors/${contractor.id}/quotes`), {
+      headers: authHeaders(contractor.id),
+    })
+
+    // Exempt contractors pass billing check; no customers/quotes seeded so 200 with empty list
+    expect(res.status).toBe(200)
   })
 })

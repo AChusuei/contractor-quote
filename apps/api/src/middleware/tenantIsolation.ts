@@ -2,6 +2,40 @@ import type { Context, Next } from "hono"
 import { apiError } from "../lib/errors"
 import { verifyClerkJwt } from "../lib/jwtVerify"
 
+// ---------------------------------------------------------------------------
+// Billing guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Middleware: require contractor billing to be in good standing.
+ * Must be used after requireAuth() — depends on contractorId being set.
+ *
+ * Fail-open: passes through if the DB query fails or contractor row is missing
+ * (avoids blocking access on infrastructure errors).
+ */
+export function requireActiveBilling() {
+  return async (c: Context, next: Next) => {
+    const contractorId = c.get("contractorId") as string
+    try {
+      const row = await c.env.DB.prepare(
+        "SELECT billing_status, billing_exempt FROM contractors WHERE id = ? LIMIT 1"
+      )
+        .bind(contractorId)
+        .first<{ billing_status: string; billing_exempt: number }>()
+
+      if (row && row.billing_exempt !== 1) {
+        const status = row.billing_status
+        if (status !== "active" && status !== "past_due") {
+          return apiError(c, "BILLING_SUSPENDED", "Account suspended — update payment to restore access")
+        }
+      }
+    } catch {
+      // Fail open on DB errors
+    }
+    await next()
+  }
+}
+
 /**
  * Extract the caller's email from the JWT payload.
  */

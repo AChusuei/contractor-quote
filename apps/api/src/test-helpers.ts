@@ -20,6 +20,8 @@ export async function seedContractor(
     name: string
     email: string | null
     phone: string | null
+    billingStatus: string
+    billingExempt: number
   }> = {}
 ) {
   const c = {
@@ -28,12 +30,14 @@ export async function seedContractor(
     name: "Central Cabinets",
     email: "admin@centralcabinets.test" as string | null,
     phone: null as string | null,
+    billingStatus: "active",
+    billingExempt: 0,
     ...overrides,
   }
   await env.DB.prepare(
-    "INSERT OR REPLACE INTO contractors (id, slug, name, email, phone) VALUES (?, ?, ?, ?, ?)"
+    "INSERT OR REPLACE INTO contractors (id, slug, name, email, phone, billing_status, billing_exempt) VALUES (?, ?, ?, ?, ?, ?, ?)"
   )
-    .bind(c.id, c.slug, c.name, c.email, c.phone)
+    .bind(c.id, c.slug, c.name, c.email, c.phone, c.billingStatus, c.billingExempt)
     .run()
   return c
 }
