@@ -6,6 +6,7 @@ import {
   requireAuth,
   requireContractorOwnership,
   requireQuoteOwnership,
+  requireStaffRole,
 } from "./middleware/tenantIsolation"
 import { requireSuperAdmin } from "./middleware/superAdmin"
 import {
@@ -51,7 +52,9 @@ type Bindings = {
   SENDGRID_API_KEY: string
   TURNSTILE_SECRET_KEY: string
   CLERK_JWKS_URL: string
+  PADDLE_API_KEY: string
   PADDLE_WEBHOOK_SECRET: string
+  PADDLE_ENVIRONMENT: string
 }
 
 type Variables = {
@@ -3732,6 +3735,253 @@ app.post("/webhooks/paddle", async (c) => {
 
   return c.json({ ok: true })
 })
+
+// ---------------------------------------------------------------------------
+// Billing — Paddle backend endpoints
+// ---------------------------------------------------------------------------
+
+function paddleBase(env: Bindings): string {
+  return env.PADDLE_ENVIRONMENT === "sandbox"
+    ? "https://sandbox-api.paddle.com"
+    : "https://api.paddle.com"
+}
+
+// GET /contractors/:contractorId/billing
+app.get(
+  "/contractors/:contractorId/billing",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+    const row = await c.env.DB.prepare(
+      `SELECT billing_status, monthly_rate_cents, next_billing_date,
+              paddle_customer_id, grace_period_ends_at
+       FROM contractors WHERE id = ?`
+    )
+      .bind(contractorId)
+      .first<{
+        billing_status: string
+        monthly_rate_cents: number | null
+        next_billing_date: string | null
+        paddle_customer_id: string | null
+        grace_period_ends_at: string | null
+      }>()
+
+    if (!row) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    const maskedCustomerId = row.paddle_customer_id
+      ? `***${row.paddle_customer_id.slice(-8)}`
+      : null
+
+    return c.json({
+      ok: true,
+      data: {
+        billingStatus: row.billing_status,
+        monthlyRateCents: row.monthly_rate_cents,
+        nextBillingDate: row.next_billing_date,
+        paddleCustomerId: maskedCustomerId,
+        gracePeriodEndsAt: row.grace_period_ends_at,
+      },
+    })
+  }
+)
+
+// POST /contractors/:contractorId/billing/setup
+app.post(
+  "/contractors/:contractorId/billing/setup",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    if (!c.env.PADDLE_API_KEY) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const contractorId = c.req.param("contractorId")
+    const contractor = await c.env.DB.prepare(
+      "SELECT name, email, paddle_customer_id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ name: string; email: string | null; paddle_customer_id: string | null }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    const base = paddleBase(c.env)
+    let paddleCustomerId = contractor.paddle_customer_id
+
+    if (!paddleCustomerId) {
+      const customerRes = await fetch(`${base}/customers`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: contractor.email ?? undefined,
+          name: contractor.name,
+        }),
+      })
+
+      if (!customerRes.ok) {
+        console.error("Paddle create customer failed:", customerRes.status, await customerRes.text())
+        return apiError(c, "INTERNAL_ERROR", "Failed to create billing customer")
+      }
+
+      const customerData = (await customerRes.json()) as { data: { id: string } }
+      paddleCustomerId = customerData.data.id
+
+      await c.env.DB.prepare(
+        "UPDATE contractors SET paddle_customer_id = ? WHERE id = ?"
+      )
+        .bind(paddleCustomerId, contractorId)
+        .run()
+    }
+
+    const anchor = new Date().toISOString().slice(0, 10)
+    const subRes = await fetch(`${base}/subscriptions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customer_id: paddleCustomerId,
+        billing_cycle_anchor: anchor,
+        collection_mode: "automatic",
+      }),
+    })
+
+    if (!subRes.ok) {
+      console.error("Paddle create subscription failed:", subRes.status, await subRes.text())
+      return apiError(c, "INTERNAL_ERROR", "Failed to create billing subscription")
+    }
+
+    const subData = (await subRes.json()) as {
+      data: { id: string; management?: { payment_method_update_url?: string } }
+    }
+    const subscriptionId = subData.data.id
+    const checkoutUrl = subData.data.management?.payment_method_update_url ?? null
+
+    await c.env.DB.prepare(
+      "UPDATE contractors SET paddle_subscription_id = ?, billing_status = 'active' WHERE id = ?"
+    )
+      .bind(subscriptionId, contractorId)
+      .run()
+
+    return c.json({ ok: true, data: { checkoutUrl } })
+  }
+)
+
+// POST /contractors/:contractorId/billing/portal
+app.post(
+  "/contractors/:contractorId/billing/portal",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    if (!c.env.PADDLE_API_KEY) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const contractorId = c.req.param("contractorId")
+    const contractor = await c.env.DB.prepare(
+      "SELECT paddle_customer_id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ paddle_customer_id: string | null }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    if (!contractor.paddle_customer_id) {
+      return apiError(c, "VALIDATION_ERROR", "No billing account found — set up billing first")
+    }
+
+    const base = paddleBase(c.env)
+    const portalRes = await fetch(
+      `${base}/customers/${contractor.paddle_customer_id}/portal-sessions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      }
+    )
+
+    if (!portalRes.ok) {
+      console.error("Paddle portal session failed:", portalRes.status, await portalRes.text())
+      return apiError(c, "INTERNAL_ERROR", "Failed to create billing portal session")
+    }
+
+    const portalData = (await portalRes.json()) as {
+      data: { urls: { general: { overview: string } } }
+    }
+    const portalUrl = portalData.data.urls.general.overview
+
+    return c.json({ ok: true, data: { portalUrl } })
+  }
+)
+
+// DELETE /contractors/:contractorId/billing/cancel
+app.delete(
+  "/contractors/:contractorId/billing/cancel",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner"]),
+  async (c) => {
+    if (!c.env.PADDLE_API_KEY) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const contractorId = c.req.param("contractorId")
+    const contractor = await c.env.DB.prepare(
+      "SELECT paddle_subscription_id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ paddle_subscription_id: string | null }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    if (!contractor.paddle_subscription_id) {
+      return apiError(c, "VALIDATION_ERROR", "No active subscription found")
+    }
+
+    const base = paddleBase(c.env)
+    const cancelRes = await fetch(
+      `${base}/subscriptions/${contractor.paddle_subscription_id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    )
+
+    if (!cancelRes.ok) {
+      console.error("Paddle cancel subscription failed:", cancelRes.status, await cancelRes.text())
+      return apiError(c, "INTERNAL_ERROR", "Failed to cancel subscription")
+    }
+
+    await c.env.DB.prepare(
+      "UPDATE contractors SET billing_status = 'canceled' WHERE id = ?"
+    )
+      .bind(contractorId)
+      .run()
+
+    return c.json({ ok: true, data: { canceled: true } })
+  }
+)
 
 // ---------------------------------------------------------------------------
 // Required secrets — must be present in all non-development environments.

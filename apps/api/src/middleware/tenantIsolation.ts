@@ -196,3 +196,59 @@ export function requireContractorOwnership() {
     await next()
   }
 }
+
+/**
+ * Middleware: verify the authenticated staff member has one of the allowed roles.
+ * Must be used after `requireAuth()`. Checks the staff table using the staffId
+ * or actorEmail set by requireAuth().
+ */
+export function requireStaffRole(roles: string[]) {
+  return async (c: Context, next: Next) => {
+    const contractorId = c.get("contractorId") as string
+    const staffId = (c.get("staffId") as string | null | undefined) ?? null
+    const actorEmail = (c.get("actorEmail") as string | null | undefined) ?? null
+
+    if (staffId) {
+      const staff = await c.env.DB.prepare(
+        "SELECT role FROM staff WHERE id = ? AND contractor_id = ? AND active = 1"
+      )
+        .bind(staffId, contractorId)
+        .first<{ role: string }>()
+      if (!staff || !roles.includes(staff.role)) {
+        return apiError(c, "FORBIDDEN", "Insufficient permissions")
+      }
+      await next()
+      return
+    }
+
+    if (actorEmail) {
+      const staff = await c.env.DB.prepare(
+        "SELECT role FROM staff WHERE LOWER(email) = ? AND contractor_id = ? AND active = 1"
+      )
+        .bind(actorEmail.toLowerCase(), contractorId)
+        .first<{ role: string }>()
+      if (!staff || !roles.includes(staff.role)) {
+        return apiError(c, "FORBIDDEN", "Insufficient permissions")
+      }
+      await next()
+      return
+    }
+
+    // Dev fallback: no JWT, check if any staff member with required role exists
+    if (c.env.ENVIRONMENT === "development") {
+      const placeholders = roles.map(() => "?").join(",")
+      const staff = await c.env.DB.prepare(
+        `SELECT role FROM staff WHERE contractor_id = ? AND role IN (${placeholders}) AND active = 1 LIMIT 1`
+      )
+        .bind(contractorId, ...roles)
+        .first<{ role: string }>()
+      if (!staff) {
+        return apiError(c, "FORBIDDEN", "Insufficient permissions")
+      }
+      await next()
+      return
+    }
+
+    return apiError(c, "FORBIDDEN", "Insufficient permissions")
+  }
+}
