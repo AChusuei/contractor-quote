@@ -15,7 +15,8 @@
     "test": "vitest run && npm test -w @contractor-quote/api",
     "test:e2e": "playwright test",
     "test:integration": "bash scripts/integration-test.sh",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "update:components": "npm update components && sed -i '' 's|git+ssh://git@github.com/AChusuei/components.git|git+https://github.com/AChusuei/components.git|g' package-lock.json"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.4",

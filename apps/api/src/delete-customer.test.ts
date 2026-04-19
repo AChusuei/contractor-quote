@@ -54,7 +54,6 @@ function makeEnv(db: ReturnType<typeof makeD1Mock>, storage?: ReturnType<typeof 
     KV: {},
     ENVIRONMENT: "development",
     CORS_ORIGINS: "http://localhost:5173",
-    HUBSPOT_ACCESS_TOKEN: "",
     TOKEN_SIGNING_SECRET: "",
   }
 }
