@@ -6,7 +6,7 @@ const config: Config = {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx}",
-    "../../../components/src/**/*.{ts,tsx}",
+    "./node_modules/components/src/**/*.{ts,tsx}",
   ],
   theme: {
     container: {
