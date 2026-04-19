@@ -250,7 +250,7 @@ export function SuperContractorDetailPage() {
       {showDisableConfirm && (
         <div className="rounded-lg border border-destructive bg-destructive/5 p-4 space-y-3">
           <p className="text-sm font-medium">
-            This will immediately block all staff from accessing quotes, customers, and all other features. Continue?
+            Disabling this account will immediately block all staff from accessing quotes and customers. Are you sure?
           </p>
           <div className="flex gap-2">
             <Button

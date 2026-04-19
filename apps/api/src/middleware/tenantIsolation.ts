@@ -154,12 +154,13 @@ export function requireAuth() {
     if (!auth.isPlatformAdmin) {
       const path = c.req.path
       const method = c.req.method
-      // Exceptions: read/update own contractor profile (settings page data)
-      const isSettingsException =
-        /^\/api\/v1\/contractors\/[^/]+$/.test(path) &&
-        (method === "GET" || method === "PATCH")
+      // Exceptions: own profile read/update (settings page) and billing management routes.
+      const isAccessException =
+        (/^\/api\/v1\/contractors\/[^/]+$/.test(path) && (method === "GET" || method === "PATCH")) ||
+        (/^\/api\/v1\/contractors\/[^/]+\/billing$/.test(path) && method === "GET") ||
+        (/^\/api\/v1\/contractors\/[^/]+\/billing\/portal$/.test(path) && method === "POST")
 
-      if (!isSettingsException) {
+      if (!isAccessException) {
         try {
           const row = await c.env.DB.prepare(
             "SELECT account_disabled FROM contractors WHERE id = ?"
@@ -169,7 +170,7 @@ export function requireAuth() {
 
           if (row?.account_disabled === 1) {
             return c.json(
-              { ok: false, code: "ACCOUNT_DISABLED", error: "This contractor account has been disabled." },
+              { ok: false, code: "ACCOUNT_DISABLED", error: "This account has been disabled. Contact support to restore access." },
               403
             )
           }

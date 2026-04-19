@@ -247,4 +247,51 @@ describe("account_disabled access middleware", () => {
 
     expect(res.status).toBe(200)
   })
+
+  it("allows GET /contractors/:id/billing for disabled contractors", async () => {
+    const contractor = await seedContractor()
+    await env.DB.prepare(
+      "UPDATE contractors SET account_disabled = 1 WHERE id = ?"
+    ).bind(contractor.id).run()
+    // Seed an owner so requireStaffRole passes in dev mode
+    await env.DB.prepare(
+      "INSERT INTO staff (id, contractor_id, name, email, role, active) VALUES (?, ?, ?, ?, ?, 1)"
+    ).bind("staff-001", contractor.id, "Owner", "owner@test.example", "owner").run()
+
+    const res = await SELF.fetch(
+      apiUrl(`/contractors/${contractor.id}/billing`),
+      {
+        headers: authHeaders(contractor.id),
+      }
+    )
+
+    // Should not be blocked with ACCOUNT_DISABLED — billing routes remain accessible
+    const body = await res.json() as { ok: boolean; code?: string }
+    expect(body.code).not.toBe("ACCOUNT_DISABLED")
+    expect(res.status).toBe(200)
+  })
+
+  it("allows POST /contractors/:id/billing/portal for disabled contractors", async () => {
+    const contractor = await seedContractor()
+    await env.DB.prepare(
+      "UPDATE contractors SET account_disabled = 1 WHERE id = ?"
+    ).bind(contractor.id).run()
+    // Seed an owner so requireStaffRole passes in dev mode
+    await env.DB.prepare(
+      "INSERT INTO staff (id, contractor_id, name, email, role, active) VALUES (?, ?, ?, ?, ?, 1)"
+    ).bind("staff-002", contractor.id, "Owner", "owner@test.example", "owner").run()
+
+    const res = await SELF.fetch(
+      apiUrl(`/contractors/${contractor.id}/billing/portal`),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders(contractor.id) },
+      }
+    )
+
+    // Should not be blocked with ACCOUNT_DISABLED — billing portal remains accessible.
+    // Will fail with VALIDATION_ERROR (no paddle_customer_id), not ACCOUNT_DISABLED.
+    const body = await res.json() as { ok: boolean; code?: string }
+    expect(body.code).not.toBe("ACCOUNT_DISABLED")
+  })
 })

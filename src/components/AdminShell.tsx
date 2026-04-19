@@ -301,7 +301,7 @@ function ClerkAdminShellContent() {
       </header>
       {accountDisabled && (
         <div className="w-full bg-destructive px-6 py-3 text-sm font-medium text-destructive-foreground">
-          Your account has been disabled. Please contact support to restore access.
+          Your account has been disabled by the platform administrator. Please contact support.
         </div>
       )}
       {billingStatus === "suspended" && contractorId && (

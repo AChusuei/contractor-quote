@@ -594,7 +594,7 @@ export function SettingsPage() {
       {accountDisabled && (
         <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
           <p className="text-sm font-medium text-destructive">
-            Your account has been disabled. Please contact support to restore access.
+            Your account has been disabled by the platform administrator. Please contact support.
           </p>
         </div>
       )}
