@@ -22,7 +22,7 @@ function makeD1Mock(
   const deleteQuotes = { meta: { changes: quoteChanges } }
   const insertLog = { meta: { changes: 1 } }
 
-  const responses = [selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
+  const responses = [{ results: [] as Row[] }, selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
 
   const prepare = vi.fn().mockImplementation(() => {
     const idx = callIndex++

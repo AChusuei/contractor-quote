@@ -102,7 +102,7 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
 
   it("returns 404 when quote does not exist", async () => {
     // requireQuoteOwnership queries for the quote — return null
-    const db = makeD1Mock([{ first: null }])
+    const db = makeD1Mock([{ first: null }, { first: null }])
     const env = makeEnv(db)
     const req = makeActivityRequest("nonexistent-quote", { type: "note", content: "Hello" })
     const res = await app.fetch(req, env)
@@ -112,6 +112,7 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
   it("returns 422 for invalid activity type", async () => {
     // requireQuoteOwnership finds the quote
     const db = makeD1Mock([
+      { first: null },
       { first: { contractor_id: CONTRACTOR_ID } },
     ])
     const env = makeEnv(db)
@@ -125,6 +126,7 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
 
   it("returns 422 when note has no content", async () => {
     const db = makeD1Mock([
+      { first: null },
       { first: { contractor_id: CONTRACTOR_ID } },
     ])
     const env = makeEnv(db)
@@ -137,6 +139,7 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
 
   it("returns 422 when status_change has no newStatus", async () => {
     const db = makeD1Mock([
+      { first: null },
       { first: { contractor_id: CONTRACTOR_ID } },
     ])
     const env = makeEnv(db)
@@ -161,6 +164,8 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
     }
 
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership
       { first: { contractor_id: CONTRACTOR_ID } },
       // INSERT RETURNING
@@ -194,6 +199,8 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
     }
 
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership
       { first: { contractor_id: CONTRACTOR_ID } },
       // SELECT status FROM quotes
@@ -219,6 +226,8 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
 
   it("rejects invalid status transition", async () => {
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership
       { first: { contractor_id: CONTRACTOR_ID } },
       // SELECT status FROM quotes — current status is "lead"
@@ -240,6 +249,8 @@ describe("POST /api/v1/quotes/:quoteId/activity", () => {
 
   it("returns 403 when contractor does not own the quote", async () => {
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership finds quote but different contractor
       { first: { contractor_id: "contractor-999" } },
     ])
@@ -265,6 +276,8 @@ describe("GET /api/v1/quotes/:quoteId/activity", () => {
 
   it("returns empty list when no activity exists", async () => {
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership
       { first: { contractor_id: CONTRACTOR_ID } },
       // COUNT
@@ -310,6 +323,8 @@ describe("GET /api/v1/quotes/:quoteId/activity", () => {
     ]
 
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership
       { first: { contractor_id: CONTRACTOR_ID } },
       // COUNT
@@ -341,6 +356,8 @@ describe("GET /api/v1/quotes/:quoteId/activity", () => {
 
   it("supports pagination", async () => {
     const db = makeD1Mock([
+      // billingGuard
+      { first: null },
       // requireQuoteOwnership
       { first: { contractor_id: CONTRACTOR_ID } },
       // COUNT
@@ -359,6 +376,7 @@ describe("GET /api/v1/quotes/:quoteId/activity", () => {
 
   it("clamps limit to 100", async () => {
     const db = makeD1Mock([
+      { first: null },
       { first: { contractor_id: CONTRACTOR_ID } },
       { first: { total: 0 } },
       { all: { results: [] } },
