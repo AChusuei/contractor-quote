@@ -52,6 +52,7 @@ export type ErrorCode =
   | "RATE_LIMITED"
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
+  | "BILLING_SUSPENDED"
 
 export type ApiOk<T> = { ok: true; data: T }
 export type ApiErr = { ok: false; error: string; code: ErrorCode }

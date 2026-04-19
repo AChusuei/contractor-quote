@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
-import { apiGet, apiPost, apiPatch, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPost, apiPatch, apiDelete, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 import { contractorProfileSchema, type ContractorProfileData, ContractorProfileForm } from "@/components/forms/ContractorProfileForm"
 import { useAutoSave } from "@/hooks/useAutoSave"
@@ -103,14 +103,194 @@ function mapApiStaff(raw: Record<string, unknown>): StaffMember {
 }
 
 // ---------------------------------------------------------------------------
+// Billing Tab
+// ---------------------------------------------------------------------------
+
+interface BillingInfo {
+  billingStatus: string
+  monthlyRateCents: number | null
+  gracePeriodEndsAt: string | null
+  billingExempt: boolean
+  hasPaddleCustomer: boolean
+  hasPaddleSubscription: boolean
+}
+
+const BILLING_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  trialing: "Trialing",
+  past_due: "Past Due",
+  suspended: "Suspended",
+  canceled: "Canceled",
+}
+
+const BILLING_STATUS_CLASSES: Record<string, string> = {
+  active: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  trialing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  past_due: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  suspended: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  canceled: "bg-muted text-muted-foreground",
+}
+
+function formatRate(cents: number | null): string {
+  if (cents === null) return "—"
+  return `$${(cents / 100).toFixed(2)}/mo`
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—"
+  const date = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z")
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+}
+
+function BillingTab({ userRole }: { userRole: string | null }) {
+  const [billing, setBilling] = useState<BillingInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [cancelPending, setCancelPending] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  const isOwner = userRole === null || userRole === "owner"
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    apiGet<BillingInfo>("/billing")
+      .then((res) => {
+        if (res.ok) setBilling(res.data)
+        else setError(res.error)
+      })
+      .catch(() => setError("Failed to load billing info"))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handlePortal() {
+    setPortalLoading(true)
+    try {
+      const res = await apiPost<{ url: string }>("/billing/portal")
+      if (res.ok) {
+        window.location.href = res.data.url
+      } else {
+        setError(res.error)
+      }
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  async function handleCancel() {
+    setCancelLoading(true)
+    setCancelError(null)
+    try {
+      const res = await apiDelete<null>("/billing/cancel")
+      if (res.ok) {
+        setBilling((prev) => prev ? { ...prev, billingStatus: "canceled", hasPaddleSubscription: false } : prev)
+        setCancelPending(false)
+      } else {
+        setCancelError(res.error)
+      }
+    } finally {
+      setCancelLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading billing info...</p>
+  }
+
+  if (error && !billing) {
+    return <p className="text-sm text-destructive">{error}</p>
+  }
+
+  if (!billing) return null
+
+  const statusLabel = BILLING_STATUS_LABELS[billing.billingStatus] ?? billing.billingStatus
+  const statusClass = BILLING_STATUS_CLASSES[billing.billingStatus] ?? "bg-muted text-muted-foreground"
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium">Billing</h2>
+        <p className="text-sm text-muted-foreground">
+          Manage your subscription and payment method.
+        </p>
+      </div>
+
+      {billing.billingExempt && (
+        <p className="text-sm text-muted-foreground italic">This account has a billing exemption.</p>
+      )}
+
+      <div className="rounded-lg border border-border divide-y divide-border">
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-sm font-medium">Status</span>
+          <span className={cn("inline-block rounded-full px-2 py-0.5 text-xs font-medium", statusClass)}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-sm font-medium">Monthly rate</span>
+          <span className="text-sm text-muted-foreground">{formatRate(billing.monthlyRateCents)}</span>
+        </div>
+        {billing.gracePeriodEndsAt && (
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm font-medium">Grace period ends</span>
+            <span className="text-sm text-muted-foreground">{formatDate(billing.gracePeriodEndsAt)}</span>
+          </div>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex flex-wrap items-center gap-3">
+        {billing.hasPaddleCustomer && (
+          <Button size="sm" onClick={handlePortal} disabled={portalLoading}>
+            {portalLoading ? "Loading..." : "Manage payment method"}
+          </Button>
+        )}
+        {isOwner && billing.hasPaddleSubscription && billing.billingStatus !== "canceled" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive border-destructive/50 hover:bg-destructive/10"
+            onClick={() => setCancelPending(true)}
+          >
+            Cancel subscription
+          </Button>
+        )}
+      </div>
+
+      {cancelPending && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+          <p className="text-sm font-medium text-destructive">Are you sure you want to cancel?</p>
+          <p className="text-sm text-muted-foreground">
+            Your subscription will remain active until the end of the current billing period.
+          </p>
+          {cancelError && <p className="text-sm text-destructive">{cancelError}</p>}
+          <div className="flex items-center gap-3">
+            <Button size="sm" variant="destructive" onClick={handleCancel} disabled={cancelLoading}>
+              {cancelLoading ? "Canceling..." : "Yes, cancel"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setCancelPending(false); setCancelError(null) }}>
+              Never mind
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
 
-type SettingsTab = "profile" | "staff"
+type SettingsTab = "profile" | "staff" | "billing"
 
-const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
-  { id: "profile", label: "Profile" },
-  { id: "staff", label: "Staff" },
+const ALL_SETTINGS_TABS: { id: SettingsTab; label: string; roles: string[] | null }[] = [
+  { id: "profile", label: "Profile", roles: null },
+  { id: "staff", label: "Staff", roles: null },
+  { id: "billing", label: "Billing", roles: ["owner", "admin"] },
 ]
 
 // ---------------------------------------------------------------------------
@@ -246,7 +426,11 @@ function StaffForm({
 
 export function SettingsPage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
-  const { contractorId } = useContractorSession()
+  const { contractorId, role, isSuperAdmin } = useContractorSession()
+  const effectiveRole = isSuperAdmin ? null : role
+  const visibleTabs = ALL_SETTINGS_TABS.filter(
+    (t) => t.roles === null || effectiveRole === null || t.roles.includes(effectiveRole)
+  )
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile")
 
   // Wire up Clerk auth for API calls
@@ -483,7 +667,7 @@ export function SettingsPage() {
 
       {/* Tab bar */}
       <div className="flex items-center border-b">
-        {SETTINGS_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -670,6 +854,11 @@ export function SettingsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ---- Billing Tab ---- */}
+      {activeTab === "billing" && (
+        <BillingTab userRole={effectiveRole} />
       )}
 
     </div>

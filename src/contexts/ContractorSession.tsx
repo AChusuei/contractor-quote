@@ -17,6 +17,8 @@ interface ContractorSessionValue {
   /** Full contractor list — populated for super admins only (for dropdown). */
   contractors: ContractorInfo[]
   logoUrl: string | null
+  /** Staff role for the current user. null for super admins (treat as owner). */
+  role: string | null
   loading: boolean
   noAccess: boolean
   error: string | null
@@ -28,6 +30,7 @@ const ContractorSessionContext = createContext<ContractorSessionValue>({
   isSuperAdmin: false,
   contractors: [],
   logoUrl: null,
+  role: null,
   loading: true,
   noAccess: false,
   error: null,
@@ -46,6 +49,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
     isSuperAdmin: false,
     contractors: [],
     logoUrl: null,
+    role: null,
     loading: true,
     noAccess: false,
     error: null,
@@ -81,6 +85,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             isSuperAdmin: true,
             contractors,
             logoUrl,
+            role: null,
             loading: false,
             noAccess: false,
             error: null,
@@ -93,6 +98,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             isSuperAdmin: true,
             contractors: [],
             logoUrl: null,
+            role: null,
             loading: false,
             noAccess: false,
             error: null,
@@ -121,6 +127,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
                     isSuperAdmin: false,
                     contractors: [],
                     logoUrl,
+                    role: staffRes.data.role,
                     loading: false,
                     noAccess: false,
                     error: null,

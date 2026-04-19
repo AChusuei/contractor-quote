@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/clerk-react"
 import staticLogoUrl from "@/assets/logo.png"
 import { apiGet, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
+import { BillingProvider, useBilling } from "@/contexts/BillingContext"
 
 const CLERK_CONFIGURED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
 
@@ -189,6 +190,23 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   )
 }
 
+function SuspensionBanner() {
+  const { isSuspended, redirectToPortal, portalLoading } = useBilling()
+  if (!isSuspended) return null
+  return (
+    <div className="w-full bg-destructive px-6 py-3 flex items-center justify-between gap-4 text-sm text-destructive-foreground">
+      <span>Your account is suspended. Update your payment method to restore access.</span>
+      <button
+        onClick={redirectToPortal}
+        disabled={portalLoading}
+        className="shrink-0 rounded-md bg-white/20 px-3 py-1 text-sm font-medium hover:bg-white/30 disabled:opacity-60"
+      >
+        {portalLoading ? "Loading..." : "Update payment"}
+      </button>
+    </div>
+  )
+}
+
 // Full shell content — only rendered when Clerk confirms user is signed in
 function ClerkAdminShellContent() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
@@ -247,19 +265,22 @@ function ClerkAdminShellContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="flex h-14 shrink-0 items-center border-b bg-background px-6 gap-6">
-        {logoUrl ? (
-          <img src={logoUrl} alt="Logo" className="h-7 w-auto object-contain" />
-        ) : (
-          <span className="font-semibold text-sm">Admin</span>
-        )}
-        <ClerkAdminHeader />
-      </header>
-      <main className="p-6">
-        <Outlet />
-      </main>
-    </div>
+    <BillingProvider>
+      <div className="min-h-screen bg-background">
+        <header className="flex h-14 shrink-0 items-center border-b bg-background px-6 gap-6">
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="h-7 w-auto object-contain" />
+          ) : (
+            <span className="font-semibold text-sm">Admin</span>
+          )}
+          <ClerkAdminHeader />
+        </header>
+        <SuspensionBanner />
+        <main className="p-6">
+          <Outlet />
+        </main>
+      </div>
+    </BillingProvider>
   )
 }
 

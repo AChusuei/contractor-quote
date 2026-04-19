@@ -8,6 +8,7 @@ import {
   requireQuoteOwnership,
 } from "./middleware/tenantIsolation"
 import { requireSuperAdmin } from "./middleware/superAdmin"
+import { requireStaffRole } from "./middleware/staffRole"
 import {
   quoteSubmissionSchema,
   quoteUpdateSchema,
@@ -52,6 +53,7 @@ type Bindings = {
   TURNSTILE_SECRET_KEY: string
   CLERK_JWKS_URL: string
   PADDLE_WEBHOOK_SECRET: string
+  PADDLE_API_KEY: string
 }
 
 type Variables = {
@@ -3563,6 +3565,141 @@ app.get(
         limit,
       },
     })
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Billing management (owner/admin only)
+// ---------------------------------------------------------------------------
+
+// GET /billing — returns billing info for the authenticated contractor
+app.get(
+  "/billing",
+  requireAuth(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const row = await c.env.DB.prepare(
+      `SELECT billing_status, monthly_rate_cents, grace_period_ends_at,
+              billing_exempt, paddle_customer_id, paddle_subscription_id
+       FROM contractors WHERE id = ? LIMIT 1`
+    )
+      .bind(contractorId)
+      .first<{
+        billing_status: string
+        monthly_rate_cents: number | null
+        grace_period_ends_at: string | null
+        billing_exempt: number
+        paddle_customer_id: string | null
+        paddle_subscription_id: string | null
+      }>()
+
+    if (!row) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        billingStatus: row.billing_status,
+        monthlyRateCents: row.monthly_rate_cents,
+        gracePeriodEndsAt: row.grace_period_ends_at,
+        billingExempt: row.billing_exempt === 1,
+        hasPaddleCustomer: row.paddle_customer_id !== null,
+        hasPaddleSubscription: row.paddle_subscription_id !== null,
+      },
+    })
+  }
+)
+
+// POST /billing/portal — create a Paddle customer portal session
+app.post(
+  "/billing/portal",
+  requireAuth(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const row = await c.env.DB.prepare(
+      "SELECT paddle_customer_id FROM contractors WHERE id = ? LIMIT 1"
+    )
+      .bind(contractorId)
+      .first<{ paddle_customer_id: string | null }>()
+
+    if (!row?.paddle_customer_id) {
+      return apiError(c, "NOT_FOUND", "No Paddle customer record found for this contractor")
+    }
+
+    const apiKey = c.env.PADDLE_API_KEY
+    if (!apiKey) {
+      return apiError(c, "INTERNAL_ERROR", "Billing portal not configured")
+    }
+
+    const paddleRes = await fetch(
+      `https://api.paddle.com/customers/${row.paddle_customer_id}/portal-sessions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      }
+    )
+
+    if (!paddleRes.ok) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to create billing portal session")
+    }
+
+    const paddleData = (await paddleRes.json()) as { data?: { urls?: { general?: { overview?: string } } } }
+    const portalUrl = paddleData.data?.urls?.general?.overview
+
+    if (!portalUrl) {
+      return apiError(c, "INTERNAL_ERROR", "Billing portal URL not available")
+    }
+
+    return c.json({ ok: true, data: { url: portalUrl } })
+  }
+)
+
+// DELETE /billing/cancel — cancel the Paddle subscription (owner only)
+app.delete(
+  "/billing/cancel",
+  requireAuth(),
+  requireStaffRole(["owner"]),
+  async (c) => {
+    const contractorId = c.get("contractorId") as string
+    const row = await c.env.DB.prepare(
+      "SELECT paddle_subscription_id FROM contractors WHERE id = ? LIMIT 1"
+    )
+      .bind(contractorId)
+      .first<{ paddle_subscription_id: string | null }>()
+
+    if (!row?.paddle_subscription_id) {
+      return apiError(c, "NOT_FOUND", "No active subscription found for this contractor")
+    }
+
+    const apiKey = c.env.PADDLE_API_KEY
+    if (!apiKey) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const paddleRes = await fetch(
+      `https://api.paddle.com/subscriptions/${row.paddle_subscription_id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ effective_from: "next_billing_period" }),
+      }
+    )
+
+    if (!paddleRes.ok) {
+      return apiError(c, "INTERNAL_ERROR", "Failed to cancel subscription")
+    }
+
+    return c.json({ ok: true, data: null })
   }
 )
 

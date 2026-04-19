@@ -24,6 +24,16 @@ export function setAuthProvider(fn: () => Promise<string | null>) {
   getTokenFn = fn
 }
 
+/** Called when any API response has HTTP status 402 (BILLING_SUSPENDED). */
+let billingSuspendedCb: (() => void) | null = null
+
+export function onBillingSuspended(cb: () => void): () => void {
+  billingSuspendedCb = cb
+  return () => {
+    billingSuspendedCb = null
+  }
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {}
 
@@ -71,7 +81,11 @@ export async function api<T>(
       return { ok: true, data: undefined as unknown as T }
     }
 
-    return (await res.json()) as ApiResponse<T>
+    const json = (await res.json()) as ApiResponse<T>
+    if (res.status === 402) {
+      billingSuspendedCb?.()
+    }
+    return json
   } catch {
     if (import.meta.env.DEV) console.warn(`API unreachable: ${method} ${path} — falling back to local data`)
     return { ok: false, error: "API unreachable", code: "NETWORK_ERROR" }

@@ -9,6 +9,7 @@ const STATUS_MAP: Record<ErrorCode, number> = {
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
   UNAUTHORIZED: 401,
+  BILLING_SUSPENDED: 402,
 }
 
 /**
@@ -19,7 +20,7 @@ const STATUS_MAP: Record<ErrorCode, number> = {
  * @param error Human-readable error message
  */
 export function apiError(c: Context, code: ErrorCode, error: string) {
-  const status = STATUS_MAP[code] as 400 | 401 | 403 | 404 | 410 | 429 | 500
+  const status = STATUS_MAP[code] as 400 | 401 | 402 | 403 | 404 | 410 | 429 | 500
   const body: ApiErr = { ok: false, error, code }
   return c.json(body, status)
 }
