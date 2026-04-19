@@ -3563,6 +3563,22 @@ export default {
         })
       }
     }
+
+    // Warn if dev-mode security bypasses are active in a non-local deployment.
+    // ENVIRONMENT=development disables JWT signature verification and enables the
+    // x-super-admin-email bypass — safe locally, dangerous if set on a real Worker.
+    if (env.ENVIRONMENT === "development") {
+      const { hostname } = new URL(request.url)
+      if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+        console.error(
+          `SECURITY WARNING: ENVIRONMENT=development is set but Worker is serving requests at "${hostname}". ` +
+            "Dev-mode security bypasses are active (JWT signature verification skipped, " +
+            "x-super-admin-email header accepted). " +
+            "Set ENVIRONMENT=production for non-local deployments."
+        )
+      }
+    }
+
     return app.fetch(request, env, ctx)
   },
 }
