@@ -46,7 +46,6 @@ type Bindings = {
   APP_BASE_URL: string
   // Secrets (set via `wrangler secret put`)
   PLATFORM_ADMIN_EMAILS: string
-  HUBSPOT_ACCESS_TOKEN: string
   TOKEN_SIGNING_SECRET: string
   SENDGRID_API_KEY: string
   TURNSTILE_SECRET_KEY: string
@@ -3543,7 +3542,6 @@ app.get(
 // immediately with a clear error rather than a cryptic failure deep in a handler.
 // ---------------------------------------------------------------------------
 const REQUIRED_SECRETS = [
-  "HUBSPOT_ACCESS_TOKEN",
   "TOKEN_SIGNING_SECRET",
   "SENDGRID_API_KEY",
   "TURNSTILE_SECRET_KEY",

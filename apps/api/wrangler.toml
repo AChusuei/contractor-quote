@@ -30,7 +30,6 @@ id = "f550d2c295914276a23af2d4b29dbaeb"
 # ---------------------------------------------------------------------------
 # Secrets (set via `wrangler secret put <NAME>`)
 # ---------------------------------------------------------------------------
-# HUBSPOT_ACCESS_TOKEN   — HubSpot private-app token for CRM submission
 # TOKEN_SIGNING_SECRET   — HMAC secret for signed URL tokens
 # SENDGRID_API_KEY       — SendGrid API key for email notifications
 # TURNSTILE_SECRET_KEY   — Cloudflare Turnstile secret key for bot protection
@@ -39,7 +38,6 @@ id = "f550d2c295914276a23af2d4b29dbaeb"
 #                          Find your domain in Clerk dashboard → API Keys → Advanced
 #
 # Example:
-#   wrangler secret put HUBSPOT_ACCESS_TOKEN
 #   wrangler secret put TOKEN_SIGNING_SECRET
 #   wrangler secret put SENDGRID_API_KEY
 #   wrangler secret put TURNSTILE_SECRET_KEY

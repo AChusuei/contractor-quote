@@ -16,37 +16,6 @@ import { CustomerInfoForm, customerInfoSchema, type CustomerInfoData } from "@/c
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
-const HUBSPOT_PORTAL_ID = import.meta.env.VITE_HUBSPOT_PORTAL_ID as string | undefined
-const HUBSPOT_FORM_ID = import.meta.env.VITE_HUBSPOT_FORM_ID as string | undefined
-
-async function submitToHubSpot(data: CustomerInfoData): Promise<void> {
-  if (!HUBSPOT_PORTAL_ID || !HUBSPOT_FORM_ID) {
-    if (import.meta.env.DEV) console.warn("HubSpot credentials not configured — skipping CRM submission")
-    return
-  }
-
-  const fields = [
-    { name: "firstname", value: data.name.split(" ")[0] },
-    { name: "lastname", value: data.name.split(" ").slice(1).join(" ") },
-    { name: "email", value: data.email },
-    { name: "phone", value: data.phone },
-    { name: "how_did_you_find_us", value: data.howDidYouFindUs },
-    { name: "referred_by_contractor", value: data.referredByContractor ?? "" },
-  ]
-
-  const res = await fetch(
-    `https://api.hsforms.com/submissions/v3/integration/submit/${HUBSPOT_PORTAL_ID}/${HUBSPOT_FORM_ID}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fields }),
-    }
-  )
-
-  if (!res.ok) {
-    throw new Error(`HubSpot submission failed: ${res.status}`)
-  }
-}
 
 export function IntakePage() {
   usePageTitle("Customer Information")
@@ -228,7 +197,6 @@ export function IntakePage() {
         }
       }
 
-      await submitToHubSpot(data)
       navigate("/intake/scope")
     } catch (err) {
       resetTurnstile()

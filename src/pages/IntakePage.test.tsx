@@ -79,8 +79,6 @@ describe("IntakePage — navigation on submit", () => {
   })
 
   it("navigates to /intake/scope when all required fields are valid", async () => {
-    // HubSpot portal/form IDs are not configured in test env, so submitToHubSpot
-    // skips the network call and returns cleanly — navigate() runs immediately.
     renderIntakePage()
     await fillRequiredFields(user)
 
