@@ -48,6 +48,7 @@ export async function seedContractorWithBilling(
     paddleSubscriptionId: string | null
     billingStatus: string
     gracePeriodEndsAt: string | null
+    billingExempt: number
   }> = {}
 ) {
   const c = {
@@ -59,16 +60,17 @@ export async function seedContractorWithBilling(
     paddleSubscriptionId: "sub_test456" as string | null,
     billingStatus: "trialing",
     gracePeriodEndsAt: null as string | null,
+    billingExempt: 0,
     ...overrides,
   }
   await env.DB.prepare(
     `INSERT OR REPLACE INTO contractors
-     (id, slug, name, email, paddle_customer_id, paddle_subscription_id, billing_status, grace_period_ends_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+     (id, slug, name, email, paddle_customer_id, paddle_subscription_id, billing_status, grace_period_ends_at, billing_exempt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       c.id, c.slug, c.name, c.email,
-      c.paddleCustomerId, c.paddleSubscriptionId, c.billingStatus, c.gracePeriodEndsAt
+      c.paddleCustomerId, c.paddleSubscriptionId, c.billingStatus, c.gracePeriodEndsAt, c.billingExempt
     )
     .run()
   return c

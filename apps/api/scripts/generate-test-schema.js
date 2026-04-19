@@ -17,6 +17,8 @@ const files = fs.readdirSync(migrationsDir)
   .sort()
 
 const statements = []
+// Track added columns to skip duplicates from overlapping migration files
+const addedColumns = new Set()
 
 for (const file of files) {
   const sql = fs.readFileSync(path.join(migrationsDir, file), "utf-8")
@@ -26,6 +28,13 @@ for (const file of files) {
     if (!trimmed) continue
     if (trimmed.split("\n").every((line) => line.trim().startsWith("--") || !line.trim())) continue
     if (trimmed.startsWith("PRAGMA")) continue
+    // Deduplicate ALTER TABLE ADD COLUMN statements (two 0002_* files overlap)
+    const addColMatch = trimmed.match(/ALTER TABLE (\w+) ADD COLUMN (\w+)/i)
+    if (addColMatch) {
+      const key = `${addColMatch[1]}.${addColMatch[2]}`
+      if (addedColumns.has(key)) continue
+      addedColumns.add(key)
+    }
     statements.push(trimmed)
   }
 }
