@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useAuth } from "@clerk/clerk-react"
 import { Button } from "components"
-import { apiGet, apiPatch, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPatch, apiPost, setAuthProvider } from "@/lib/api"
 import { useAutoSave } from "@/hooks/useAutoSave"
 import {
   contractorProfileSchema,
@@ -37,6 +37,11 @@ interface ContractorDetail {
   websiteUrl: string | null
   licenseNumber: string | null
   logoUrl: string | null
+  billingStatus: string
+  monthlyRateCents: number | null
+  billingExempt: boolean
+  paddleCustomerId: string | null
+  gracePeriodEndsAt: string | null
   quoteCount?: number
   customerCount?: number
   staff?: StaffMember[]
@@ -72,6 +77,136 @@ function RoleBadge({ role }: { role: string }) {
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
       {role.replace("_", " ")}
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Billing section
+// ---------------------------------------------------------------------------
+
+const BILLING_STATUS_COLORS: Record<string, string> = {
+  active: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  past_due: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  suspended: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  trialing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  canceled: "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
+}
+
+function BillingStatusBadge({ status }: { status: string }) {
+  const colorClass = BILLING_STATUS_COLORS[status] ?? "bg-muted text-muted-foreground"
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
+      {status.replace("_", " ")}
+    </span>
+  )
+}
+
+interface BillingSectionProps {
+  contractorId: string
+  contractor: ContractorDetail
+  onUpdated: () => void
+}
+
+function BillingSection({ contractorId, contractor, onUpdated }: BillingSectionProps) {
+  const [rateCents, setRateCents] = useState(
+    contractor.monthlyRateCents !== null && contractor.monthlyRateCents !== undefined ? String(Math.round(contractor.monthlyRateCents / 100)) : ""
+  )
+  const [billingExempt, setBillingExempt] = useState(contractor.billingExempt)
+  const [saving, setSaving] = useState(false)
+  const [overriding, setOverriding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    const monthly_rate_cents = rateCents.trim() !== "" ? Math.round(parseFloat(rateCents) * 100) : undefined
+    const res = await apiPatch(`/platform/contractors/${encodeURIComponent(contractorId)}/billing`, {
+      ...(monthly_rate_cents !== undefined ? { monthly_rate_cents } : {}),
+      billing_exempt: billingExempt,
+    })
+    if (!res.ok) {
+      setError("error" in res ? (res as { error: string }).error : "Save failed")
+    } else {
+      onUpdated()
+    }
+    setSaving(false)
+  }
+
+  const handleOverride = async () => {
+    if (!confirm("Clear suspension and set billing status to active?")) return
+    setOverriding(true)
+    setError(null)
+    const res = await apiPost(
+      `/platform/contractors/${encodeURIComponent(contractorId)}/billing/override-suspension`,
+      {}
+    )
+    if (!res.ok) {
+      setError("error" in res ? (res as { error: string }).error : "Override failed")
+    } else {
+      onUpdated()
+    }
+    setOverriding(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-foreground">Status</span>
+        <BillingStatusBadge status={contractor.billingStatus} />
+      </div>
+
+      {contractor.gracePeriodEndsAt && (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          Grace period ends: {new Date(contractor.gracePeriodEndsAt).toLocaleDateString()}
+        </p>
+      )}
+
+      {contractor.paddleCustomerId && (
+        <div>
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Paddle Customer ID</span>
+          <p className="text-sm font-mono mt-0.5">{contractor.paddleCustomerId}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium mb-1">Monthly Rate (USD)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={rateCents}
+            onChange={(e) => setRateCents(e.target.value)}
+            placeholder="e.g. 49.00"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={billingExempt}
+              onChange={(e) => setBillingExempt(e.target.checked)}
+              className="rounded border-input"
+            />
+            <span className="text-sm">Billing exempt</span>
+          </label>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex items-center gap-3">
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save Billing"}
+        </Button>
+        {(contractor.billingStatus === "suspended" || contractor.billingStatus === "past_due") && (
+          <Button size="sm" variant="outline" onClick={handleOverride} disabled={overriding}>
+            {overriding ? "Clearing…" : "Override: clear suspension"}
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -234,6 +369,18 @@ export function SuperContractorDetailPage() {
           Contractor Info
         </h2>
         <ContractorProfileForm register={register} errors={errors} showSlug />
+      </div>
+
+      {/* Billing */}
+      <div>
+        <h2 className="text-sm font-semibold text-foreground border-b pb-2 mb-4">
+          Billing
+        </h2>
+        <BillingSection
+          contractorId={id!}
+          contractor={contractor}
+          onUpdated={loadContractor}
+        />
       </div>
 
       {/* Staff list */}

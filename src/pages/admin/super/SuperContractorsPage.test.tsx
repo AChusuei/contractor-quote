@@ -39,8 +39,8 @@ vi.mock("components", async (importOriginal) => {
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const MOCK_CONTRACTORS = [
-  { id: "c-1", slug: "acme-cabinets", name: "Acme Cabinets", email: "acme@example.com", staffCount: 3, quoteCount: 12 },
-  { id: "c-2", slug: "metro-kitchens", name: "Metro Kitchens", email: null, staffCount: 1, quoteCount: 4 },
+  { id: "c-1", slug: "acme-cabinets", name: "Acme Cabinets", email: "acme@example.com", billingStatus: "active", staffCount: 3, quoteCount: 12 },
+  { id: "c-2", slug: "metro-kitchens", name: "Metro Kitchens", email: null, billingStatus: "past_due", staffCount: 1, quoteCount: 4 },
 ]
 
 function renderPage() {
@@ -112,6 +112,12 @@ describe("SuperContractorsPage", () => {
         expect.objectContaining({ name: "New Co", slug: "new-co" })
       )
     })
+  })
+
+  it("shows billing status badges for each contractor", async () => {
+    renderPage()
+    expect(await screen.findByText("active")).toBeInTheDocument()
+    expect(screen.getByText("past due")).toBeInTheDocument()
   })
 
   it("shows error message when loading fails", async () => {

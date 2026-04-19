@@ -9,8 +9,28 @@ interface SuperContractor {
   slug: string
   name: string
   email: string | null
+  billingStatus: string
   staffCount: number
   quoteCount: number
+}
+
+const BILLING_STATUS_COLORS: Record<string, string> = {
+  active: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  past_due: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  suspended: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  trialing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  canceled: "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
+  exempt: "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400",
+}
+
+function BillingStatusBadge({ status }: { status: string | undefined }) {
+  const s = status ?? "unknown"
+  const colorClass = BILLING_STATUS_COLORS[s] ?? "bg-muted text-muted-foreground"
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
+      {s.replace("_", " ")}
+    </span>
+  )
 }
 
 export function SuperContractorsPage() {
@@ -146,6 +166,7 @@ export function SuperContractorsPage() {
                 <th className="px-4 py-3 text-left font-medium">Name</th>
                 <th className="px-4 py-3 text-left font-medium">Slug</th>
                 <th className="px-4 py-3 text-left font-medium">Email</th>
+                <th className="px-4 py-3 text-left font-medium">Billing</th>
                 <th className="px-4 py-3 text-right font-medium">Staff</th>
                 <th className="px-4 py-3 text-right font-medium">Quotes</th>
               </tr>
@@ -160,6 +181,9 @@ export function SuperContractorsPage() {
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{c.slug}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.email ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <BillingStatusBadge status={c.billingStatus} />
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{c.staffCount}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{c.quoteCount}</td>
                 </tr>

@@ -519,6 +519,21 @@ export const superUserCreateSchema = z.object({
 export type SuperUserCreate = z.infer<typeof superUserCreateSchema>
 
 // ---------------------------------------------------------------------------
+// Billing update (platform admin)
+// ---------------------------------------------------------------------------
+
+export const billingUpdateSchema = z.object({
+  monthly_rate_cents: z
+    .number()
+    .int("Must be an integer")
+    .min(0, "Must be non-negative")
+    .optional(),
+  billing_exempt: z.boolean().optional(),
+})
+
+export type BillingUpdate = z.infer<typeof billingUpdateSchema>
+
+// ---------------------------------------------------------------------------
 // Payload size limit (100KB)
 // ---------------------------------------------------------------------------
 
