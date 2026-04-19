@@ -17,6 +17,11 @@ interface ContractorSessionValue {
   /** Full contractor list — populated for super admins only (for dropdown). */
   contractors: ContractorInfo[]
   logoUrl: string | null
+  /** Role of the current staff user. Empty string for super admins. */
+  userRole: string
+  /** Billing status of the contractor. Null if unknown or user lacks access. */
+  billingStatus: string | null
+  accountDisabled: boolean
   loading: boolean
   noAccess: boolean
   error: string | null
@@ -28,6 +33,9 @@ const ContractorSessionContext = createContext<ContractorSessionValue>({
   isSuperAdmin: false,
   contractors: [],
   logoUrl: null,
+  userRole: "",
+  billingStatus: null,
+  accountDisabled: false,
   loading: true,
   noAccess: false,
   error: null,
@@ -46,6 +54,9 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
     isSuperAdmin: false,
     contractors: [],
     logoUrl: null,
+    userRole: "",
+    billingStatus: null,
+    accountDisabled: false,
     loading: true,
     noAccess: false,
     error: null,
@@ -62,7 +73,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
       // Super admin impersonating a contractor — fetch full contractor list and logo in parallel
       Promise.all([
         apiGet<ContractorInfo[]>("/platform/contractors"),
-        apiGet<{ logoUrl: string | null }>(`/contractors/${superContractorId}`),
+        apiGet<{ logoUrl: string | null; accountDisabled?: boolean }>(`/contractors/${superContractorId}`),
       ])
         .then(([contractorsRes, profileRes]) => {
           const contractors = contractorsRes.ok
@@ -73,6 +84,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
               }))
             : []
           const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
+          const accountDisabled = profileRes.ok ? !!(profileRes.data as { accountDisabled?: boolean }).accountDisabled : false
           if (logoUrl) sessionStorage.setItem("cq_logo_url", logoUrl)
           else sessionStorage.removeItem("cq_logo_url")
           setValue({
@@ -81,6 +93,9 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             isSuperAdmin: true,
             contractors,
             logoUrl,
+            userRole: "",
+            billingStatus: null,
+            accountDisabled,
             loading: false,
             noAccess: false,
             error: null,
@@ -93,6 +108,9 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             isSuperAdmin: true,
             contractors: [],
             logoUrl: null,
+            userRole: "",
+            billingStatus: null,
+            accountDisabled: false,
             loading: false,
             noAccess: false,
             error: null,
@@ -111,16 +129,31 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             return apiGet<{ contractorId: string; contractorName: string; role: string }>("/me/contractor")
               .then(async (staffRes) => {
                 if (staffRes.ok) {
-                  const profileRes = await apiGet<{ logoUrl: string | null }>(`/contractors/${staffRes.data.contractorId}`)
+                  const { contractorId: cid, contractorName: cname, role } = staffRes.data
+                  const canAccessBilling = role === "owner" || role === "admin"
+                  const [profileRes, billingRes] = await Promise.all([
+                    apiGet<{ logoUrl: string | null; accountDisabled?: boolean }>(`/contractors/${cid}`),
+                    canAccessBilling
+                      ? apiGet<{ billingStatus: string }>(`/contractors/${cid}/billing`)
+                      : Promise.resolve(null),
+                  ])
                   const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
+                  const accountDisabled = profileRes.ok ? !!(profileRes.data as { accountDisabled?: boolean }).accountDisabled : false
                   if (logoUrl) sessionStorage.setItem("cq_logo_url", logoUrl)
                   else sessionStorage.removeItem("cq_logo_url")
+                  const billingStatus =
+                    billingRes !== null && billingRes.ok
+                      ? (billingRes.data as { billingStatus: string }).billingStatus
+                      : null
                   setValue({
-                    contractorId: staffRes.data.contractorId,
-                    contractorName: staffRes.data.contractorName,
+                    contractorId: cid,
+                    contractorName: cname,
                     isSuperAdmin: false,
                     contractors: [],
                     logoUrl,
+                    userRole: role,
+                    billingStatus,
+                    accountDisabled,
                     loading: false,
                     noAccess: false,
                     error: null,

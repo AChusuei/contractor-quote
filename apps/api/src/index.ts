@@ -6,6 +6,7 @@ import {
   requireAuth,
   requireContractorOwnership,
   requireQuoteOwnership,
+  requireStaffRole,
 } from "./middleware/tenantIsolation"
 import { requireSuperAdmin } from "./middleware/superAdmin"
 import {
@@ -28,7 +29,7 @@ import {
   type QuoteStatus,
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
-import { sendNewQuoteNotification } from "./lib/email"
+import { sendNewQuoteNotification, sendPaymentFailedNotification } from "./lib/email"
 import { verifyTurnstileToken } from "./lib/turnstile"
 import { verifyClerkJwt } from "./lib/jwtVerify"
 import { insertAuditEvent, extractEmailFromJwt } from "./lib/audit"
@@ -50,6 +51,9 @@ type Bindings = {
   SENDGRID_API_KEY: string
   TURNSTILE_SECRET_KEY: string
   CLERK_JWKS_URL: string
+  PADDLE_API_KEY: string
+  PADDLE_WEBHOOK_SECRET: string
+  PADDLE_ENVIRONMENT: string
 }
 
 type Variables = {
@@ -59,6 +63,14 @@ type Variables = {
 }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath("/api/v1")
+
+// SQLite datetime('now') returns "YYYY-MM-DD HH:MM:SS" in UTC — normalize before parsing.
+function isTokenExpired(createdAt: string): boolean {
+  const isoDate = createdAt.includes("T") ? createdAt : createdAt.replace(" ", "T") + "Z"
+  return Date.now() - new Date(isoDate).getTime() > 30 * 24 * 60 * 60 * 1000
+}
+
+const TOKEN_EXPIRED_MSG = "This draft link has expired. Links are valid for 30 days."
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -203,7 +215,7 @@ app.get("/contractors/by-id/:id", async (c) => {
 app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
   const contractorId = c.req.param("contractorId")
   const contractor = await c.env.DB.prepare(
-    "SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, calendar_url FROM contractors WHERE id = ?"
+    "SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, calendar_url, account_disabled FROM contractors WHERE id = ?"
   )
     .bind(contractorId)
     .first()
@@ -225,6 +237,7 @@ app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(
       licenseNumber: contractor.license_number,
       logoUrl: contractor.logo_url ? `/api/v1/contractors/${contractorId}/logo` : null,
       calendarUrl: contractor.calendar_url,
+      accountDisabled: contractor.account_disabled === 1,
     },
   })
 })
@@ -491,6 +504,10 @@ app.get(
       return apiError(c, "NOT_FOUND", "Quote not found")
     }
 
+    if (isTokenExpired(quote.created_at as string)) {
+      return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -548,10 +565,10 @@ app.patch(
 
     // --- Verify quote exists and is a draft, and publicToken matches ---
     const quote = await c.env.DB.prepare(
-      "SELECT id, contractor_id, customer_id, status, public_token FROM quotes WHERE id = ?"
+      "SELECT id, contractor_id, customer_id, status, public_token, created_at FROM quotes WHERE id = ?"
     )
       .bind(quoteId)
-      .first<{ id: string; contractor_id: string; customer_id: string; status: string; public_token: string }>()
+      .first<{ id: string; contractor_id: string; customer_id: string; status: string; public_token: string; created_at: string }>()
 
     if (!quote) {
       return apiError(c, "NOT_FOUND", "Quote not found")
@@ -559,6 +576,10 @@ app.patch(
 
     if (quote.public_token !== data.publicToken) {
       return apiError(c, "FORBIDDEN", "Invalid token")
+    }
+
+    if (isTokenExpired(quote.created_at)) {
+      return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
     }
 
     if (quote.status !== "draft") {
@@ -1040,19 +1061,22 @@ app.post(
 
     // --- Auth: publicToken (intake) or Clerk (admin) ---
     const publicToken = c.req.query("publicToken")
-    let quote: { id: string; contractor_id: string; public_token: string } | null
+    let quote: { id: string; contractor_id: string; public_token: string; created_at: string } | null
 
     let photoActorEmail: string | null = null
     let photoStaffId: string | null = null
 
     if (publicToken) {
       quote = await c.env.DB.prepare(
-        "SELECT id, contractor_id, public_token FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, contractor_id, public_token, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
         .first()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
     } else {
       // Fall back to Clerk auth + ownership check
@@ -1172,12 +1196,15 @@ app.get(
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
-        "SELECT id FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
-        .first()
+        .first<{ id: string; created_at: string }>()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
     } else {
       const authMw = requireAuth()
@@ -1225,12 +1252,15 @@ app.get(
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
-        "SELECT id FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
-        .first()
+        .first<{ id: string; created_at: string }>()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
     } else {
       const authMw = requireAuth()
@@ -1307,7 +1337,7 @@ app.get(
       bindings.push(budget)
     }
 
-    const q = c.req.query("q")
+    const q = c.req.query("q")?.slice(0, 200)
     if (q) {
       conditions.push("(c.name LIKE ? OR q.job_site_address LIKE ?)")
       const pattern = `%${q}%`
@@ -1385,12 +1415,15 @@ app.delete(
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
-        "SELECT id, contractor_id FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, contractor_id, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
-        .first<{ id: string; contractor_id: string }>()
+        .first<{ id: string; contractor_id: string; created_at: string }>()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
       contractorId = quote.contractor_id
     } else {
@@ -1947,9 +1980,9 @@ app.patch(
       `SELECT id, contractor_id, name, email, phone,
               how_did_you_find_us, referred_by_contractor,
               created_at, updated_at
-       FROM customers WHERE id = ?`
+       FROM customers WHERE id = ? AND contractor_id = ?`
     )
-      .bind(customerId)
+      .bind(customerId, contractorId)
       .first()
 
     if (!updated) {
@@ -2925,7 +2958,7 @@ app.get(
     const contractorId = c.req.param("contractorId")
 
     const contractor = await c.env.DB.prepare(
-      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url
+      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, account_disabled
        FROM contractors WHERE id = ?`
     )
       .bind(contractorId)
@@ -2939,6 +2972,7 @@ app.get(
         website_url: string | null
         license_number: string | null
         logo_url: string | null
+        account_disabled: number
       }>()
 
     if (!contractor) {
@@ -2979,6 +3013,7 @@ app.get(
       websiteUrl: contractor.website_url ?? null,
       licenseNumber: contractor.license_number ?? null,
       logoUrl: contractor.logo_url ?? null,
+      accountDisabled: contractor.account_disabled === 1,
       quoteCount: counts?.quoteCount ?? 0,
       customerCount: counts?.customerCount ?? 0,
       staff: (staffRows ?? []).map((s) => ({
@@ -2994,6 +3029,58 @@ app.get(
     }
 
     return c.json({ ok: true, data })
+  }
+)
+
+// Toggle contractor account access (platform admin only)
+app.post(
+  "/platform/contractors/:contractorId/toggle-access",
+  requireSuperAdmin(),
+  rateLimit({ limit: 50, windowSeconds: 3600, keyPrefix: "platform-toggle-access" }),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const parsed = body as Record<string, unknown>
+    if (typeof parsed.disabled !== "boolean") {
+      return apiError(c, "VALIDATION_ERROR", "disabled field must be a boolean")
+    }
+
+    const accountDisabled = parsed.disabled ? 1 : 0
+
+    await c.env.DB.prepare(
+      "UPDATE contractors SET account_disabled = ?, updated_at = datetime('now') WHERE id = ?"
+    )
+      .bind(accountDisabled, contractorId)
+      .run()
+
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "contractor",
+      entityId: contractorId,
+      action: accountDisabled ? "disable" : "enable",
+      details: { account_disabled: Boolean(accountDisabled) },
+    }).catch(() => {})
+
+    return c.json({ ok: true, data: { account_disabled: Boolean(accountDisabled) } })
   }
 )
 
@@ -3537,6 +3624,420 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
+// Paddle webhook — public endpoint (no auth)
+// ---------------------------------------------------------------------------
+
+type PaddleEventData = {
+  id: string
+  customer_id?: string
+  subscription_id?: string
+}
+
+type PaddleEvent = {
+  event_type: string
+  data: PaddleEventData
+}
+
+async function verifyPaddleSignature(
+  rawBody: string,
+  signatureHeader: string,
+  secret: string
+): Promise<boolean> {
+  // Paddle-Signature: ts=<timestamp>;h1=<hex-hash>
+  const parts: Record<string, string> = {}
+  for (const part of signatureHeader.split(";")) {
+    const idx = part.indexOf("=")
+    if (idx !== -1) parts[part.slice(0, idx)] = part.slice(idx + 1)
+  }
+  const ts = parts["ts"]
+  const h1 = parts["h1"]
+  if (!ts || !h1) return false
+
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const signedPayload = `${ts}:${rawBody}`
+  const sigBytes = await crypto.subtle.sign("HMAC", key, encoder.encode(signedPayload))
+  const computed = Array.from(new Uint8Array(sigBytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+
+  return computed === h1
+}
+
+const PADDLE_KNOWN_EVENTS = new Set([
+  "subscription.activated",
+  "subscription.past_due",
+  "subscription.canceled",
+  "transaction.completed",
+  "transaction.payment_failed",
+])
+
+app.post("/webhooks/paddle", async (c) => {
+  const rawBody = await c.req.text()
+
+  const signatureHeader = c.req.header("paddle-signature") ?? ""
+  const secret = c.env.PADDLE_WEBHOOK_SECRET
+
+  if (!secret || !signatureHeader) {
+    return c.json({ ok: false, error: "Invalid signature" }, 400)
+  }
+
+  const valid = await verifyPaddleSignature(rawBody, signatureHeader, secret)
+  if (!valid) {
+    return c.json({ ok: false, error: "Invalid signature" }, 400)
+  }
+
+  let event: PaddleEvent
+  try {
+    event = JSON.parse(rawBody) as PaddleEvent
+  } catch {
+    return c.json({ ok: false, error: "Invalid payload" }, 400)
+  }
+
+  const { event_type, data } = event
+
+  // Return 200 for unknown events — Paddle expects 200 for all acknowledged events
+  if (!PADDLE_KNOWN_EVENTS.has(event_type)) {
+    return c.json({ ok: true })
+  }
+
+  // For subscription events data.id is the subscription ID; for transaction events it's data.subscription_id
+  const customerId = data.customer_id ?? null
+  const subscriptionId = event_type.startsWith("subscription.")
+    ? data.id
+    : (data.subscription_id ?? null)
+
+  if (!customerId && !subscriptionId) {
+    return c.json({ ok: true })
+  }
+
+  const contractor = await c.env.DB.prepare(
+    `SELECT id, email, name, billing_status, grace_period_ends_at
+     FROM contractors
+     WHERE (paddle_customer_id = ? AND paddle_customer_id IS NOT NULL)
+        OR (paddle_subscription_id = ? AND paddle_subscription_id IS NOT NULL)
+     LIMIT 1`
+  )
+    .bind(customerId, subscriptionId)
+    .first<{ id: string; email: string | null; name: string; billing_status: string; grace_period_ends_at: string | null }>()
+
+  if (!contractor) {
+    return c.json({ ok: true })
+  }
+
+  if (event_type === "subscription.activated" || event_type === "transaction.completed") {
+    if (contractor.billing_status !== "active" || contractor.grace_period_ends_at !== null) {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET billing_status = 'active', grace_period_ends_at = NULL, updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    }
+  } else if (event_type === "subscription.past_due") {
+    if (contractor.billing_status !== "past_due") {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET billing_status = 'past_due', grace_period_ends_at = datetime('now', '+5 days'), updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    }
+  } else if (event_type === "subscription.canceled") {
+    if (contractor.billing_status !== "canceled") {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET billing_status = 'canceled', updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    }
+  } else if (event_type === "transaction.payment_failed") {
+    if (contractor.grace_period_ends_at === null) {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET grace_period_ends_at = datetime('now', '+5 days'), updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    } else {
+      const graceEnd = new Date(
+        contractor.grace_period_ends_at.includes("T")
+          ? contractor.grace_period_ends_at
+          : contractor.grace_period_ends_at.replace(" ", "T") + "Z"
+      )
+      if (graceEnd < new Date()) {
+        await c.env.DB.prepare(
+          `UPDATE contractors SET billing_status = 'suspended', updated_at = datetime('now') WHERE id = ?`
+        )
+          .bind(contractor.id)
+          .run()
+      }
+    }
+
+    if (contractor.email) {
+      await sendPaymentFailedNotification(
+        { contractorEmail: contractor.email, contractorName: contractor.name },
+        c.env.SENDGRID_API_KEY,
+        c.env.NOTIFICATION_FROM_EMAIL,
+        c.env.APP_BASE_URL
+      )
+    }
+  }
+
+  return c.json({ ok: true })
+})
+
+// ---------------------------------------------------------------------------
+// Billing — Paddle backend endpoints
+// ---------------------------------------------------------------------------
+
+function paddleBase(env: Bindings): string {
+  return env.PADDLE_ENVIRONMENT === "sandbox"
+    ? "https://sandbox-api.paddle.com"
+    : "https://api.paddle.com"
+}
+
+// GET /contractors/:contractorId/billing
+app.get(
+  "/contractors/:contractorId/billing",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+    const row = await c.env.DB.prepare(
+      `SELECT billing_status, monthly_rate_cents, next_billing_date,
+              paddle_customer_id, grace_period_ends_at
+       FROM contractors WHERE id = ?`
+    )
+      .bind(contractorId)
+      .first<{
+        billing_status: string
+        monthly_rate_cents: number | null
+        next_billing_date: string | null
+        paddle_customer_id: string | null
+        grace_period_ends_at: string | null
+      }>()
+
+    if (!row) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    const maskedCustomerId = row.paddle_customer_id
+      ? `***${row.paddle_customer_id.slice(-8)}`
+      : null
+
+    return c.json({
+      ok: true,
+      data: {
+        billingStatus: row.billing_status,
+        monthlyRateCents: row.monthly_rate_cents,
+        nextBillingDate: row.next_billing_date,
+        paddleCustomerId: maskedCustomerId,
+        gracePeriodEndsAt: row.grace_period_ends_at,
+      },
+    })
+  }
+)
+
+// POST /contractors/:contractorId/billing/setup
+app.post(
+  "/contractors/:contractorId/billing/setup",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    if (!c.env.PADDLE_API_KEY) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const contractorId = c.req.param("contractorId")
+    const contractor = await c.env.DB.prepare(
+      "SELECT name, email, paddle_customer_id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ name: string; email: string | null; paddle_customer_id: string | null }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    const base = paddleBase(c.env)
+    let paddleCustomerId = contractor.paddle_customer_id
+
+    if (!paddleCustomerId) {
+      const customerRes = await fetch(`${base}/customers`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: contractor.email ?? undefined,
+          name: contractor.name,
+        }),
+      })
+
+      if (!customerRes.ok) {
+        console.error("Paddle create customer failed:", customerRes.status, await customerRes.text())
+        return apiError(c, "INTERNAL_ERROR", "Failed to create billing customer")
+      }
+
+      const customerData = (await customerRes.json()) as { data: { id: string } }
+      paddleCustomerId = customerData.data.id
+
+      await c.env.DB.prepare(
+        "UPDATE contractors SET paddle_customer_id = ? WHERE id = ?"
+      )
+        .bind(paddleCustomerId, contractorId)
+        .run()
+    }
+
+    const anchor = new Date().toISOString().slice(0, 10)
+    const subRes = await fetch(`${base}/subscriptions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customer_id: paddleCustomerId,
+        billing_cycle_anchor: anchor,
+        collection_mode: "automatic",
+      }),
+    })
+
+    if (!subRes.ok) {
+      console.error("Paddle create subscription failed:", subRes.status, await subRes.text())
+      return apiError(c, "INTERNAL_ERROR", "Failed to create billing subscription")
+    }
+
+    const subData = (await subRes.json()) as {
+      data: { id: string; management?: { payment_method_update_url?: string } }
+    }
+    const subscriptionId = subData.data.id
+    const checkoutUrl = subData.data.management?.payment_method_update_url ?? null
+
+    await c.env.DB.prepare(
+      "UPDATE contractors SET paddle_subscription_id = ?, billing_status = 'active' WHERE id = ?"
+    )
+      .bind(subscriptionId, contractorId)
+      .run()
+
+    return c.json({ ok: true, data: { checkoutUrl } })
+  }
+)
+
+// POST /contractors/:contractorId/billing/portal
+app.post(
+  "/contractors/:contractorId/billing/portal",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner", "admin"]),
+  async (c) => {
+    if (!c.env.PADDLE_API_KEY) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const contractorId = c.req.param("contractorId")
+    const contractor = await c.env.DB.prepare(
+      "SELECT paddle_customer_id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ paddle_customer_id: string | null }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    if (!contractor.paddle_customer_id) {
+      return apiError(c, "VALIDATION_ERROR", "No billing account found — set up billing first")
+    }
+
+    const base = paddleBase(c.env)
+    const portalRes = await fetch(
+      `${base}/customers/${contractor.paddle_customer_id}/portal-sessions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      }
+    )
+
+    if (!portalRes.ok) {
+      console.error("Paddle portal session failed:", portalRes.status, await portalRes.text())
+      return apiError(c, "INTERNAL_ERROR", "Failed to create billing portal session")
+    }
+
+    const portalData = (await portalRes.json()) as {
+      data: { urls: { general: { overview: string } } }
+    }
+    const portalUrl = portalData.data.urls.general.overview
+
+    return c.json({ ok: true, data: { portalUrl } })
+  }
+)
+
+// DELETE /contractors/:contractorId/billing/cancel
+app.delete(
+  "/contractors/:contractorId/billing/cancel",
+  requireAuth(),
+  requireContractorOwnership(),
+  requireStaffRole(["owner"]),
+  async (c) => {
+    if (!c.env.PADDLE_API_KEY) {
+      return apiError(c, "INTERNAL_ERROR", "Billing not configured")
+    }
+
+    const contractorId = c.req.param("contractorId")
+    const contractor = await c.env.DB.prepare(
+      "SELECT paddle_subscription_id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ paddle_subscription_id: string | null }>()
+
+    if (!contractor) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    if (!contractor.paddle_subscription_id) {
+      return apiError(c, "VALIDATION_ERROR", "No active subscription found")
+    }
+
+    const base = paddleBase(c.env)
+    const cancelRes = await fetch(
+      `${base}/subscriptions/${contractor.paddle_subscription_id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${c.env.PADDLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    )
+
+    if (!cancelRes.ok) {
+      console.error("Paddle cancel subscription failed:", cancelRes.status, await cancelRes.text())
+      return apiError(c, "INTERNAL_ERROR", "Failed to cancel subscription")
+    }
+
+    await c.env.DB.prepare(
+      "UPDATE contractors SET billing_status = 'canceled' WHERE id = ?"
+    )
+      .bind(contractorId)
+      .run()
+
+    return c.json({ ok: true, data: { canceled: true } })
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Required secrets — must be present in all non-development environments.
 // Validated on every request so any request to an unconfigured Worker fails
 // immediately with a clear error rather than a cryptic failure deep in a handler.
@@ -3561,6 +4062,22 @@ export default {
         })
       }
     }
+
+    // Warn if dev-mode security bypasses are active in a non-local deployment.
+    // ENVIRONMENT=development disables JWT signature verification and enables the
+    // x-super-admin-email bypass — safe locally, dangerous if set on a real Worker.
+    if (env.ENVIRONMENT === "development") {
+      const { hostname } = new URL(request.url)
+      if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+        console.error(
+          `SECURITY WARNING: ENVIRONMENT=development is set but Worker is serving requests at "${hostname}". ` +
+            "Dev-mode security bypasses are active (JWT signature verification skipped, " +
+            "x-super-admin-email header accepted). " +
+            "Set ENVIRONMENT=production for non-local deployments."
+        )
+      }
+    }
+
     return app.fetch(request, env, ctx)
   },
 }

@@ -46,3 +46,9 @@ CLAUDE.md
 /blob-report/
 /playwright/.cache/
 src/generated-schema.ts
+
+# Gas Town (added by gt)
+.logs/
+__pycache__/
+state.json
+CLAUDE.local.md

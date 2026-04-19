@@ -920,6 +920,146 @@ describe("DELETE /api/v1/quotes/:quoteId/photos/:photoId", () => {
 })
 
 // ---------------------------------------------------------------------------
+// Public token expiry — 410 Gone after 30 days (all publicToken endpoints)
+// ---------------------------------------------------------------------------
+
+describe("public token expiry — 30-day TTL", () => {
+  const TINY_JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+
+  function daysAgo(n: number): string {
+    return new Date(Date.now() - n * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .replace("T", " ")
+      .slice(0, 19)
+  }
+
+  it("GET /quotes/:quoteId/draft returns 410 for expired token", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(31),
+    })
+
+    const res = await SELF.fetch(
+      apiUrl(`/quotes/${quote.id}/draft?publicToken=${quote.publicToken}`)
+    )
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { ok: boolean; code: string; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("GONE")
+    expect(body.error).toContain("expired")
+  })
+
+  it("GET /quotes/:quoteId/draft returns 200 for token within 30 days", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(29),
+    })
+
+    const res = await SELF.fetch(
+      apiUrl(`/quotes/${quote.id}/draft?publicToken=${quote.publicToken}`)
+    )
+    expect(res.status).toBe(200)
+  })
+
+  it("PATCH /quotes/:quoteId/draft returns 410 for expired token", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(31),
+    })
+
+    const res = await SELF.fetch(apiUrl(`/quotes/${quote.id}/draft`), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ publicToken: quote.publicToken, scope: {} }),
+    })
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("GONE")
+  })
+
+  it("POST /quotes/:quoteId/photos returns 410 for expired token", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(31),
+    })
+
+    const formData = new FormData()
+    formData.append("file", new File([TINY_JPG], "test.jpg", { type: "image/jpeg" }))
+    const res = await SELF.fetch(
+      apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`),
+      { method: "POST", body: formData }
+    )
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("GONE")
+  })
+
+  it("GET /quotes/:quoteId/photos returns 410 for expired token", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(31),
+    })
+
+    const res = await SELF.fetch(
+      apiUrl(`/quotes/${quote.id}/photos?publicToken=${quote.publicToken}`)
+    )
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("GONE")
+  })
+
+  it("GET /quotes/:quoteId/photos/:photoId/file returns 410 for expired token", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(31),
+    })
+    const photo = await seedPhoto(quote.id, contractor.id)
+
+    const res = await SELF.fetch(
+      apiUrl(`/quotes/${quote.id}/photos/${photo.id}/file?publicToken=${quote.publicToken}`)
+    )
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("GONE")
+  })
+
+  it("DELETE /quotes/:quoteId/photos/:photoId returns 410 for expired token", async () => {
+    const contractor = await seedContractor()
+    const customer = await seedCustomer(contractor.id)
+    const quote = await seedQuote(customer.id, contractor.id, {
+      status: "draft",
+      createdAt: daysAgo(31),
+    })
+    const photo = await seedPhoto(quote.id, contractor.id)
+
+    const res = await SELF.fetch(
+      apiUrl(`/quotes/${quote.id}/photos/${photo.id}?publicToken=${quote.publicToken}`),
+      { method: "DELETE" }
+    )
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { ok: boolean; code: string }
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe("GONE")
+  })
+})
+
+// ---------------------------------------------------------------------------
 // POST /api/v1/contractors/:contractorId/logo — Logo upload
 // ---------------------------------------------------------------------------
 

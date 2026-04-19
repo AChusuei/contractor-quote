@@ -38,6 +38,64 @@ export async function seedContractor(
   return c
 }
 
+export async function seedContractorWithBilling(
+  overrides: Partial<{
+    id: string
+    slug: string
+    name: string
+    email: string | null
+    paddleCustomerId: string | null
+    paddleSubscriptionId: string | null
+    billingStatus: string
+    gracePeriodEndsAt: string | null
+  }> = {}
+) {
+  const c = {
+    id: "00000000-0000-4000-8000-000000000002",
+    slug: "billing-co",
+    name: "Billing Co",
+    email: "admin@billingco.test" as string | null,
+    paddleCustomerId: "ctm_test123" as string | null,
+    paddleSubscriptionId: "sub_test456" as string | null,
+    billingStatus: "trialing",
+    gracePeriodEndsAt: null as string | null,
+    ...overrides,
+  }
+  await env.DB.prepare(
+    `INSERT OR REPLACE INTO contractors
+     (id, slug, name, email, paddle_customer_id, paddle_subscription_id, billing_status, grace_period_ends_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      c.id, c.slug, c.name, c.email,
+      c.paddleCustomerId, c.paddleSubscriptionId, c.billingStatus, c.gracePeriodEndsAt
+    )
+    .run()
+  return c
+}
+
+/** Compute a valid Paddle-Signature header value for testing */
+export async function paddleSignatureHeader(
+  rawBody: string,
+  secret: string,
+  ts?: string
+): Promise<string> {
+  const timestamp = ts ?? String(Math.floor(Date.now() / 1000))
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const sigBytes = await crypto.subtle.sign("HMAC", key, encoder.encode(`${timestamp}:${rawBody}`))
+  const h1 = Array.from(new Uint8Array(sigBytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+  return `ts=${timestamp};h1=${h1}`
+}
+
 export async function seedCustomer(
   contractorId: string,
   overrides: Partial<{
@@ -85,6 +143,7 @@ export async function seedQuote(
     status: string
     submittedAt: string | null
     deletedAt: string | null
+    createdAt: string | null
   }> = {}
 ) {
   const q = {
@@ -97,21 +156,24 @@ export async function seedQuote(
     status: "lead",
     submittedAt: null as string | null,
     deletedAt: null as string | null,
+    createdAt: null as string | null,
     ...overrides,
   }
+
+  const createdAt = q.createdAt ?? new Date().toISOString().replace("T", " ").slice(0, 19)
 
   await env.DB.prepare(
     `INSERT INTO quotes (
       id, customer_id, contractor_id, schema_version,
       job_site_address, property_type, budget_range,
-      scope, public_token, status, submitted_at, deleted_at
-    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`
+      scope, public_token, status, submitted_at, deleted_at, created_at
+    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       q.id, customerId, contractorId,
       q.jobSiteAddress, q.propertyType, q.budgetRange,
       q.scope, q.publicToken, q.status,
-      q.submittedAt, q.deletedAt
+      q.submittedAt, q.deletedAt, createdAt
     )
     .run()
 
@@ -225,5 +287,6 @@ declare module "cloudflare:test" {
     KV: KVNamespace
     ENVIRONMENT: string
     CORS_ORIGINS: string
+    PADDLE_WEBHOOK_SECRET: string
   }
 }

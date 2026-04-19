@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useAuth } from "@clerk/clerk-react"
 import { Button } from "components"
-import { apiGet, apiPatch, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPatch, apiPost, setAuthProvider } from "@/lib/api"
 import { useAutoSave } from "@/hooks/useAutoSave"
 import {
   contractorProfileSchema,
@@ -37,6 +37,7 @@ interface ContractorDetail {
   websiteUrl: string | null
   licenseNumber: string | null
   logoUrl: string | null
+  accountDisabled: boolean
   quoteCount?: number
   customerCount?: number
   staff?: StaffMember[]
@@ -85,6 +86,8 @@ export function SuperContractorDetailPage() {
   const navigate = useNavigate()
   const [contractor, setContractor] = useState<ContractorDetail | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false)
+  const [toggleLoading, setToggleLoading] = useState(false)
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
@@ -107,6 +110,20 @@ export function SuperContractorDetailPage() {
   useEffect(() => {
     loadContractor()
   }, [loadContractor])
+
+  const handleToggleAccess = useCallback(async (disable: boolean) => {
+    if (!id) return
+    setToggleLoading(true)
+    const res = await apiPost<{ account_disabled: boolean }>(
+      `/platform/contractors/${encodeURIComponent(id)}/toggle-access`,
+      { disabled: disable },
+    )
+    setToggleLoading(false)
+    if (res.ok) {
+      setContractor((prev) => prev ? { ...prev, accountDisabled: res.data.account_disabled } : prev)
+      setShowDisableConfirm(false)
+    }
+  }, [id])
 
   const {
     register,
@@ -193,6 +210,68 @@ export function SuperContractorDetailPage() {
         <h1 className="text-2xl font-semibold">{contractor.name}</h1>
         <p className="text-sm text-muted-foreground mt-1 font-mono">{contractor.slug}</p>
       </div>
+
+      {/* Account Status */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Account Status:</span>
+          {contractor.accountDisabled ? (
+            <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200">
+              Disabled
+            </span>
+          ) : (
+            <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
+              Active
+            </span>
+          )}
+        </div>
+        {contractor.accountDisabled ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={toggleLoading}
+            onClick={() => handleToggleAccess(false)}
+          >
+            {toggleLoading ? "Enabling…" : "Enable Account"}
+          </Button>
+        ) : (
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={toggleLoading}
+            onClick={() => setShowDisableConfirm(true)}
+          >
+            Disable Account
+          </Button>
+        )}
+      </div>
+
+      {/* Disable confirm dialog */}
+      {showDisableConfirm && (
+        <div className="rounded-lg border border-destructive bg-destructive/5 p-4 space-y-3">
+          <p className="text-sm font-medium">
+            This will immediately block all staff from accessing quotes, customers, and all other features. Continue?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={toggleLoading}
+              onClick={() => handleToggleAccess(true)}
+            >
+              {toggleLoading ? "Disabling…" : "Disable"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={toggleLoading}
+              onClick={() => setShowDisableConfirm(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="flex gap-6 text-sm">
