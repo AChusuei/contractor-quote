@@ -19,8 +19,7 @@ function extractEmailFromJwt(c: Context): string | null {
 
 /**
  * Check if the current caller is a platform admin.
- * Checks PLATFORM_ADMIN_EMAILS env var first (fast path), then falls through
- * to the super_users table as the source of truth.
+ * Source of truth is the super_users table.
  */
 async function isPlatformAdmin(c: Context): Promise<boolean> {
   const authHeader = c.req.header("authorization")
@@ -34,17 +33,6 @@ async function isPlatformAdmin(c: Context): Promise<boolean> {
 
   const normalizedEmail = (email as string).toLowerCase()
 
-  // Fast path: env var check
-  const adminEmailsRaw = c.env.PLATFORM_ADMIN_EMAILS as string | undefined
-  if (adminEmailsRaw) {
-    const adminEmails = adminEmailsRaw
-      .split(",")
-      .map((e: string) => e.trim().toLowerCase())
-      .filter(Boolean)
-    if (adminEmails.includes(normalizedEmail)) return true
-  }
-
-  // Fall through: check super_users table
   const row = await c.env.DB.prepare(
     "SELECT id FROM super_users WHERE LOWER(email) = ? LIMIT 1"
   )
