@@ -20,6 +20,7 @@ import {
   staffUpdateSchema,
   assignOwnerSchema,
   contractorUpdateSchema,
+  contractorBillingUpdateSchema,
   superUserCreateSchema,
   formatZodErrors,
   MAX_PAYLOAD_BYTES,
@@ -2954,7 +2955,8 @@ app.get(
     const contractorId = c.req.param("contractorId")
 
     const contractor = await c.env.DB.prepare(
-      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url
+      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url,
+              billing_status, monthly_rate_cents, billing_exempt, paddle_customer_id, grace_period_ends_at
        FROM contractors WHERE id = ?`
     )
       .bind(contractorId)
@@ -2968,6 +2970,11 @@ app.get(
         website_url: string | null
         license_number: string | null
         logo_url: string | null
+        billing_status: string
+        monthly_rate_cents: number
+        billing_exempt: number
+        paddle_customer_id: string | null
+        grace_period_ends_at: string | null
       }>()
 
     if (!contractor) {
@@ -3008,6 +3015,11 @@ app.get(
       websiteUrl: contractor.website_url ?? null,
       licenseNumber: contractor.license_number ?? null,
       logoUrl: contractor.logo_url ?? null,
+      billingStatus: contractor.billing_status ?? "active",
+      monthlyRateCents: contractor.monthly_rate_cents ?? 0,
+      billingExempt: contractor.billing_exempt === 1,
+      paddleCustomerId: contractor.paddle_customer_id ?? null,
+      gracePeriodEndsAt: contractor.grace_period_ends_at ?? null,
       quoteCount: counts?.quoteCount ?? 0,
       customerCount: counts?.customerCount ?? 0,
       staff: (staffRows ?? []).map((s) => ({
@@ -3117,6 +3129,121 @@ app.patch(
   }
 )
 
+// Update contractor billing fields (platform admin only)
+app.patch(
+  "/platform/contractors/:contractorId/billing",
+  requireSuperAdmin(),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const result = contractorBillingUpdateSchema.safeParse(body)
+    if (!result.success) {
+      return c.json(
+        {
+          ok: false,
+          error: "Validation failed",
+          code: "VALIDATION_ERROR" as const,
+          fields: formatZodErrors(result.error),
+        },
+        422
+      )
+    }
+
+    const data = result.data
+    if (data.monthly_rate_cents === undefined && data.billing_exempt === undefined) {
+      return apiError(c, "VALIDATION_ERROR", "No billing fields to update")
+    }
+
+    const updates: string[] = []
+    const bindings: (string | number)[] = []
+
+    if (data.monthly_rate_cents !== undefined) {
+      updates.push("monthly_rate_cents = ?")
+      bindings.push(data.monthly_rate_cents)
+    }
+    if (data.billing_exempt !== undefined) {
+      updates.push("billing_exempt = ?")
+      bindings.push(data.billing_exempt ? 1 : 0)
+    }
+    updates.push("updated_at = datetime('now')")
+    bindings.push(contractorId as string)
+
+    await c.env.DB.prepare(
+      `UPDATE contractors SET ${updates.join(", ")} WHERE id = ?`
+    )
+      .bind(...bindings)
+      .run()
+
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "contractor",
+      entityId: contractorId,
+      action: "update",
+      details: { billing: data },
+    }).catch(() => {})
+
+    return c.json({ ok: true, data: { updated: true } })
+  }
+)
+
+// Override contractor suspension (platform admin only)
+app.post(
+  "/platform/contractors/:contractorId/billing/override-suspension",
+  requireSuperAdmin(),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE contractors
+       SET billing_status = 'active', grace_period_ends_at = NULL, updated_at = datetime('now')
+       WHERE id = ?`
+    )
+      .bind(contractorId)
+      .run()
+
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "contractor",
+      entityId: contractorId,
+      action: "update",
+      details: { billing_status: "active", grace_period_ends_at: null, override: true },
+    }).catch(() => {})
+
+    return c.json({ ok: true, data: { updated: true } })
+  }
+)
+
 // Extended contractor list with staff count and quote count
 app.get(
   "/platform/contractors-extended",
@@ -3124,7 +3251,7 @@ app.get(
   async (c) => {
     const { results } = await c.env.DB.prepare(
       `SELECT
-         c.id, c.slug, c.name, c.email,
+         c.id, c.slug, c.name, c.email, c.billing_status,
          (SELECT COUNT(*) FROM staff s WHERE s.contractor_id = c.id AND s.active = 1) AS staffCount,
          (SELECT COUNT(*) FROM quotes q WHERE q.contractor_id = c.id AND q.deleted_at IS NULL) AS quoteCount
        FROM contractors c
@@ -3134,6 +3261,7 @@ app.get(
       slug: string
       name: string
       email: string | null
+      billing_status: string
       staffCount: number
       quoteCount: number
     }>()
@@ -3143,6 +3271,7 @@ app.get(
       slug: row.slug,
       name: row.name,
       email: row.email ?? null,
+      billingStatus: row.billing_status ?? "active",
       staffCount: row.staffCount,
       quoteCount: row.quoteCount,
     }))

@@ -501,6 +501,21 @@ export const contractorUpdateSchema = z.object({
 export type ContractorUpdate = z.infer<typeof contractorUpdateSchema>
 
 // ---------------------------------------------------------------------------
+// Contractor billing update (platform admin)
+// ---------------------------------------------------------------------------
+
+export const contractorBillingUpdateSchema = z.object({
+  monthly_rate_cents: z
+    .number()
+    .int("Must be a whole number")
+    .min(0, "Rate cannot be negative")
+    .optional(),
+  billing_exempt: z.boolean().optional(),
+})
+
+export type ContractorBillingUpdate = z.infer<typeof contractorBillingUpdateSchema>
+
+// ---------------------------------------------------------------------------
 // Super user create
 // ---------------------------------------------------------------------------
 

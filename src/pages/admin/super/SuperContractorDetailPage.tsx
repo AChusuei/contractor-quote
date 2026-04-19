@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useAuth } from "@clerk/clerk-react"
 import { Button } from "components"
-import { apiGet, apiPatch, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPatch, apiPost, setAuthProvider } from "@/lib/api"
 import { useAutoSave } from "@/hooks/useAutoSave"
 import {
   contractorProfileSchema,
@@ -37,6 +37,11 @@ interface ContractorDetail {
   websiteUrl: string | null
   licenseNumber: string | null
   logoUrl: string | null
+  billingStatus: string
+  monthlyRateCents: number
+  billingExempt: boolean
+  paddleCustomerId: string | null
+  gracePeriodEndsAt: string | null
   quoteCount?: number
   customerCount?: number
   staff?: StaffMember[]
@@ -72,6 +77,134 @@ function RoleBadge({ role }: { role: string }) {
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
       {role.replace("_", " ")}
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Billing section
+// ---------------------------------------------------------------------------
+
+const BILLING_STATUS_COLORS: Record<string, string> = {
+  active: "text-green-700 dark:text-green-400",
+  past_due: "text-amber-700 dark:text-amber-400",
+  suspended: "text-red-700 dark:text-red-400",
+  exempt: "text-slate-500 dark:text-slate-400",
+}
+
+function BillingSection({
+  contractor,
+  onUpdate,
+}: {
+  contractor: ContractorDetail
+  onUpdate: () => void
+}) {
+  const [rateCents, setRateCents] = useState(contractor.monthlyRateCents)
+  const [exempt, setExempt] = useState(contractor.billingExempt)
+  const [saving, setSaving] = useState(false)
+  const [overriding, setOverriding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    const res = await apiPatch(`/platform/contractors/${contractor.id}/billing`, {
+      monthly_rate_cents: rateCents,
+      billing_exempt: exempt,
+    })
+    if (res.ok) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      onUpdate()
+    } else {
+      setError("error" in res ? res.error : "Failed to save billing settings")
+    }
+    setSaving(false)
+  }
+
+  const handleOverride = async () => {
+    setOverriding(true)
+    setError(null)
+    const res = await apiPost(`/platform/contractors/${contractor.id}/billing/override-suspension`, {})
+    if (res.ok) {
+      onUpdate()
+    } else {
+      setError("error" in res ? res.error : "Failed to override suspension")
+    }
+    setOverriding(false)
+  }
+
+  const statusColor = BILLING_STATUS_COLORS[contractor.billingStatus] ?? BILLING_STATUS_COLORS.active
+  const statusLabel = contractor.billingStatus.replace("_", " ")
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Billing Status</p>
+          <p className={`text-sm font-medium capitalize ${statusColor}`}>{statusLabel}</p>
+        </div>
+        {contractor.paddleCustomerId && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Paddle Customer ID</p>
+            <p className="text-sm font-mono text-muted-foreground">{contractor.paddleCustomerId}</p>
+          </div>
+        )}
+        {contractor.gracePeriodEndsAt && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Grace Period Ends</p>
+            <p className="text-sm text-muted-foreground">
+              {new Date(contractor.gracePeriodEndsAt).toLocaleDateString()}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium mb-1">Monthly Rate (cents)</label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={rateCents}
+            onChange={(e) => setRateCents(parseInt(e.target.value, 10) || 0)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            ${(rateCents / 100).toFixed(2)}/mo
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pt-5">
+          <input
+            type="checkbox"
+            id="billing-exempt"
+            checked={exempt}
+            onChange={(e) => setExempt(e.target.checked)}
+            className="h-4 w-4 rounded border-input"
+          />
+          <label htmlFor="billing-exempt" className="text-sm">Billing exempt</label>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex items-center gap-3">
+        <Button size="sm" disabled={saving} onClick={handleSave}>
+          {saving ? "Saving…" : saved ? "Saved" : "Save billing"}
+        </Button>
+        {contractor.billingStatus === "suspended" && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={overriding}
+            onClick={handleOverride}
+          >
+            {overriding ? "Clearing…" : "Override: clear suspension"}
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -234,6 +367,14 @@ export function SuperContractorDetailPage() {
           Contractor Info
         </h2>
         <ContractorProfileForm register={register} errors={errors} showSlug />
+      </div>
+
+      {/* Billing */}
+      <div>
+        <h2 className="text-sm font-semibold text-foreground border-b pb-2 mb-4">
+          Billing
+        </h2>
+        <BillingSection contractor={contractor} onUpdate={loadContractor} />
       </div>
 
       {/* Staff list */}
