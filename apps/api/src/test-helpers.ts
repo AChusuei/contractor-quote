@@ -85,6 +85,7 @@ export async function seedQuote(
     status: string
     submittedAt: string | null
     deletedAt: string | null
+    createdAt: string | null
   }> = {}
 ) {
   const q = {
@@ -97,21 +98,24 @@ export async function seedQuote(
     status: "lead",
     submittedAt: null as string | null,
     deletedAt: null as string | null,
+    createdAt: null as string | null,
     ...overrides,
   }
+
+  const createdAt = q.createdAt ?? new Date().toISOString().replace("T", " ").slice(0, 19)
 
   await env.DB.prepare(
     `INSERT INTO quotes (
       id, customer_id, contractor_id, schema_version,
       job_site_address, property_type, budget_range,
-      scope, public_token, status, submitted_at, deleted_at
-    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`
+      scope, public_token, status, submitted_at, deleted_at, created_at
+    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       q.id, customerId, contractorId,
       q.jobSiteAddress, q.propertyType, q.budgetRange,
       q.scope, q.publicToken, q.status,
-      q.submittedAt, q.deletedAt
+      q.submittedAt, q.deletedAt, createdAt
     )
     .run()
 

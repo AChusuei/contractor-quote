@@ -47,6 +47,7 @@ export type Lead = LeadInput & {
 export type ErrorCode =
   | "NOT_FOUND"
   | "FORBIDDEN"
+  | "GONE"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "INTERNAL_ERROR"

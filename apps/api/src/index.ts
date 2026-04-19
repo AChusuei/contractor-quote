@@ -61,6 +61,14 @@ type Variables = {
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath("/api/v1")
 
+// SQLite datetime('now') returns "YYYY-MM-DD HH:MM:SS" in UTC — normalize before parsing.
+function isTokenExpired(createdAt: string): boolean {
+  const isoDate = createdAt.includes("T") ? createdAt : createdAt.replace(" ", "T") + "Z"
+  return Date.now() - new Date(isoDate).getTime() > 30 * 24 * 60 * 60 * 1000
+}
+
+const TOKEN_EXPIRED_MSG = "This draft link has expired. Links are valid for 30 days."
+
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
@@ -492,6 +500,10 @@ app.get(
       return apiError(c, "NOT_FOUND", "Quote not found")
     }
 
+    if (isTokenExpired(quote.created_at as string)) {
+      return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -549,10 +561,10 @@ app.patch(
 
     // --- Verify quote exists and is a draft, and publicToken matches ---
     const quote = await c.env.DB.prepare(
-      "SELECT id, contractor_id, customer_id, status, public_token FROM quotes WHERE id = ?"
+      "SELECT id, contractor_id, customer_id, status, public_token, created_at FROM quotes WHERE id = ?"
     )
       .bind(quoteId)
-      .first<{ id: string; contractor_id: string; customer_id: string; status: string; public_token: string }>()
+      .first<{ id: string; contractor_id: string; customer_id: string; status: string; public_token: string; created_at: string }>()
 
     if (!quote) {
       return apiError(c, "NOT_FOUND", "Quote not found")
@@ -560,6 +572,10 @@ app.patch(
 
     if (quote.public_token !== data.publicToken) {
       return apiError(c, "FORBIDDEN", "Invalid token")
+    }
+
+    if (isTokenExpired(quote.created_at)) {
+      return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
     }
 
     if (quote.status !== "draft") {
@@ -1041,19 +1057,22 @@ app.post(
 
     // --- Auth: publicToken (intake) or Clerk (admin) ---
     const publicToken = c.req.query("publicToken")
-    let quote: { id: string; contractor_id: string; public_token: string } | null
+    let quote: { id: string; contractor_id: string; public_token: string; created_at: string } | null
 
     let photoActorEmail: string | null = null
     let photoStaffId: string | null = null
 
     if (publicToken) {
       quote = await c.env.DB.prepare(
-        "SELECT id, contractor_id, public_token FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, contractor_id, public_token, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
         .first()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
     } else {
       // Fall back to Clerk auth + ownership check
@@ -1173,12 +1192,15 @@ app.get(
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
-        "SELECT id FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
-        .first()
+        .first<{ id: string; created_at: string }>()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
     } else {
       const authMw = requireAuth()
@@ -1226,12 +1248,15 @@ app.get(
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
-        "SELECT id FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
-        .first()
+        .first<{ id: string; created_at: string }>()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
     } else {
       const authMw = requireAuth()
@@ -1386,12 +1411,15 @@ app.delete(
 
     if (publicToken) {
       const quote = await c.env.DB.prepare(
-        "SELECT id, contractor_id FROM quotes WHERE id = ? AND public_token = ?"
+        "SELECT id, contractor_id, created_at FROM quotes WHERE id = ? AND public_token = ?"
       )
         .bind(quoteId, publicToken)
-        .first<{ id: string; contractor_id: string }>()
+        .first<{ id: string; contractor_id: string; created_at: string }>()
       if (!quote) {
         return apiError(c, "NOT_FOUND", "Quote not found")
+      }
+      if (isTokenExpired(quote.created_at)) {
+        return apiError(c, "GONE", TOKEN_EXPIRED_MSG)
       }
       contractorId = quote.contractor_id
     } else {
