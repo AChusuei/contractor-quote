@@ -55,7 +55,7 @@ describe("GET /api/v1/contractors/:contractorId/billing", () => {
       }
     }
     expect(body.ok).toBe(true)
-    expect(body.data.billingStatus).toBe("trial")
+    expect(body.data.billingStatus).toBe("trialing")
     expect(body.data.monthlyRateCents).toBeNull()
     expect(body.data.nextBillingDate).toBeNull()
     expect(body.data.paddleCustomerId).toBeNull()
@@ -71,7 +71,7 @@ describe("GET /api/v1/contractors/:contractorId/billing", () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as { ok: boolean; data: { billingStatus: string } }
     expect(body.ok).toBe(true)
-    expect(body.data.billingStatus).toBe("trial")
+    expect(body.data.billingStatus).toBe("trialing")
   })
 
   it("masks paddle_customer_id when set", async () => {
