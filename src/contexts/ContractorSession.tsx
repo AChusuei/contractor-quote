@@ -21,6 +21,7 @@ interface ContractorSessionValue {
   userRole: string
   /** Billing status of the contractor. Null if unknown or user lacks access. */
   billingStatus: string | null
+  accountDisabled: boolean
   loading: boolean
   noAccess: boolean
   error: string | null
@@ -34,6 +35,7 @@ const ContractorSessionContext = createContext<ContractorSessionValue>({
   logoUrl: null,
   userRole: "",
   billingStatus: null,
+  accountDisabled: false,
   loading: true,
   noAccess: false,
   error: null,
@@ -54,6 +56,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
     logoUrl: null,
     userRole: "",
     billingStatus: null,
+    accountDisabled: false,
     loading: true,
     noAccess: false,
     error: null,
@@ -70,7 +73,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
       // Super admin impersonating a contractor — fetch full contractor list and logo in parallel
       Promise.all([
         apiGet<ContractorInfo[]>("/platform/contractors"),
-        apiGet<{ logoUrl: string | null }>(`/contractors/${superContractorId}`),
+        apiGet<{ logoUrl: string | null; accountDisabled?: boolean }>(`/contractors/${superContractorId}`),
       ])
         .then(([contractorsRes, profileRes]) => {
           const contractors = contractorsRes.ok
@@ -81,6 +84,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
               }))
             : []
           const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
+          const accountDisabled = profileRes.ok ? !!(profileRes.data as { accountDisabled?: boolean }).accountDisabled : false
           if (logoUrl) sessionStorage.setItem("cq_logo_url", logoUrl)
           else sessionStorage.removeItem("cq_logo_url")
           setValue({
@@ -91,6 +95,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             logoUrl,
             userRole: "",
             billingStatus: null,
+            accountDisabled,
             loading: false,
             noAccess: false,
             error: null,
@@ -105,6 +110,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
             logoUrl: null,
             userRole: "",
             billingStatus: null,
+            accountDisabled: false,
             loading: false,
             noAccess: false,
             error: null,
@@ -126,12 +132,13 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
                   const { contractorId: cid, contractorName: cname, role } = staffRes.data
                   const canAccessBilling = role === "owner" || role === "admin"
                   const [profileRes, billingRes] = await Promise.all([
-                    apiGet<{ logoUrl: string | null }>(`/contractors/${cid}`),
+                    apiGet<{ logoUrl: string | null; accountDisabled?: boolean }>(`/contractors/${cid}`),
                     canAccessBilling
                       ? apiGet<{ billingStatus: string }>(`/contractors/${cid}/billing`)
                       : Promise.resolve(null),
                   ])
                   const logoUrl = profileRes.ok ? (profileRes.data as { logoUrl: string | null }).logoUrl ?? null : null
+                  const accountDisabled = profileRes.ok ? !!(profileRes.data as { accountDisabled?: boolean }).accountDisabled : false
                   if (logoUrl) sessionStorage.setItem("cq_logo_url", logoUrl)
                   else sessionStorage.removeItem("cq_logo_url")
                   const billingStatus =
@@ -146,6 +153,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
                     logoUrl,
                     userRole: role,
                     billingStatus,
+                    accountDisabled,
                     loading: false,
                     noAccess: false,
                     error: null,

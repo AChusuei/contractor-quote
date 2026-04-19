@@ -45,6 +45,7 @@ interface AuthContext {
   contractorId: string
   actorEmail: string | null
   staffId: string | null
+  isPlatformAdmin: boolean
 }
 
 /**
@@ -65,7 +66,7 @@ async function extractAuthContext(c: Context): Promise<AuthContext | null> {
   // Platform admins can override the contractor context (impersonation)
   const superContractorId = c.req.header("x-super-contractor-id")
   if (superContractorId && (await isPlatformAdmin(c))) {
-    return { contractorId: superContractorId, actorEmail: extractEmailFromJwt(c), staffId: null }
+    return { contractorId: superContractorId, actorEmail: extractEmailFromJwt(c), staffId: null, isPlatformAdmin: true }
   }
 
   // In production: extract from Clerk JWT
@@ -97,7 +98,7 @@ async function extractAuthContext(c: Context): Promise<AuthContext | null> {
           .first<{ id: string }>()
         staffId = staff?.id ?? null
       }
-      return { contractorId: contractorIdFromJwt as string, actorEmail: email ?? null, staffId }
+      return { contractorId: contractorIdFromJwt as string, actorEmail: email ?? null, staffId, isPlatformAdmin: false }
     }
 
     // No contractorId claim — look up staff table by email
@@ -107,13 +108,13 @@ async function extractAuthContext(c: Context): Promise<AuthContext | null> {
       )
         .bind(email.toLowerCase())
         .first<{ id: string; contractor_id: string }>()
-      if (staff) return { contractorId: staff.contractor_id, actorEmail: email, staffId: staff.id }
+      if (staff) return { contractorId: staff.contractor_id, actorEmail: email, staffId: staff.id, isPlatformAdmin: false }
     }
 
     // Dev fallback: JWT exists but no contractor association found
     if (c.env.ENVIRONMENT === "development") {
       const devContractorId = c.req.header("x-contractor-id") ?? null
-      if (devContractorId) return { contractorId: devContractorId, actorEmail: email ?? null, staffId: null }
+      if (devContractorId) return { contractorId: devContractorId, actorEmail: email ?? null, staffId: null, isPlatformAdmin: false }
     }
     return null
   }
@@ -126,6 +127,7 @@ async function extractAuthContext(c: Context): Promise<AuthContext | null> {
       contractorId: devContractorId,
       actorEmail: null,
       staffId: null,
+      isPlatformAdmin: false,
     }
   }
 
@@ -135,6 +137,7 @@ async function extractAuthContext(c: Context): Promise<AuthContext | null> {
 /**
  * Middleware: require authentication and extract contractor ID.
  * Sets `contractorId`, `actorEmail`, and `staffId` on the Hono context variables.
+ * Also blocks disabled contractor accounts on protected routes (fail-open on DB errors).
  */
 export function requireAuth() {
   return async (c: Context, next: Next) => {
@@ -145,6 +148,37 @@ export function requireAuth() {
     c.set("contractorId", auth.contractorId)
     c.set("actorEmail", auth.actorEmail)
     c.set("staffId", auth.staffId)
+
+    // Block disabled accounts on all routes except the settings page exceptions.
+    // Platform admins impersonating a contractor bypass this check.
+    if (!auth.isPlatformAdmin) {
+      const path = c.req.path
+      const method = c.req.method
+      // Exceptions: read/update own contractor profile (settings page data)
+      const isSettingsException =
+        /^\/api\/v1\/contractors\/[^/]+$/.test(path) &&
+        (method === "GET" || method === "PATCH")
+
+      if (!isSettingsException) {
+        try {
+          const row = await c.env.DB.prepare(
+            "SELECT account_disabled FROM contractors WHERE id = ?"
+          )
+            .bind(auth.contractorId)
+            .first<{ account_disabled: number }>()
+
+          if (row?.account_disabled === 1) {
+            return c.json(
+              { ok: false, code: "ACCOUNT_DISABLED", error: "This contractor account has been disabled." },
+              403
+            )
+          }
+        } catch {
+          // FAIL OPEN: never block on infrastructure errors
+        }
+      }
+    }
+
     await next()
   }
 }

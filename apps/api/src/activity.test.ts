@@ -10,13 +10,17 @@ type Row = Record<string, unknown>
 /**
  * Build a D1 mock that supports multiple sequential prepare() calls.
  * Each call to prepare() returns the next statement config in the queue.
+ * The first slot is reserved for requireAuth()'s account_disabled check.
  */
 function makeD1Mock(stmtConfigs: Array<{ first?: unknown; all?: { results: Row[] }; run?: unknown }>) {
+  // requireAuth() now queries account_disabled — prepend a null result so it
+  // passes through without consuming a meaningful mock slot.
+  const configs = [{ first: null }, ...stmtConfigs]
   let callIndex = 0
 
   return {
     prepare: vi.fn().mockImplementation(() => {
-      const config = stmtConfigs[callIndex] ?? stmtConfigs[stmtConfigs.length - 1]
+      const config = configs[callIndex] ?? configs[configs.length - 1]
       callIndex++
 
       const makeStmt = (cfg: typeof config) => ({

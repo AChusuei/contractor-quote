@@ -216,7 +216,7 @@ app.get("/contractors/by-id/:id", async (c) => {
 app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
   const contractorId = c.req.param("contractorId")
   const contractor = await c.env.DB.prepare(
-    "SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, calendar_url FROM contractors WHERE id = ?"
+    "SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, calendar_url, account_disabled FROM contractors WHERE id = ?"
   )
     .bind(contractorId)
     .first()
@@ -238,6 +238,7 @@ app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(
       licenseNumber: contractor.license_number,
       logoUrl: contractor.logo_url ? `/api/v1/contractors/${contractorId}/logo` : null,
       calendarUrl: contractor.calendar_url,
+      accountDisabled: contractor.account_disabled === 1,
     },
   })
 })
@@ -2958,7 +2959,7 @@ app.get(
     const contractorId = c.req.param("contractorId")
 
     const contractor = await c.env.DB.prepare(
-      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url
+      `SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, account_disabled
        FROM contractors WHERE id = ?`
     )
       .bind(contractorId)
@@ -2972,6 +2973,7 @@ app.get(
         website_url: string | null
         license_number: string | null
         logo_url: string | null
+        account_disabled: number
       }>()
 
     if (!contractor) {
@@ -3012,6 +3014,7 @@ app.get(
       websiteUrl: contractor.website_url ?? null,
       licenseNumber: contractor.license_number ?? null,
       logoUrl: contractor.logo_url ?? null,
+      accountDisabled: contractor.account_disabled === 1,
       quoteCount: counts?.quoteCount ?? 0,
       customerCount: counts?.customerCount ?? 0,
       staff: (staffRows ?? []).map((s) => ({
@@ -3027,6 +3030,58 @@ app.get(
     }
 
     return c.json({ ok: true, data })
+  }
+)
+
+// Toggle contractor account access (platform admin only)
+app.post(
+  "/platform/contractors/:contractorId/toggle-access",
+  requireSuperAdmin(),
+  rateLimit({ limit: 50, windowSeconds: 3600, keyPrefix: "platform-toggle-access" }),
+  async (c) => {
+    const contractorId = c.req.param("contractorId")
+
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM contractors WHERE id = ?"
+    )
+      .bind(contractorId)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      return apiError(c, "NOT_FOUND", "Contractor not found")
+    }
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return apiError(c, "VALIDATION_ERROR", "Invalid JSON in request body")
+    }
+
+    const parsed = body as Record<string, unknown>
+    if (typeof parsed.disabled !== "boolean") {
+      return apiError(c, "VALIDATION_ERROR", "disabled field must be a boolean")
+    }
+
+    const accountDisabled = parsed.disabled ? 1 : 0
+
+    await c.env.DB.prepare(
+      "UPDATE contractors SET account_disabled = ?, updated_at = datetime('now') WHERE id = ?"
+    )
+      .bind(accountDisabled, contractorId)
+      .run()
+
+    const actorEmail = c.get("superAdminEmail") as string
+    await insertAuditEvent(c.env.DB, {
+      actorEmail,
+      actorType: "super_admin",
+      entityType: "contractor",
+      entityId: contractorId,
+      action: accountDisabled ? "disable" : "enable",
+      details: { account_disabled: Boolean(accountDisabled) },
+    }).catch(() => {})
+
+    return c.json({ ok: true, data: { account_disabled: Boolean(accountDisabled) } })
   }
 )
 

@@ -22,7 +22,9 @@ function makeD1Mock(
   const deleteQuotes = { meta: { changes: quoteChanges } }
   const insertLog = { meta: { changes: 1 } }
 
-  const responses = [selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
+  // requireAuth() queries account_disabled — prepend a null slot so it passes
+  // through without consuming a meaningful index in the operation sequence.
+  const responses = [null, selectQuotes, selectPhotos, deletePhotoRecords, deleteAppointments, deleteActivity, deleteQuotes, insertLog]
 
   const prepare = vi.fn().mockImplementation(() => {
     const idx = callIndex++

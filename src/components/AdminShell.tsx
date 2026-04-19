@@ -235,7 +235,7 @@ function SuspensionBanner({ contractorId }: { contractorId: string }) {
 // Full shell content — only rendered when Clerk confirms user is signed in
 function ClerkAdminShellContent() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
-  const { logoUrl: sessionLogoUrl, loading: sessionLoading, billingStatus, contractorId } = useContractorSession()
+  const { logoUrl: sessionLogoUrl, loading: sessionLoading, billingStatus, contractorId, accountDisabled } = useContractorSession()
   const [fetchedLogoUrl, setFetchedLogoUrl] = useState<string | null>(
     () => sessionStorage.getItem("cq_logo_url") || null
   )
@@ -299,6 +299,11 @@ function ClerkAdminShellContent() {
         )}
         <ClerkAdminHeader />
       </header>
+      {accountDisabled && (
+        <div className="w-full bg-destructive px-6 py-3 text-sm font-medium text-destructive-foreground">
+          Your account has been disabled. Please contact support to restore access.
+        </div>
+      )}
       {billingStatus === "suspended" && contractorId && (
         <SuspensionBanner contractorId={contractorId} />
       )}
