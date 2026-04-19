@@ -7,7 +7,8 @@ import { NotFoundPage } from "@/components/NotFoundPage"
 const isLocalhost =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1" ||
-  /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)
+  /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname) ||
+  window.location.hostname.endsWith(".pages.dev")
 
 
 export function AppShell() {

@@ -30,7 +30,8 @@ function isLocalDev(): boolean {
   return (
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
-    /^\d+\.\d+\.\d+\.\d+$/.test(hostname)
+    /^\d+\.\d+\.\d+\.\d+$/.test(hostname) ||
+    hostname.endsWith(".pages.dev")
   )
 }
 
