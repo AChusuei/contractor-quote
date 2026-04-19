@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import staticLogoUrl from "@/assets/logo.png"
-import { apiGet, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPost, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 
 const CLERK_CONFIGURED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
@@ -189,10 +189,53 @@ function ContractorDropdown({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
   )
 }
 
+// Suspension banner — shown when billing_status is suspended
+function SuspensionBanner({ contractorId }: { contractorId: string }) {
+  const [redirecting, setRedirecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleUpdatePayment() {
+    setRedirecting(true)
+    setError(null)
+    try {
+      const res = await apiPost<{ portalUrl: string }>(
+        `/contractors/${encodeURIComponent(contractorId)}/billing/portal`
+      )
+      if (res.ok) {
+        window.location.href = res.data.portalUrl
+      } else {
+        setError("Failed to open billing portal. Please try again.")
+        setRedirecting(false)
+      }
+    } catch {
+      setError("Failed to open billing portal. Please try again.")
+      setRedirecting(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between bg-destructive px-6 py-3 text-destructive-foreground">
+      <p className="text-sm font-medium">
+        Your account is suspended. Update your payment method to restore access.
+      </p>
+      <div className="flex items-center gap-4">
+        {error && <span className="text-xs opacity-80">{error}</span>}
+        <button
+          onClick={handleUpdatePayment}
+          disabled={redirecting}
+          className="shrink-0 rounded bg-destructive-foreground px-3 py-1.5 text-xs font-semibold text-destructive hover:opacity-90 disabled:opacity-50"
+        >
+          {redirecting ? "Redirecting…" : "Update payment"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Full shell content — only rendered when Clerk confirms user is signed in
 function ClerkAdminShellContent() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
-  const { logoUrl: sessionLogoUrl, loading: sessionLoading } = useContractorSession()
+  const { logoUrl: sessionLogoUrl, loading: sessionLoading, billingStatus, contractorId } = useContractorSession()
   const [fetchedLogoUrl, setFetchedLogoUrl] = useState<string | null>(
     () => sessionStorage.getItem("cq_logo_url") || null
   )
@@ -256,6 +299,9 @@ function ClerkAdminShellContent() {
         )}
         <ClerkAdminHeader />
       </header>
+      {billingStatus === "suspended" && contractorId && (
+        <SuspensionBanner contractorId={contractorId} />
+      )}
       <main className="p-6">
         <Outlet />
       </main>

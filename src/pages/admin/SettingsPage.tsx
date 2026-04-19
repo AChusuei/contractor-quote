@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "components"
 import { cn } from "@/lib/utils"
-import { apiGet, apiPost, apiPatch, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
+import { apiGet, apiPost, apiPatch, apiDelete, apiUpload, isNetworkError, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 import { contractorProfileSchema, type ContractorProfileData, ContractorProfileForm } from "@/components/forms/ContractorProfileForm"
 import { useAutoSave } from "@/hooks/useAutoSave"
@@ -103,14 +103,59 @@ function mapApiStaff(raw: Record<string, unknown>): StaffMember {
 }
 
 // ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+interface BillingInfo {
+  billingStatus: string
+  monthlyRateCents: number | null
+  nextBillingDate: string | null
+  paddleCustomerId: string | null
+  gracePeriodEndsAt: string | null
+}
+
+function formatDollars(cents: number | null): string {
+  if (cents === null) return "—"
+  return `$${(cents / 100).toFixed(0)}/mo`
+}
+
+function BillingStatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    active: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    trial: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    past_due: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+    suspended: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    canceled: "bg-muted text-muted-foreground",
+  }
+  const label: Record<string, string> = {
+    active: "Active",
+    trial: "Trial",
+    past_due: "Past Due",
+    suspended: "Suspended",
+    canceled: "Canceled",
+  }
+  return (
+    <span
+      className={cn(
+        "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+        styles[status] ?? "bg-muted text-muted-foreground",
+      )}
+    >
+      {label[status] ?? status}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
 
-type SettingsTab = "profile" | "staff"
+type SettingsTab = "profile" | "staff" | "billing"
 
-const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+const ALL_SETTINGS_TABS: { id: SettingsTab; label: string; roles?: string[] }[] = [
   { id: "profile", label: "Profile" },
   { id: "staff", label: "Staff" },
+  { id: "billing", label: "Billing", roles: ["owner", "admin"] },
 ]
 
 // ---------------------------------------------------------------------------
@@ -246,8 +291,78 @@ function StaffForm({
 
 export function SettingsPage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
-  const { contractorId } = useContractorSession()
+  const { contractorId, userRole } = useContractorSession()
+  const canAccessBilling = userRole === "owner" || userRole === "admin"
+  const visibleTabs = ALL_SETTINGS_TABS.filter(
+    (t) => !t.roles || t.roles.includes(userRole),
+  )
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile")
+
+  // ---- Billing state ----
+  const [billing, setBilling] = useState<BillingInfo | null>(null)
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [billingError, setBillingError] = useState<string | null>(null)
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  const loadBilling = useCallback(async () => {
+    if (!contractorId || !canAccessBilling) return
+    setBillingLoading(true)
+    setBillingError(null)
+    try {
+      const res = await apiGet<BillingInfo>(`/contractors/${encodeURIComponent(contractorId)}/billing`)
+      if (res.ok) {
+        setBilling(res.data)
+      } else {
+        setBillingError(res.error ?? "Failed to load billing info")
+      }
+    } finally {
+      setBillingLoading(false)
+    }
+  }, [contractorId, canAccessBilling])
+
+  useEffect(() => {
+    if (activeTab === "billing") loadBilling()
+  }, [activeTab, loadBilling])
+
+  async function handleManagePayment() {
+    if (!contractorId) return
+    setPortalLoading(true)
+    setBillingError(null)
+    try {
+      const res = await apiPost<{ portalUrl: string }>(
+        `/contractors/${encodeURIComponent(contractorId)}/billing/portal`,
+      )
+      if (res.ok) {
+        window.location.href = res.data.portalUrl
+      } else {
+        setBillingError(res.error ?? "Failed to open billing portal")
+      }
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  async function handleCancelSubscription() {
+    if (!contractorId) return
+    setCancelLoading(true)
+    setCancelError(null)
+    try {
+      const res = await apiDelete<{ canceled: boolean }>(
+        `/contractors/${encodeURIComponent(contractorId)}/billing/cancel`,
+      )
+      if (res.ok) {
+        setShowCancelConfirm(false)
+        await loadBilling()
+      } else {
+        setCancelError(res.error ?? "Failed to cancel subscription")
+      }
+    } finally {
+      setCancelLoading(false)
+    }
+  }
 
   // Wire up Clerk auth for API calls
   useEffect(() => {
@@ -483,7 +598,7 @@ export function SettingsPage() {
 
       {/* Tab bar */}
       <div className="flex items-center border-b">
-        {SETTINGS_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -551,6 +666,131 @@ export function SettingsPage() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* ---- Billing Tab ---- */}
+      {activeTab === "billing" && canAccessBilling && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-lg font-medium">Billing</h2>
+            <p className="text-sm text-muted-foreground">
+              Manage your subscription and payment method.
+            </p>
+          </div>
+
+          {billingLoading && (
+            <p className="text-sm text-muted-foreground">Loading billing info…</p>
+          )}
+
+          {billingError && !billingLoading && (
+            <p className="text-sm text-destructive">{billingError}</p>
+          )}
+
+          {billing && !billingLoading && (
+            <div className="space-y-4 rounded-lg border border-border p-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Status
+                  </p>
+                  <div className="mt-1">
+                    <BillingStatusBadge status={billing.billingStatus} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Monthly Rate
+                  </p>
+                  <p className="mt-1 text-sm font-medium">
+                    {formatDollars(billing.monthlyRateCents)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Next Billing Date
+                  </p>
+                  <p className="mt-1 text-sm font-medium">
+                    {billing.nextBillingDate
+                      ? new Date(billing.nextBillingDate).toLocaleDateString()
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+
+              {billing.gracePeriodEndsAt && (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  Grace period ends{" "}
+                  {new Date(billing.gracePeriodEndsAt).toLocaleDateString()}
+                </p>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleManagePayment}
+                  disabled={portalLoading}
+                >
+                  {portalLoading ? "Redirecting…" : "Manage payment method"}
+                </Button>
+
+                {userRole === "owner" &&
+                  billing.billingStatus !== "canceled" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setShowCancelConfirm(true)
+                        setCancelError(null)
+                      }}
+                    >
+                      Cancel subscription
+                    </Button>
+                  )}
+              </div>
+
+              {showCancelConfirm && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+                  <p className="text-sm font-medium text-destructive">
+                    Cancel your subscription?
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Your account will remain active until the end of the billing period,
+                    then be deactivated.
+                  </p>
+                  {cancelError && (
+                    <p className="text-sm text-destructive">{cancelError}</p>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={handleCancelSubscription}
+                      disabled={cancelLoading}
+                    >
+                      {cancelLoading ? "Canceling…" : "Yes, cancel subscription"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowCancelConfirm(false)
+                        setCancelError(null)
+                      }}
+                    >
+                      Keep subscription
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
