@@ -28,7 +28,7 @@ import {
   type QuoteStatus,
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
-import { sendNewQuoteNotification } from "./lib/email"
+import { sendNewQuoteNotification, sendPaymentFailedNotification } from "./lib/email"
 import { verifyTurnstileToken } from "./lib/turnstile"
 import { verifyClerkJwt } from "./lib/jwtVerify"
 import { insertAuditEvent, extractEmailFromJwt } from "./lib/audit"
@@ -51,6 +51,7 @@ type Bindings = {
   SENDGRID_API_KEY: string
   TURNSTILE_SECRET_KEY: string
   CLERK_JWKS_URL: string
+  PADDLE_WEBHOOK_SECRET: string
 }
 
 type Variables = {
@@ -3564,6 +3565,173 @@ app.get(
     })
   }
 )
+
+// ---------------------------------------------------------------------------
+// Paddle webhook — public endpoint (no auth)
+// ---------------------------------------------------------------------------
+
+type PaddleEventData = {
+  id: string
+  customer_id?: string
+  subscription_id?: string
+}
+
+type PaddleEvent = {
+  event_type: string
+  data: PaddleEventData
+}
+
+async function verifyPaddleSignature(
+  rawBody: string,
+  signatureHeader: string,
+  secret: string
+): Promise<boolean> {
+  // Paddle-Signature: ts=<timestamp>;h1=<hex-hash>
+  const parts: Record<string, string> = {}
+  for (const part of signatureHeader.split(";")) {
+    const idx = part.indexOf("=")
+    if (idx !== -1) parts[part.slice(0, idx)] = part.slice(idx + 1)
+  }
+  const ts = parts["ts"]
+  const h1 = parts["h1"]
+  if (!ts || !h1) return false
+
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const signedPayload = `${ts}:${rawBody}`
+  const sigBytes = await crypto.subtle.sign("HMAC", key, encoder.encode(signedPayload))
+  const computed = Array.from(new Uint8Array(sigBytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+
+  return computed === h1
+}
+
+const PADDLE_KNOWN_EVENTS = new Set([
+  "subscription.activated",
+  "subscription.past_due",
+  "subscription.canceled",
+  "transaction.completed",
+  "transaction.payment_failed",
+])
+
+app.post("/webhooks/paddle", async (c) => {
+  const rawBody = await c.req.text()
+
+  const signatureHeader = c.req.header("paddle-signature") ?? ""
+  const secret = c.env.PADDLE_WEBHOOK_SECRET
+
+  if (!secret || !signatureHeader) {
+    return c.json({ ok: false, error: "Invalid signature" }, 400)
+  }
+
+  const valid = await verifyPaddleSignature(rawBody, signatureHeader, secret)
+  if (!valid) {
+    return c.json({ ok: false, error: "Invalid signature" }, 400)
+  }
+
+  let event: PaddleEvent
+  try {
+    event = JSON.parse(rawBody) as PaddleEvent
+  } catch {
+    return c.json({ ok: false, error: "Invalid payload" }, 400)
+  }
+
+  const { event_type, data } = event
+
+  // Return 200 for unknown events — Paddle expects 200 for all acknowledged events
+  if (!PADDLE_KNOWN_EVENTS.has(event_type)) {
+    return c.json({ ok: true })
+  }
+
+  // For subscription events data.id is the subscription ID; for transaction events it's data.subscription_id
+  const customerId = data.customer_id ?? null
+  const subscriptionId = event_type.startsWith("subscription.")
+    ? data.id
+    : (data.subscription_id ?? null)
+
+  if (!customerId && !subscriptionId) {
+    return c.json({ ok: true })
+  }
+
+  const contractor = await c.env.DB.prepare(
+    `SELECT id, email, name, billing_status, grace_period_ends_at
+     FROM contractors
+     WHERE (paddle_customer_id = ? AND paddle_customer_id IS NOT NULL)
+        OR (paddle_subscription_id = ? AND paddle_subscription_id IS NOT NULL)
+     LIMIT 1`
+  )
+    .bind(customerId, subscriptionId)
+    .first<{ id: string; email: string | null; name: string; billing_status: string; grace_period_ends_at: string | null }>()
+
+  if (!contractor) {
+    return c.json({ ok: true })
+  }
+
+  if (event_type === "subscription.activated" || event_type === "transaction.completed") {
+    if (contractor.billing_status !== "active" || contractor.grace_period_ends_at !== null) {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET billing_status = 'active', grace_period_ends_at = NULL, updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    }
+  } else if (event_type === "subscription.past_due") {
+    if (contractor.billing_status !== "past_due") {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET billing_status = 'past_due', grace_period_ends_at = datetime('now', '+5 days'), updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    }
+  } else if (event_type === "subscription.canceled") {
+    if (contractor.billing_status !== "canceled") {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET billing_status = 'canceled', updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    }
+  } else if (event_type === "transaction.payment_failed") {
+    if (contractor.grace_period_ends_at === null) {
+      await c.env.DB.prepare(
+        `UPDATE contractors SET grace_period_ends_at = datetime('now', '+5 days'), updated_at = datetime('now') WHERE id = ?`
+      )
+        .bind(contractor.id)
+        .run()
+    } else {
+      const graceEnd = new Date(
+        contractor.grace_period_ends_at.includes("T")
+          ? contractor.grace_period_ends_at
+          : contractor.grace_period_ends_at.replace(" ", "T") + "Z"
+      )
+      if (graceEnd < new Date()) {
+        await c.env.DB.prepare(
+          `UPDATE contractors SET billing_status = 'suspended', updated_at = datetime('now') WHERE id = ?`
+        )
+          .bind(contractor.id)
+          .run()
+      }
+    }
+
+    if (contractor.email) {
+      await sendPaymentFailedNotification(
+        { contractorEmail: contractor.email, contractorName: contractor.name },
+        c.env.SENDGRID_API_KEY,
+        c.env.NOTIFICATION_FROM_EMAIL,
+        c.env.APP_BASE_URL
+      )
+    }
+  }
+
+  return c.json({ ok: true })
+})
 
 // ---------------------------------------------------------------------------
 // Required secrets — must be present in all non-development environments.
