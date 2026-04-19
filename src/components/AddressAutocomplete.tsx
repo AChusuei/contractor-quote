@@ -98,7 +98,7 @@ export function AddressAutocomplete({
 
     try {
       const components = await provider.resolve(suggestion.id)
-      const formatted = components.raw || suggestion.label
+      const formatted = (components.raw || suggestion.label).replace(/, United States$/, "")
       ignoreNextFetchRef.current = true
       onChange(formatted)
     } catch {
