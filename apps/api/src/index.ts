@@ -29,6 +29,7 @@ import {
   type QuoteStatus,
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
+import { requireActiveBilling } from "./middleware/billingGuard"
 import { sendNewQuoteNotification, sendPaymentFailedNotification } from "./lib/email"
 import { verifyTurnstileToken } from "./lib/turnstile"
 import { verifyClerkJwt } from "./lib/jwtVerify"
@@ -213,7 +214,7 @@ app.get("/contractors/by-id/:id", async (c) => {
 // ---------------------------------------------------------------------------
 // Get contractor profile (authenticated)
 // ---------------------------------------------------------------------------
-app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), async (c) => {
+app.get("/contractors/:contractorId", requireAuth(), requireActiveBilling(), requireContractorOwnership(), async (c) => {
   const contractorId = c.req.param("contractorId")
   const contractor = await c.env.DB.prepare(
     "SELECT id, slug, name, email, phone, address, website_url, license_number, logo_url, calendar_url FROM contractors WHERE id = ?"
@@ -245,7 +246,7 @@ app.get("/contractors/:contractorId", requireAuth(), requireContractorOwnership(
 // ---------------------------------------------------------------------------
 // Update contractor profile (authenticated)
 // ---------------------------------------------------------------------------
-app.patch("/contractors/:contractorId", requireAuth(), requireContractorOwnership(), rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "contractor-update" }), async (c) => {
+app.patch("/contractors/:contractorId", requireAuth(), requireActiveBilling(), requireContractorOwnership(), rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "contractor-update" }), async (c) => {
   const contractorId = c.req.param("contractorId")
 
   let body: Record<string, unknown>
@@ -767,6 +768,7 @@ app.get(
 app.get(
   "/quotes/:quoteId",
   requireAuth(),
+  requireActiveBilling(),
   requireQuoteOwnership(),
   async (c) => {
     const quoteId = c.req.param("quoteId")
@@ -831,6 +833,7 @@ app.get(
 app.patch(
   "/quotes/:quoteId",
   requireAuth(),
+  requireActiveBilling(),
   requireQuoteOwnership(),
   rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "quote-update" }),
   async (c) => {
@@ -1081,9 +1084,12 @@ app.post(
     } else {
       // Fall back to Clerk auth + ownership check
       const authMw = requireAuth()
+      const billingMw = requireActiveBilling()
       const ownerMw = requireQuoteOwnership()
       const authResult = await authMw(c, async () => {})
       if (authResult) return authResult
+      const billingResult = await billingMw(c, async () => {})
+      if (billingResult) return billingResult
       const ownerResult = await ownerMw(c, async () => {})
       if (ownerResult) return ownerResult
 
@@ -1208,9 +1214,12 @@ app.get(
       }
     } else {
       const authMw = requireAuth()
+      const billingMw = requireActiveBilling()
       const ownerMw = requireQuoteOwnership()
       const authResult = await authMw(c, async () => {})
       if (authResult) return authResult
+      const billingResult = await billingMw(c, async () => {})
+      if (billingResult) return billingResult
       const ownerResult = await ownerMw(c, async () => {})
       if (ownerResult) return ownerResult
     }
@@ -1264,9 +1273,12 @@ app.get(
       }
     } else {
       const authMw = requireAuth()
+      const billingMw = requireActiveBilling()
       const ownerMw = requireQuoteOwnership()
       const authResult = await authMw(c, async () => {})
       if (authResult) return authResult
+      const billingResult = await billingMw(c, async () => {})
+      if (billingResult) return billingResult
       const ownerResult = await ownerMw(c, async () => {})
       if (ownerResult) return ownerResult
     }
@@ -1304,6 +1316,7 @@ app.get(
 app.get(
   "/contractors/:contractorId/quotes",
   requireAuth(),
+  requireActiveBilling(),
   requireContractorOwnership(),
   async (c) => {
     const contractorId = c.get("contractorId")
@@ -1428,9 +1441,12 @@ app.delete(
       contractorId = quote.contractor_id
     } else {
       const authMw = requireAuth()
+      const billingMw = requireActiveBilling()
       const ownerMw = requireQuoteOwnership()
       const authResult = await authMw(c, async () => {})
       if (authResult) return authResult
+      const billingResult = await billingMw(c, async () => {})
+      if (billingResult) return billingResult
       const ownerResult = await ownerMw(c, async () => {})
       if (ownerResult) return ownerResult
       contractorId = c.get("contractorId") as string
@@ -1511,6 +1527,7 @@ const ALLOWED_LOGO_TYPES: Record<string, string> = {
 app.post(
   "/contractors/:contractorId/logo",
   requireAuth(),
+  requireActiveBilling(),
   requireContractorOwnership(),
   rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "logo-upload" }),
   async (c) => {
@@ -1591,6 +1608,7 @@ app.post(
 app.post(
   "/quotes/:quoteId/activity",
   requireAuth(),
+  requireActiveBilling(),
   requireQuoteOwnership(),
   rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "activity-create" }),
   async (c) => {
@@ -1718,6 +1736,7 @@ app.post(
 app.get(
   "/quotes/:quoteId/activity",
   requireAuth(),
+  requireActiveBilling(),
   requireQuoteOwnership(),
   async (c) => {
     const quoteId = c.req.param("quoteId")
@@ -1783,6 +1802,7 @@ app.get(
 app.get(
   "/contractors/:contractorId/customers",
   requireAuth(),
+  requireActiveBilling(),
   requireContractorOwnership(),
   async (c) => {
     const contractorId = c.get("contractorId")
@@ -1858,6 +1878,7 @@ app.get(
 app.get(
   "/customers/:customerId",
   requireAuth(),
+  requireActiveBilling(),
   async (c) => {
     const contractorId = c.get("contractorId") as string
     const customerId = c.req.param("customerId")
@@ -1916,6 +1937,7 @@ app.get(
 app.patch(
   "/customers/:customerId",
   requireAuth(),
+  requireActiveBilling(),
   rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "customer-update" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
@@ -2012,6 +2034,7 @@ app.patch(
 app.delete(
   "/customers/:id",
   requireAuth(),
+  requireActiveBilling(),
   rateLimit({ limit: 20, windowSeconds: 3600, keyPrefix: "customer-delete" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
@@ -2297,6 +2320,7 @@ function textToHtml(text: string): string {
 app.post(
   "/email/send",
   requireAuth(),
+  requireActiveBilling(),
   rateLimit({ limit: 10, windowSeconds: 3600, keyPrefix: "email-send" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
@@ -2491,6 +2515,7 @@ app.get(
 app.get(
   "/staff",
   requireAuth(),
+  requireActiveBilling(),
   async (c) => {
     const contractorId = c.get("contractorId") as string
 
@@ -2529,6 +2554,7 @@ app.get(
 app.post(
   "/staff",
   requireAuth(),
+  requireActiveBilling(),
   rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "staff-create" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
@@ -2615,6 +2641,7 @@ app.post(
 app.patch(
   "/staff/:staffId",
   requireAuth(),
+  requireActiveBilling(),
   rateLimit({ limit: 100, windowSeconds: 3600, keyPrefix: "staff-update" }),
   async (c) => {
     const contractorId = c.get("contractorId") as string
