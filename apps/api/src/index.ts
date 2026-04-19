@@ -1308,7 +1308,7 @@ app.get(
       bindings.push(budget)
     }
 
-    const q = c.req.query("q")
+    const q = c.req.query("q")?.slice(0, 200)
     if (q) {
       conditions.push("(c.name LIKE ? OR q.job_site_address LIKE ?)")
       const pattern = `%${q}%`
@@ -1948,9 +1948,9 @@ app.patch(
       `SELECT id, contractor_id, name, email, phone,
               how_did_you_find_us, referred_by_contractor,
               created_at, updated_at
-       FROM customers WHERE id = ?`
+       FROM customers WHERE id = ? AND contractor_id = ?`
     )
-      .bind(customerId)
+      .bind(customerId, contractorId)
       .first()
 
     if (!updated) {
