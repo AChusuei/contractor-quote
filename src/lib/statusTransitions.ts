@@ -34,17 +34,17 @@ export const STATUS_LABELS: Record<QuoteStatus, string> = {
 }
 
 export const STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: "rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs font-medium dark:bg-slate-800 dark:text-slate-300",
-  lead: "rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium dark:bg-blue-900/40 dark:text-blue-300",
-  reviewing: "rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs font-medium dark:bg-indigo-900/40 dark:text-indigo-300",
-  site_visit_requested: "rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium dark:bg-amber-900/40 dark:text-amber-300",
-  site_visit_scheduled: "rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium dark:bg-amber-900/40 dark:text-amber-300",
-  site_visit_completed: "rounded-full bg-teal-100 text-teal-800 px-2 py-0.5 text-xs font-medium dark:bg-teal-900/40 dark:text-teal-300",
-  estimate_requested: "rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-medium dark:bg-purple-900/40 dark:text-purple-300",
-  estimate_sent: "rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-medium dark:bg-purple-900/40 dark:text-purple-300",
-  accepted: "rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-medium dark:bg-emerald-900/40 dark:text-emerald-300",
-  rejected: "rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium dark:bg-red-900/40 dark:text-red-300",
-  closed: "rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-xs font-medium dark:bg-gray-800 dark:text-gray-400",
+  draft: "text-slate-500",
+  lead: "text-blue-600 dark:text-blue-400",
+  reviewing: "text-indigo-600 dark:text-indigo-400",
+  site_visit_requested: "text-amber-600 dark:text-amber-400",
+  site_visit_scheduled: "text-amber-600 dark:text-amber-400",
+  site_visit_completed: "text-teal-600 dark:text-teal-400",
+  estimate_requested: "text-purple-600 dark:text-purple-400",
+  estimate_sent: "text-purple-600 dark:text-purple-400",
+  accepted: "text-emerald-600 dark:text-emerald-400",
+  rejected: "text-red-600 dark:text-red-400",
+  closed: "text-gray-400 dark:text-gray-500",
 }
 
 /**

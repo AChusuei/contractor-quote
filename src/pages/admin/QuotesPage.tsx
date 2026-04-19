@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
+import { RefreshCw } from "lucide-react"
 import { DataTable, type DataTableColumnDef } from "components"
 import { fetchQuotes, type Quote } from "@/lib/quotes"
 import { QUOTE_STATUSES, STATUS_LABELS, STATUS_COLORS, type QuoteStatus } from "@/lib/statusTransitions"
 import { apiGet, isNetworkError, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
+import { cn } from "@/lib/utils"
 
 // ─── API quote shape (from backend) ──────────────────────────────────────────
 
@@ -50,7 +52,7 @@ const columns: DataTableColumnDef<Quote>[] = [
   {
     id: "propertyType",
     accessorKey: "propertyType",
-    header: "Property Type",
+    header: "Property",
     cell: ({ getValue }) => PROPERTY_TYPE_LABELS[getValue() as string] ?? String(getValue()),
     filterMeta: {
       filterVariant: "select",
@@ -93,7 +95,7 @@ const columns: DataTableColumnDef<Quote>[] = [
   {
     id: "layoutChanges",
     accessorKey: "layoutChanges",
-    header: "Layout Changes",
+    header: "Layout",
     cell: ({ getValue }) => (
       <span className={getValue() ? "font-medium text-foreground" : "text-muted-foreground"}>
         {getValue() ? "Yes" : "No"}
@@ -110,7 +112,7 @@ const columns: DataTableColumnDef<Quote>[] = [
   {
     id: "kitchenSize",
     accessorKey: "kitchenSize",
-    header: "Kitchen Size",
+    header: "Kitchen",
     cell: ({ getValue }) => KITCHEN_SIZE_LABELS[getValue() as string] ?? String(getValue()),
     filterMeta: {
       filterVariant: "select",
@@ -136,8 +138,13 @@ const columns: DataTableColumnDef<Quote>[] = [
     cell: ({ getValue }) => {
       const status = getValue() as string
       const label = STATUS_LABELS[status as QuoteStatus] ?? status
-      const className = STATUS_COLORS[status as QuoteStatus] ?? "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
-      return <span className={className}>{label}</span>
+      const colorClass = STATUS_COLORS[status as QuoteStatus] ?? "text-gray-400"
+      return (
+        <span className={cn("inline-flex items-center gap-1.5 text-sm", colorClass)}>
+          <span aria-hidden>●</span>
+          {label}
+        </span>
+      )
     },
     filterMeta: {
       filterVariant: "select",
@@ -249,8 +256,9 @@ export function QuotesPage() {
           refreshSlot={
             <button
               onClick={() => void loadQuotes()}
-              className="rounded border border-input bg-background px-3 py-1.5 text-xs hover:bg-accent"
+              className="flex items-center gap-1.5 rounded border border-input bg-background px-2.5 py-1.5 text-xs hover:bg-accent"
             >
+              <RefreshCw className="h-3 w-3" />
               Refresh
             </button>
           }
