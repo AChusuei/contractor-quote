@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
+import { RefreshCw } from "lucide-react"
+import { format, formatDistanceToNowStrict } from "date-fns"
 import { DataTable, type DataTableColumnDef } from "components"
 import { apiGet, isNetworkError, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
@@ -16,21 +18,45 @@ type Customer = {
 
 const columns: DataTableColumnDef<Customer>[] = [
   {
+    id: "avatar",
+    accessorKey: "name",
+    header: "",
+    cell: ({ getValue }) => {
+      const name = String(getValue() ?? "")
+      const initials = name
+        .split(" ")
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? "")
+        .join("")
+      return (
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+          {initials}
+        </div>
+      )
+    },
+    enableSorting: false,
+    enableHiding: false,
+    size: 48,
+  },
+  {
     id: "name",
     accessorKey: "name",
     header: "Name",
+    cell: ({ getValue }) => <span className="font-medium">{String(getValue())}</span>,
     filterMeta: { filterVariant: "text" },
   },
   {
     id: "email",
     accessorKey: "email",
     header: "Email",
+    cell: ({ getValue }) => <span className="text-muted-foreground">{String(getValue() ?? "")}</span>,
     filterMeta: { filterVariant: "text" },
   },
   {
     id: "phone",
     accessorKey: "phone",
     header: "Phone",
+    cell: ({ getValue }) => <span className="text-muted-foreground">{String(getValue() ?? "")}</span>,
   },
   {
     id: "quoteCount",
@@ -42,7 +68,20 @@ const columns: DataTableColumnDef<Customer>[] = [
     id: "mostRecentQuoteDate",
     accessorKey: "mostRecentQuoteDate",
     header: "Last Quote",
-    formatter: { type: "date" },
+    cell: ({ getValue }) => {
+      const raw = getValue() as string | null
+      if (!raw) return <span className="text-muted-foreground">—</span>
+      const d = new Date(raw)
+      if (isNaN(d.getTime())) return <span className="text-muted-foreground">{raw}</span>
+      const label = format(d, "MMM d")
+      const relative = formatDistanceToNowStrict(d, { addSuffix: false })
+      return (
+        <div className="flex flex-col leading-tight">
+          <span>{label}</span>
+          <span className="text-muted-foreground text-xs">{relative} ago</span>
+        </div>
+      )
+    },
   },
 ]
 
@@ -121,37 +160,30 @@ export function CustomersPage() {
         </p>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={customers}
-        isLoading={isLoading}
-        error={error}
-        emptyMessage="No customers yet."
-        onRowClick={(row) => navigate(`/admin/customers/${row.id}`)}
-        enableGlobalFilter
-        enableColumnFilters
-        enableSorting
-        enablePagination
-        defaultPageSize={25}
-        enableRowSelection
-        bulkActions={[
-          {
-            label: "Email selected",
-            onClick: (selectedCustomers) => {
-              const ids = selectedCustomers.map((c) => c.id).join(",")
-              navigate(`/admin/email/compose?customerIds=${encodeURIComponent(ids)}`)
-            },
-          },
-        ]}
-        refreshSlot={
-          <button
-            onClick={() => void loadCustomers()}
-            className="rounded border border-input bg-background px-3 py-1.5 text-xs hover:bg-accent"
-          >
-            Refresh
-          </button>
-        }
-      />
+      <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <DataTable
+          columns={columns}
+          data={customers}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="No customers yet."
+          onRowClick={(row) => navigate(`/admin/customers/${row.id}`)}
+          enableGlobalFilter
+          enableColumnFilters
+          enableSorting
+          enablePagination
+          defaultPageSize={25}
+          refreshSlot={
+            <button
+              onClick={() => void loadCustomers()}
+              className="flex items-center gap-1.5 rounded border border-input bg-background px-2.5 py-1.5 text-xs hover:bg-accent"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </button>
+          }
+        />
+      </div>
     </div>
   )
 }
