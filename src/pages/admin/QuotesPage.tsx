@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { RefreshCw } from "lucide-react"
+import { format, formatDistanceToNowStrict } from "date-fns"
 import { DataTable, type DataTableColumnDef } from "components"
 import { fetchQuotes, type Quote } from "@/lib/quotes"
 import { QUOTE_STATUSES, STATUS_LABELS, STATUS_COLORS, type QuoteStatus } from "@/lib/statusTransitions"
@@ -32,9 +33,37 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
   townhouse: "Townhouse",
 }
 
+const BUDGET_LABELS: Record<string, string> = {
+  "<10k": "< $10k",
+  "10-25k": "$10–25k",
+  "25-50k": "$25–50k",
+  "50k+": "$50k+",
+}
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 
 const columns: DataTableColumnDef<Quote>[] = [
+  {
+    id: "avatar",
+    accessorKey: "customerName",
+    header: "",
+    cell: ({ getValue }) => {
+      const name = String(getValue() ?? "")
+      const initials = name
+        .split(" ")
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? "")
+        .join("")
+      return (
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+          {initials}
+        </div>
+      )
+    },
+    enableSorting: false,
+    enableHiding: false,
+    size: 48,
+  },
   {
     id: "customerName",
     accessorKey: "customerName",
@@ -46,7 +75,21 @@ const columns: DataTableColumnDef<Quote>[] = [
     id: "address",
     accessorKey: "address",
     header: "Address",
-    cell: ({ getValue }) => <span className="text-muted-foreground">{String(getValue() ?? '')}</span>,
+    cell: ({ getValue }) => {
+      const raw = String(getValue() ?? "")
+      const commaIdx = raw.indexOf(",")
+      if (commaIdx === -1) {
+        return <span className="text-muted-foreground">{raw}</span>
+      }
+      const line1 = raw.slice(0, commaIdx).trim()
+      const line2 = raw.slice(commaIdx + 1).trim()
+      return (
+        <div className="flex flex-col leading-tight">
+          <span>{line1}</span>
+          <span className="text-muted-foreground text-xs">{line2}</span>
+        </div>
+      )
+    },
     filterMeta: { filterVariant: "text" },
   },
   {
@@ -68,7 +111,9 @@ const columns: DataTableColumnDef<Quote>[] = [
     id: "budgetRange",
     accessorKey: "budgetRange",
     header: "Budget",
-    cell: ({ getValue }) => <span className="text-muted-foreground">{String(getValue() ?? '')}</span>,
+    cell: ({ getValue }) => (
+      <span className="text-muted-foreground">{BUDGET_LABELS[getValue() as string] ?? String(getValue() ?? "")}</span>
+    ),
     filterMeta: {
       filterVariant: "select",
       options: [
@@ -128,7 +173,20 @@ const columns: DataTableColumnDef<Quote>[] = [
     id: "submittedAt",
     accessorKey: "submittedAt",
     header: "Submitted",
-    formatter: { type: "date" },
+    cell: ({ getValue }) => {
+      const raw = getValue() as string | null
+      if (!raw) return <span className="text-muted-foreground">—</span>
+      const d = new Date(raw)
+      if (isNaN(d.getTime())) return <span className="text-muted-foreground">{raw}</span>
+      const label = format(d, "MMM d")
+      const relative = formatDistanceToNowStrict(d, { addSuffix: false })
+      return (
+        <div className="flex flex-col leading-tight">
+          <span>{label}</span>
+          <span className="text-muted-foreground text-xs">{relative} ago</span>
+        </div>
+      )
+    },
     filterMeta: { filterVariant: "dateRange" },
   },
   {
