@@ -136,7 +136,7 @@ export function DevToolbar() {
     return () => mq.removeEventListener("change", handler)
   }, [theme])
 
-  if (!import.meta.env.DEV) return null
+  if (!import.meta.env.DEV && !window.location.hostname.endsWith(".pages.dev")) return null
 
   const themeOptions: { value: Theme; label: string }[] = [
     { value: "system", label: "Auto" },
