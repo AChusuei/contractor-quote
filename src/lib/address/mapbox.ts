@@ -38,7 +38,7 @@ export class MapboxProvider implements AddressProvider {
 
     features.forEach((f) => this._cache.set(f.id, f))
 
-    return features.map((f) => ({ id: f.id, label: f.place_name }))
+    return features.map((f) => ({ id: f.id, label: f.place_name.replace(/, United States$/, "") }))
   }
 
   async resolve(id: string): Promise<AddressComponents> {

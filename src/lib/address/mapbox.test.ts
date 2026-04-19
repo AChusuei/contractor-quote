@@ -42,7 +42,7 @@ describe("MapboxProvider — suggest()", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(mockFetch.mock.calls[0][0]).toContain("mapbox.places")
-    expect(results).toEqual([{ id: mockFeature.id, label: mockFeature.place_name }])
+    expect(results).toEqual([{ id: mockFeature.id, label: "123 Main St, Springfield, IL 62701" }])
   })
 
   it("caches the full feature data from suggest()", async () => {
