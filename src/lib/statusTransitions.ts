@@ -34,17 +34,17 @@ export const STATUS_LABELS: Record<QuoteStatus, string> = {
 }
 
 export const STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700",
-  lead: "rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800",
-  reviewing: "rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800",
-  site_visit_requested: "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800",
-  site_visit_scheduled: "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800",
-  site_visit_completed: "rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800",
-  estimate_requested: "rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800",
-  estimate_sent: "rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800",
-  accepted: "rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800",
-  rejected: "rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800",
-  closed: "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500",
+  draft: "rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs font-medium dark:bg-slate-800 dark:text-slate-300",
+  lead: "rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium dark:bg-blue-900/40 dark:text-blue-300",
+  reviewing: "rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs font-medium dark:bg-indigo-900/40 dark:text-indigo-300",
+  site_visit_requested: "rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium dark:bg-amber-900/40 dark:text-amber-300",
+  site_visit_scheduled: "rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium dark:bg-amber-900/40 dark:text-amber-300",
+  site_visit_completed: "rounded-full bg-teal-100 text-teal-800 px-2 py-0.5 text-xs font-medium dark:bg-teal-900/40 dark:text-teal-300",
+  estimate_requested: "rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-medium dark:bg-purple-900/40 dark:text-purple-300",
+  estimate_sent: "rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-medium dark:bg-purple-900/40 dark:text-purple-300",
+  accepted: "rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-medium dark:bg-emerald-900/40 dark:text-emerald-300",
+  rejected: "rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium dark:bg-red-900/40 dark:text-red-300",
+  closed: "rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-xs font-medium dark:bg-gray-800 dark:text-gray-400",
 }
 
 /**
