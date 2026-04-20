@@ -591,13 +591,6 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      {accountDisabled && (
-        <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
-          <p className="text-sm font-medium text-destructive">
-            Your account has been disabled. Please contact support to restore access.
-          </p>
-        </div>
-      )}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage your admin preferences.</p>
