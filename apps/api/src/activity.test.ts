@@ -13,9 +13,9 @@ type Row = Record<string, unknown>
  * The first slot is reserved for requireAuth()'s account_disabled check.
  */
 function makeD1Mock(stmtConfigs: Array<{ first?: unknown; all?: { results: Row[] }; run?: unknown }>) {
-  // requireAuth() queries account_disabled, requireActiveBilling() queries billing_status/billing_exempt —
-  // prepend two null results so both pass through without consuming meaningful mock slots.
-  const configs = [{ first: null }, { first: null }, ...stmtConfigs]
+  // requireAuth() queries account_disabled — prepend one null so it passes through.
+  // requireActiveBilling() short-circuits when BILLING_ENABLED is unset, so no DB slot needed.
+  const configs = [{ first: null }, ...stmtConfigs]
   let callIndex = 0
 
   return {

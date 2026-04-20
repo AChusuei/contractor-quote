@@ -237,6 +237,11 @@ export function requireContractorOwnership() {
  */
 export function requireActiveBilling() {
   return async (c: Context, next: Next) => {
+    if (c.env.BILLING_ENABLED !== 'true') {
+      await next()
+      return
+    }
+
     const contractorId = c.get("contractorId") as string | undefined
     if (!contractorId) {
       await next()
