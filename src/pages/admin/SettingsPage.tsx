@@ -291,7 +291,7 @@ function StaffForm({
 
 export function SettingsPage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
-  const { contractorId, userRole, accountDisabled } = useContractorSession()
+  const { contractorId, userRole } = useContractorSession()
   const canAccessBilling = userRole === "owner" || userRole === "admin"
   const visibleTabs = ALL_SETTINGS_TABS.filter(
     (t) => !t.roles || t.roles.includes(userRole),
