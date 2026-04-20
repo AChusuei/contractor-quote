@@ -59,6 +59,7 @@ APP_BASE_URL = "http://localhost:5173"
 # Test-only placeholder — real value set via `wrangler secret put PADDLE_WEBHOOK_SECRET`
 PADDLE_WEBHOOK_SECRET = "test-paddle-secret"
 PADDLE_ENVIRONMENT = "sandbox"
+BILLING_ENABLED = "false"
 
 # ---------------------------------------------------------------------------
 # Dev environment — deployed as contractor-quote-api-dev
@@ -87,3 +88,4 @@ CORS_ORIGINS = "https://contractor-quote-dev.pages.dev,https://*.dev.contractorq
 NOTIFICATION_FROM_EMAIL = "noreply@contractorquote.work"
 APP_BASE_URL = "https://contractor-quote-dev.pages.dev"
 PADDLE_ENVIRONMENT = "sandbox"
+BILLING_ENABLED = "false"

@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+
+const BILLING_FLAG_ENABLED = import.meta.env.VITE_CQ_BILLING_ENABLED === "true"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@clerk/clerk-react"
 import { apiGet, setAuthProvider } from "@/lib/api"
@@ -130,7 +132,7 @@ export function ContractorSessionProvider({ children }: { children: ReactNode })
               .then(async (staffRes) => {
                 if (staffRes.ok) {
                   const { contractorId: cid, contractorName: cname, role } = staffRes.data
-                  const canAccessBilling = role === "owner" || role === "admin"
+                  const canAccessBilling = BILLING_FLAG_ENABLED && (role === "owner" || role === "admin")
                   const [profileRes, billingRes] = await Promise.all([
                     apiGet<{ logoUrl: string | null; accountDisabled?: boolean }>(`/contractors/${cid}`),
                     canAccessBilling

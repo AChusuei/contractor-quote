@@ -98,6 +98,7 @@ function renderPage() {
 
 describe("SettingsPage — Billing tab visibility", () => {
   beforeEach(() => {
+    vi.stubEnv("VITE_CQ_BILLING_ENABLED", "true")
     mockApiGet.mockResolvedValue({ ok: true, data: { name: "Test Co", email: "", phone: "", address: "", websiteUrl: "", licenseNumber: "", logoUrl: null } })
     mockApiPost.mockResolvedValue({ ok: true, data: { portalUrl: "https://portal.paddle.com/xxx" } })
     mockApiDelete.mockResolvedValue({ ok: true, data: { canceled: true } })
@@ -126,10 +127,18 @@ describe("SettingsPage — Billing tab visibility", () => {
     renderPage()
     expect(screen.queryByRole("button", { name: "Billing" })).not.toBeInTheDocument()
   })
+
+  it("hides Billing tab for owner when VITE_CQ_BILLING_ENABLED is not set", () => {
+    vi.stubEnv("VITE_CQ_BILLING_ENABLED", "")
+    mockContractorSession.userRole = "owner"
+    renderPage()
+    expect(screen.queryByRole("button", { name: "Billing" })).not.toBeInTheDocument()
+  })
 })
 
 describe("SettingsPage — Billing tab content", () => {
   beforeEach(() => {
+    vi.stubEnv("VITE_CQ_BILLING_ENABLED", "true")
     mockContractorSession.userRole = "owner"
     mockApiGet.mockImplementation((path: string) => {
       if (path.includes("/billing")) {
