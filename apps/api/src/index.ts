@@ -30,6 +30,7 @@ import {
   type QuoteStatus,
 } from "./validation"
 import { rateLimit } from "./middleware/rateLimit"
+import { billingEnabled } from "./middleware/billingEnabled"
 import { sendNewQuoteNotification, sendPaymentFailedNotification } from "./lib/email"
 import { verifyTurnstileToken } from "./lib/turnstile"
 import { verifyClerkJwt } from "./lib/jwtVerify"
@@ -55,6 +56,7 @@ type Bindings = {
   PADDLE_API_KEY: string
   PADDLE_WEBHOOK_SECRET: string
   PADDLE_ENVIRONMENT: string
+  BILLING_ENABLED: string
 }
 
 type Variables = {
@@ -3693,7 +3695,7 @@ const PADDLE_KNOWN_EVENTS = new Set([
   "transaction.payment_failed",
 ])
 
-app.post("/webhooks/paddle", async (c) => {
+app.post("/webhooks/paddle", billingEnabled(), async (c) => {
   const rawBody = await c.req.text()
 
   const signatureHeader = c.req.header("paddle-signature") ?? ""
@@ -3818,6 +3820,7 @@ function paddleBase(env: Bindings): string {
 // GET /contractors/:contractorId/billing
 app.get(
   "/contractors/:contractorId/billing",
+  billingEnabled(),
   requireAuth(),
   requireContractorOwnership(),
   requireStaffRole(["owner", "admin"]),
@@ -3861,6 +3864,7 @@ app.get(
 // POST /contractors/:contractorId/billing/setup
 app.post(
   "/contractors/:contractorId/billing/setup",
+  billingEnabled(),
   requireAuth(),
   requireActiveBilling(),
   requireContractorOwnership(),
@@ -3950,6 +3954,7 @@ app.post(
 // POST /contractors/:contractorId/billing/portal
 app.post(
   "/contractors/:contractorId/billing/portal",
+  billingEnabled(),
   requireAuth(),
   requireContractorOwnership(),
   requireStaffRole(["owner", "admin"]),
@@ -4003,6 +4008,7 @@ app.post(
 // DELETE /contractors/:contractorId/billing/cancel
 app.delete(
   "/contractors/:contractorId/billing/cancel",
+  billingEnabled(),
   requireAuth(),
   requireActiveBilling(),
   requireContractorOwnership(),

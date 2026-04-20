@@ -6,6 +6,7 @@ import { apiGet, apiPost, setAuthProvider } from "@/lib/api"
 import { useContractorSession } from "@/contexts/ContractorSession"
 
 const CLERK_CONFIGURED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
+const BILLING_FLAG_ENABLED = import.meta.env.VITE_CQ_BILLING_ENABLED === "true"
 
 // Navigation bar with platform admin check — only rendered inside ClerkProvider
 function AdminNav({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
@@ -304,7 +305,7 @@ function ClerkAdminShellContent() {
           Your account has been disabled. Please contact support to restore access.
         </div>
       )}
-      {billingStatus === "suspended" && contractorId && (
+      {BILLING_FLAG_ENABLED && billingStatus === "suspended" && contractorId && (
         <SuspensionBanner contractorId={contractorId} />
       )}
       <main className="p-6">

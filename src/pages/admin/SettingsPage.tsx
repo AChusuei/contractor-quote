@@ -152,10 +152,9 @@ function BillingStatusBadge({ status }: { status: string }) {
 
 type SettingsTab = "profile" | "staff" | "billing"
 
-const ALL_SETTINGS_TABS: { id: SettingsTab; label: string; roles?: string[] }[] = [
+const BASE_SETTINGS_TABS: { id: SettingsTab; label: string; roles?: string[] }[] = [
   { id: "profile", label: "Profile" },
   { id: "staff", label: "Staff" },
-  { id: "billing", label: "Billing", roles: ["owner", "admin"] },
 ]
 
 // ---------------------------------------------------------------------------
@@ -292,8 +291,12 @@ function StaffForm({
 export function SettingsPage() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const { contractorId, userRole } = useContractorSession()
-  const canAccessBilling = userRole === "owner" || userRole === "admin"
-  const visibleTabs = ALL_SETTINGS_TABS.filter(
+  const billingFlagEnabled = import.meta.env.VITE_CQ_BILLING_ENABLED === "true"
+  const canAccessBilling = billingFlagEnabled && (userRole === "owner" || userRole === "admin")
+  const allTabs = billingFlagEnabled
+    ? [...BASE_SETTINGS_TABS, { id: "billing" as SettingsTab, label: "Billing", roles: ["owner", "admin"] }]
+    : BASE_SETTINGS_TABS
+  const visibleTabs = allTabs.filter(
     (t) => !t.roles || t.roles.includes(userRole),
   )
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile")
@@ -328,7 +331,7 @@ export function SettingsPage() {
   }, [activeTab, loadBilling])
 
   async function handleManagePayment() {
-    if (!contractorId) return
+    if (!contractorId || !canAccessBilling) return
     setPortalLoading(true)
     setBillingError(null)
     try {
@@ -346,7 +349,7 @@ export function SettingsPage() {
   }
 
   async function handleCancelSubscription() {
-    if (!contractorId) return
+    if (!contractorId || !canAccessBilling) return
     setCancelLoading(true)
     setCancelError(null)
     try {
