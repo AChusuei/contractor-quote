@@ -25,8 +25,9 @@ export function IntakePage() {
   const readOnly = ctx?.readOnly ?? false
   const quote = ctx?.quote
   const isAdminView = !!quote
-  const { contractor } = useContractor()
+  const { contractor, loading: contractorLoading } = useContractor()
   const contractorId = contractor?.id ?? ""
+  const isFormDisabled = !isAdminView && !contractorLoading && !contractor
 
   const {
     register,
@@ -123,6 +124,11 @@ export function IntakePage() {
   const onSubmit = async (data: CustomerInfoData) => {
     setSubmitError(null)
 
+    if (!contractorId) {
+      setSubmitError("No contractor selected. Please select a contractor and try again.")
+      return
+    }
+
     // Require Turnstile token when configured
     if (TURNSTILE_SITE_KEY) {
       const turnstileToken = getTurnstileToken()
@@ -216,11 +222,18 @@ export function IntakePage() {
         </div>
       )}
 
+      {isFormDisabled && (
+        <p className="text-sm text-muted-foreground mb-4 p-3 rounded-md bg-muted">
+          No contractor configured. Select a contractor from the dev toolbar to fill out this form.
+        </p>
+      )}
+
       <form onSubmit={readOnly ? undefined : handleSubmit(onSubmit)} noValidate>
         <CustomerInfoForm
           register={register}
           errors={errors}
           readOnly={readOnly}
+          disabled={isFormDisabled}
         />
 
         {!isAdminView && TurnstileWidget}
@@ -231,7 +244,7 @@ export function IntakePage() {
 
         {!isAdminView && (
           <div className="pt-6">
-            <Button type="submit" disabled={isSubmitting} className="w-full">
+            <Button type="submit" disabled={isSubmitting || isFormDisabled} className="w-full">
               {isSubmitting ? "Submitting\u2026" : "Continue"}
             </Button>
           </div>

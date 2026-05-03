@@ -10,14 +10,14 @@ async function fillStep1(page: Page) {
   await page.getByLabel("Full Name").fill("Jane Doe")
   await page.getByLabel("Email").fill("jane@example.com")
   await page.getByLabel("Phone").fill("(718) 555-1234")
-  await page.getByLabel("Job Site Address").fill("123 Main St, New York, NY 10001")
-  await page.getByLabel("Property Type").selectOption("house")
-  await page.getByLabel("Budget Range").selectOption("25-50k")
   await page.getByLabel("How Did You Find Us?").selectOption("referral")
 }
 
 /** Fill the Step 2 scope form with valid data */
 async function fillStep2(page: Page) {
+  await page.getByLabel("Job Site Address").fill("123 Main St, New York, NY 10001")
+  await page.getByLabel("Property Type").selectOption("house")
+  await page.getByLabel("Budget Range").selectOption("25-50k")
   await page.getByText("Supply + install").click()
   await page.getByText("No", { exact: true }).first().click() // layout changes
   await page.getByText("Medium (70–150 sq ft)").click()
@@ -151,5 +151,43 @@ test.describe("Intake Flow", () => {
     await phoneInput.fill("555")
     await phoneInput.blur()
     await expect(page.getByText("Enter a valid phone number")).toBeVisible()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Test 5: Intake form is accessible when contractor is configured
+  // ---------------------------------------------------------------------------
+
+  test("5 - intake form fields are enabled when contractor is configured", async ({ page }) => {
+    await page.goto("/")
+
+    // When a contractor is configured (dev server default), form should be interactive
+    await expect(page.getByLabel("Full Name")).toBeEnabled()
+    await expect(page.getByLabel("Email")).toBeEnabled()
+    await expect(page.getByLabel("Phone")).toBeEnabled()
+    await expect(page.getByLabel("How Did You Find Us?")).toBeEnabled()
+    await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Test 6: Intake form is disabled when no contractor is available
+  // ---------------------------------------------------------------------------
+
+  test("6 - intake form is disabled when contractor API returns not found", async ({ page }) => {
+    // Intercept contractor API calls to simulate no contractor configured
+    await page.route("**/api/v1/contractors/**", async (route) => {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false }) })
+    })
+
+    await page.goto("/")
+    // Wait for loading to settle
+    await page.waitForLoadState("networkidle")
+
+    // Either the AppShell shows a no-contractor message, or IntakePage disables the form
+    // Both are acceptable outcomes — the key invariant is the form cannot be submitted
+    const continueBtn = page.getByRole("button", { name: "Continue" })
+    const hasBtn = await continueBtn.count()
+    if (hasBtn > 0) {
+      await expect(continueBtn).toBeDisabled()
+    }
   })
 })

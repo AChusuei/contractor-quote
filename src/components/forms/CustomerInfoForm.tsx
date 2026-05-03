@@ -16,9 +16,11 @@ type CustomerInfoFormProps = {
   register: UseFormRegister<CustomerInfoData>
   errors: FieldErrors<CustomerInfoData>
   readOnly: boolean
+  disabled?: boolean
 }
 
-export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFormProps) {
+export function CustomerInfoForm({ register, errors, readOnly, disabled = false }: CustomerInfoFormProps) {
+  const isDisabled = readOnly || disabled
   return (
     <div className="space-y-4">
       {/* Name */}
@@ -28,9 +30,9 @@ export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFor
           id="name"
           type="text"
           autoComplete="name"
-          disabled={readOnly}
-          className={inputClass(!!errors.name)}
           {...register("name")}
+          disabled={isDisabled}
+          className={inputClass(!!errors.name)}
         />
         <FieldError message={errors.name?.message} />
       </div>
@@ -42,9 +44,9 @@ export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFor
           id="email"
           type="email"
           autoComplete="email"
-          disabled={readOnly}
-          className={inputClass(!!errors.email)}
           {...register("email")}
+          disabled={isDisabled}
+          className={inputClass(!!errors.email)}
         />
         <FieldError message={errors.email?.message} />
       </div>
@@ -56,9 +58,9 @@ export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFor
           id="phone"
           type="tel"
           autoComplete="tel"
-          disabled={readOnly}
-          className={inputClass(!!errors.phone)}
           {...register("phone")}
+          disabled={isDisabled}
+          className={inputClass(!!errors.phone)}
         />
         <FieldError message={errors.phone?.message} />
       </div>
@@ -68,9 +70,9 @@ export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFor
         <Label htmlFor="howDidYouFindUs">How Did You Find Us? {!readOnly && "*"}</Label>
         <select
           id="howDidYouFindUs"
-          disabled={readOnly}
-          className={inputClass(!!errors.howDidYouFindUs)}
           {...register("howDidYouFindUs")}
+          disabled={isDisabled}
+          className={inputClass(!!errors.howDidYouFindUs)}
           defaultValue=""
         >
           <option value="" disabled>Select an option</option>
@@ -91,9 +93,9 @@ export function CustomerInfoForm({ register, errors, readOnly }: CustomerInfoFor
           id="referredByContractor"
           type="text"
           placeholder={readOnly ? "" : "Leave blank if not applicable"}
-          disabled={readOnly}
-          className={inputClass(!!errors.referredByContractor)}
           {...register("referredByContractor")}
+          disabled={isDisabled}
+          className={inputClass(!!errors.referredByContractor)}
         />
         <FieldError message={errors.referredByContractor?.message} />
       </div>

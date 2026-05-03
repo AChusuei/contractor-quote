@@ -3,7 +3,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import type * as ReactRouterDom from "react-router-dom"
+import type * as UseContractorModule from "@/hooks/useContractor"
 import { IntakePage } from "./IntakePage"
+import type { ContractorPublicInfo } from "@/hooks/useContractor"
 
 const mockNavigate = vi.fn()
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -22,6 +24,21 @@ vi.mock("@/components/Turnstile", () => ({
     TurnstileWidget: null,
   }),
 }))
+
+const { mockUseContractor } = vi.hoisted(() => ({ mockUseContractor: vi.fn() }))
+vi.mock("@/hooks/useContractor", async (importOriginal) => {
+  const mod = await importOriginal<typeof UseContractorModule>()
+  return { ...mod, useContractor: mockUseContractor }
+})
+
+const testContractor: ContractorPublicInfo = {
+  id: "c1",
+  slug: "test-co",
+  name: "Test Co",
+  logoUrl: null,
+  calendarUrl: null,
+  phone: null,
+}
 
 function renderIntakePage() {
   return render(
@@ -50,6 +67,7 @@ describe("IntakePage — phone validation", () => {
   beforeEach(() => {
     user = userEvent.setup()
     mockNavigate.mockReset()
+    mockUseContractor.mockReturnValue({ contractor: testContractor, loading: false, error: null })
   })
 
   it("rejects phone numbers with fewer than 10 digits", async () => {
@@ -76,6 +94,7 @@ describe("IntakePage — navigation on submit", () => {
   beforeEach(() => {
     user = userEvent.setup()
     mockNavigate.mockReset()
+    mockUseContractor.mockReturnValue({ contractor: testContractor, loading: false, error: null })
   })
 
   it("navigates to /intake/scope when all required fields are valid", async () => {
@@ -106,6 +125,7 @@ describe("IntakePage — blur validation (onTouched mode)", () => {
   let user: ReturnType<typeof userEvent.setup>
   beforeEach(() => {
     user = userEvent.setup()
+    mockUseContractor.mockReturnValue({ contractor: testContractor, loading: false, error: null })
   })
 
   it("does not show name error before the field is touched", () => {
@@ -132,5 +152,57 @@ describe("IntakePage — blur validation (onTouched mode)", () => {
   it("does not show email error before the field is touched", () => {
     renderIntakePage()
     expect(screen.queryByText("Enter a valid email")).not.toBeInTheDocument()
+  })
+})
+
+describe("IntakePage — no contractor guard", () => {
+  let user: ReturnType<typeof userEvent.setup>
+  beforeEach(() => {
+    user = userEvent.setup()
+    mockNavigate.mockReset()
+  })
+
+  it("disables form fields when contractor is null and not loading", () => {
+    mockUseContractor.mockReturnValue({ contractor: null, loading: false, error: null })
+    renderIntakePage()
+    expect(screen.getByLabelText(/full name/i)).toBeDisabled()
+    expect(screen.getByLabelText(/email \*/i)).toBeDisabled()
+    expect(screen.getByLabelText(/phone \*/i)).toBeDisabled()
+    expect(screen.getByLabelText(/how did you find us/i)).toBeDisabled()
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled()
+  })
+
+  it("shows a message when no contractor is configured", () => {
+    mockUseContractor.mockReturnValue({ contractor: null, loading: false, error: null })
+    renderIntakePage()
+    expect(screen.getByText(/no contractor configured/i)).toBeInTheDocument()
+  })
+
+  it("enables form fields when contractor is loaded", () => {
+    mockUseContractor.mockReturnValue({ contractor: testContractor, loading: false, error: null })
+    renderIntakePage()
+    expect(screen.getByLabelText(/full name/i)).not.toBeDisabled()
+    expect(screen.getByLabelText(/email \*/i)).not.toBeDisabled()
+    expect(screen.getByLabelText(/phone \*/i)).not.toBeDisabled()
+    expect(screen.getByRole("button", { name: /continue/i })).not.toBeDisabled()
+  })
+
+  it("does not disable form during loading (contractor may still resolve)", () => {
+    mockUseContractor.mockReturnValue({ contractor: null, loading: true, error: null })
+    renderIntakePage()
+    expect(screen.getByLabelText(/full name/i)).not.toBeDisabled()
+    expect(screen.getByRole("button", { name: /continue/i })).not.toBeDisabled()
+  })
+
+  it("does not navigate when contractor is missing and all fields are filled", async () => {
+    mockUseContractor.mockReturnValue({ contractor: null, loading: false, error: null })
+    renderIntakePage()
+    // Form is disabled so clicking submit should not navigate
+    const submitBtn = screen.getByRole("button", { name: /continue/i })
+    expect(submitBtn).toBeDisabled()
+    await user.click(submitBtn)
+    await waitFor(() => {
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
   })
 })
